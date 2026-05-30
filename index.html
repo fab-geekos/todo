@@ -236,10 +236,29 @@
   .eisen-head { display: flex; flex-direction: column; margin-bottom: 8px; }
   .eisen-title { font-weight: 600; font-size: 15px; }
   .eisen-sub { font-size: 12px; color: var(--muted); }
-  .eisen-cell .task { box-shadow: none; background: transparent; padding: 8px 6px; }
+  .eisen-cell .task { box-shadow: none; background: transparent; padding: 8px 6px; border-left-color: transparent; }
   .eisen-cell .task:hover { background: rgba(0,0,0,.03); }
   body.dark .eisen-cell .task:hover { background: rgba(255,255,255,.04); }
   .eisen-empty { color: var(--muted); font-size: 13px; padding: 6px; }
+  .eisen-add { margin-top: 6px; }
+  .eisen-add-btn {
+    display: flex; align-items: center; width: 100%;
+    background: none; border: none; cursor: pointer;
+    font-family: inherit; padding: 6px; border-radius: 8px;
+    transition: background .15s;
+  }
+  .eisen-add-btn:hover { background: rgba(0,0,0,.03); }
+  body.dark .eisen-add-btn:hover { background: rgba(255,255,255,.04); }
+  .eisen-add-btn .plus-sm { font-size: 20px; font-weight: 600; line-height: 1; }
+  .q-faire     .plus-sm { color: var(--q-faire); }
+  .q-planifier .plus-sm { color: var(--q-planifier); }
+  .q-deleguer  .plus-sm { color: var(--q-deleguer); }
+  .q-eliminer  .plus-sm { color: var(--q-eliminer); }
+  .eisen-add-input {
+    width: 100%; font-family: inherit; font-size: 14px; color: var(--text);
+    border: 1px solid var(--accent); border-radius: 8px; padding: 9px 10px;
+    background: var(--card); outline: none;
+  }
 
   /* ===== MODAL ÉDITION ===== */
   .overlay {
@@ -379,20 +398,36 @@
 
     <div class="eisen-grid" id="eisenGrid">
       <div class="eisen-cell q-faire" data-q="faire">
-        <div class="eisen-head"><span class="eisen-title">Faire</span><span class="eisen-sub">Urgent + Important</span></div>
+        <div class="eisen-head"><span class="eisen-title">Faire</span><span class="eisen-sub">Important + Urgent</span></div>
         <ul class="task-list"></ul>
+        <div class="eisen-add">
+          <button class="eisen-add-btn" type="button"><span class="plus-sm">+</span></button>
+          <input class="eisen-add-input" type="text" placeholder="Nouvelle tâche…" autocomplete="off" hidden>
+        </div>
       </div>
       <div class="eisen-cell q-planifier" data-q="planifier">
         <div class="eisen-head"><span class="eisen-title">Planifier</span><span class="eisen-sub">Important, pas urgent</span></div>
         <ul class="task-list"></ul>
+        <div class="eisen-add">
+          <button class="eisen-add-btn" type="button"><span class="plus-sm">+</span></button>
+          <input class="eisen-add-input" type="text" placeholder="Nouvelle tâche…" autocomplete="off" hidden>
+        </div>
       </div>
       <div class="eisen-cell q-deleguer" data-q="deleguer">
         <div class="eisen-head"><span class="eisen-title">Déléguer</span><span class="eisen-sub">Urgent, pas important</span></div>
         <ul class="task-list"></ul>
+        <div class="eisen-add">
+          <button class="eisen-add-btn" type="button"><span class="plus-sm">+</span></button>
+          <input class="eisen-add-input" type="text" placeholder="Nouvelle tâche…" autocomplete="off" hidden>
+        </div>
       </div>
       <div class="eisen-cell q-eliminer" data-q="eliminer">
         <div class="eisen-head"><span class="eisen-title">Éliminer</span><span class="eisen-sub">Ni urgent ni important</span></div>
         <ul class="task-list"></ul>
+        <div class="eisen-add">
+          <button class="eisen-add-btn" type="button"><span class="plus-sm">+</span></button>
+          <input class="eisen-add-input" type="text" placeholder="Nouvelle tâche…" autocomplete="off" hidden>
+        </div>
       </div>
     </div>
   </main>
@@ -445,6 +480,14 @@ const QUADRANTS = {
   eliminer:  { cls: "q-eliminer",  label: "Éliminer" }       // ni l'un ni l'autre
 };
 const QUADRANT_ORDER = ["faire", "planifier", "deleguer", "eliminer"];
+
+// Priorité imposée par chaque case de la matrice
+const QUADRANT_FLAGS = {
+  faire:     { urgent: true,  important: true },
+  planifier: { urgent: false, important: true },
+  deleguer:  { urgent: true,  important: false },
+  eliminer:  { urgent: false, important: false }
+};
 
 function quadrantOf(task) {
   if (task.urgent && task.important) return "faire";
@@ -786,6 +829,29 @@ function addTask() {
   render();
 }
 
+// Ajout depuis une case de la matrice : la priorité du quadrant est imposée
+function addTaskInQuadrant(q, raw) {
+  const parsed = parseInput(raw);
+  const flags = QUADRANT_FLAGS[q];
+  db.add({
+    id: uid(),
+    title: parsed.title,
+    note: "",
+    dueDate: parsed.dueDate,
+    dueTime: parsed.dueTime,
+    urgent: flags.urgent,
+    important: flags.important,
+    completed: false,
+    createdAt: Date.now()
+  });
+}
+
+function closeEisenAdd(input) {
+  input.hidden = true;
+  input.value = "";
+  input.closest(".eisen-add").querySelector(".eisen-add-btn").hidden = false;
+}
+
 function toggleTask(id) {
   const t = state.tasks.find(t => t.id === id);
   if (!t) return;
@@ -939,6 +1005,36 @@ function bindEvents() {
   // Afficher / masquer le menu latéral
   document.getElementById("sidebarToggle").addEventListener("click", toggleSidebar);
   document.getElementById("scrim").addEventListener("click", closeSidebar);
+
+  // Ajout direct dans une case de la matrice Eisenhower
+  const grid = document.getElementById("eisenGrid");
+  grid.addEventListener("click", e => {
+    const btn = e.target.closest(".eisen-add-btn");
+    if (!btn) return;
+    btn.hidden = true;
+    const input = btn.closest(".eisen-add").querySelector(".eisen-add-input");
+    input.hidden = false;
+    input.focus();
+  });
+  grid.addEventListener("keydown", e => {
+    const input = e.target.closest(".eisen-add-input");
+    if (!input) return;
+    if (e.key === "Enter") {
+      const raw = input.value.trim();
+      if (raw) {
+        addTaskInQuadrant(input.closest(".eisen-cell").dataset.q, raw);
+        input.value = "";
+        render();
+        input.focus();
+      }
+    } else if (e.key === "Escape") {
+      closeEisenAdd(input);
+    }
+  });
+  grid.addEventListener("focusout", e => {
+    const input = e.target.closest(".eisen-add-input");
+    if (input && !input.value.trim()) closeEisenAdd(input);
+  });
 
   // Bascule thème clair / nuit
   document.getElementById("themeToggle").addEventListener("click", toggleTheme);
