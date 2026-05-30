@@ -26,7 +26,22 @@
     --q-planifier: #4A6FA5;  /* Important, pas urgent */
     --q-deleguer: #D9A441;   /* Urgent, pas important */
     --q-eliminer: #9aa3ad;   /* Ni l'un ni l'autre */
+
+    --star: #F2B705;         /* étoile "Important" */
   }
+
+  /* Mode nuit (thème des quiz capitales) */
+  body.dark {
+    --bg: #0b1120;
+    --text: #e2e8f0;
+    --card: #131b2e;
+    --muted: #64748b;
+    --border: #1e293b;
+    --shadow: 0 1px 3px rgba(0,0,0,.4);
+  }
+  body.dark .task:hover { background: #1a2438; }
+  body.dark .icon-btn:hover { background: #1a2438; }
+  body.dark .field input, body.dark .field textarea { background: var(--card); }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -46,7 +61,7 @@
     flex-shrink: 0;
     background: var(--card);
     border-right: 1px solid var(--border);
-    padding: 20px 14px;
+    padding: 64px 14px 20px;
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -96,8 +111,18 @@
   .nav-sep { height: 1px; background: var(--border); margin: 12px 4px; }
 
   /* ===== MAIN ===== */
+  .main-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 24px; }
+  .main-head .titles { flex: 1; min-width: 0; }
   .view-title { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
-  .view-sub { color: var(--muted); font-size: 14px; margin-bottom: 24px; }
+  .view-sub { color: var(--muted); font-size: 14px; }
+  .head-actions { display: flex; gap: 8px; flex-shrink: 0; }
+  .icon-btn {
+    background: var(--card); border: 1px solid var(--border); border-radius: 50%;
+    width: 40px; height: 40px; cursor: pointer; font-size: 18px; color: var(--text);
+    flex-shrink: 0; transition: background .2s; box-shadow: var(--shadow);
+    display: grid; place-items: center;
+  }
+  .icon-btn:hover { background: var(--bg); }
 
   .toolbar {
     display: flex; align-items: center; gap: 10px;
@@ -137,6 +162,7 @@
   }
   .flag.on[data-flag="urgent"] { background: var(--alert); color: #fff; border-color: var(--alert); }
   .flag.on[data-flag="important"] { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .flag .star { color: var(--star); }
 
   /* ===== TASK LIST ===== */
   .task-list { list-style: none; display: flex; flex-direction: column; gap: 2px; }
@@ -196,6 +222,25 @@
   }
   .empty .big { font-size: 40px; margin-bottom: 12px; }
 
+  /* ===== MATRICE EISENHOWER ===== */
+  .eisen-grid { display: none; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .eisen-cell {
+    background: var(--card); border: 1px solid var(--border);
+    border-top: 3px solid var(--muted); border-radius: var(--radius);
+    padding: 14px; box-shadow: var(--shadow);
+  }
+  .eisen-cell.q-faire { border-top-color: var(--q-faire); }
+  .eisen-cell.q-planifier { border-top-color: var(--q-planifier); }
+  .eisen-cell.q-deleguer { border-top-color: var(--q-deleguer); }
+  .eisen-cell.q-eliminer { border-top-color: var(--q-eliminer); }
+  .eisen-head { display: flex; flex-direction: column; margin-bottom: 8px; }
+  .eisen-title { font-weight: 600; font-size: 15px; }
+  .eisen-sub { font-size: 12px; color: var(--muted); }
+  .eisen-cell .task { box-shadow: none; background: transparent; padding: 8px 6px; }
+  .eisen-cell .task:hover { background: rgba(0,0,0,.03); }
+  body.dark .eisen-cell .task:hover { background: rgba(255,255,255,.04); }
+  .eisen-empty { color: var(--muted); font-size: 13px; padding: 6px; }
+
   /* ===== MODAL ÉDITION ===== */
   .overlay {
     position: fixed; inset: 0; background: rgba(0,0,0,.35);
@@ -228,13 +273,20 @@
   .btn-danger { background: none; color: var(--alert); border: 1px solid var(--alert); }
 
   /* ===== BURGER MOBILE ===== */
-  .burger {
-    display: none; position: fixed; top: 14px; left: 14px; z-index: 40;
+  .scrim { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.3); z-index: 30; }
+  .menu-btn {
+    position: fixed; top: 14px; left: 14px; z-index: 60;
     background: var(--card); border: 1px solid var(--border); border-radius: 10px;
     width: 42px; height: 42px; cursor: pointer; font-size: 20px; color: var(--text);
-    box-shadow: var(--shadow);
+    box-shadow: var(--shadow); display: grid; place-items: center; transition: background .2s;
   }
-  .scrim { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.3); z-index: 30; }
+  .menu-btn:hover { background: var(--bg); }
+  body.dark .menu-btn:hover { background: #1a2438; }
+  /* Desktop : repli de la sidebar */
+  @media (min-width: 721px) {
+    body.sidebar-hidden .sidebar { display: none; }
+    body.sidebar-hidden .main { padding-left: 72px; }
+  }
 
   @keyframes fadeUp {
     from { opacity: 0; transform: translateY(6px); }
@@ -243,7 +295,6 @@
 
   /* ===== RESPONSIVE ===== */
   @media (max-width: 720px) {
-    .burger { display: grid; place-items: center; }
     .sidebar {
       position: fixed; left: 0; top: 0; z-index: 35;
       transform: translateX(-100%); transition: transform .25s ease;
@@ -254,17 +305,18 @@
     .main { padding: 70px 18px 40px; }
     .view-title { font-size: 24px; }
     .quick-submit { padding: 12px 14px; }
+    .eisen-grid { grid-template-columns: 1fr; }
   }
 
   /* ===== MODE EMBED (Notion) : pas de sidebar ni burger ===== */
-  body.embed .sidebar, body.embed .burger, body.embed .scrim { display: none !important; }
+  body.embed .sidebar, body.embed #sidebarToggle, body.embed .scrim { display: none !important; }
   body.embed .main { padding: 24px 20px; max-width: 100%; }
   body.embed .view-title { font-size: 22px; }
 </style>
 </head>
 <body>
 
-<button class="burger" id="burger" aria-label="Menu">☰</button>
+<button class="menu-btn" id="sidebarToggle" aria-label="Afficher/masquer le menu">☰</button>
 <div class="scrim" id="scrim"></div>
 
 <div class="app">
@@ -283,14 +335,24 @@
     <button class="nav-item soon">
       <span class="icon">🗓️</span> Prochainement <span class="count">bientôt</span>
     </button>
+    <button class="nav-item" data-view="eisenhower">
+      <span class="icon">🎯</span> Eisenhower
+    </button>
     <button class="nav-item soon">
       <span class="icon">🏷️</span> Projets &amp; labels <span class="count">bientôt</span>
     </button>
   </aside>
 
   <main class="main">
-    <h1 class="view-title" id="viewTitle"></h1>
-    <p class="view-sub" id="viewSub"></p>
+    <div class="main-head">
+      <div class="titles">
+        <h1 class="view-title" id="viewTitle"></h1>
+        <p class="view-sub" id="viewSub"></p>
+      </div>
+      <div class="head-actions">
+        <button class="icon-btn" id="themeToggle" aria-label="Changer de thème">🌙</button>
+      </div>
+    </div>
 
     <div class="quick-add">
       <div class="quick-add-row">
@@ -299,8 +361,8 @@
         <button class="quick-submit" id="quickSubmit">Ajouter</button>
       </div>
       <div class="flags">
+        <button class="flag" data-flag="important"><span class="star">★</span> Important</button>
         <button class="flag" data-flag="urgent">⚡ Urgent</button>
-        <button class="flag" data-flag="important">★ Important</button>
       </div>
       <p class="quick-hint">Dates reconnues : aujourd'hui, demain, lundi, dans 3 jours, 15/03, 18h…</p>
     </div>
@@ -314,6 +376,25 @@
     </div>
 
     <ul class="task-list" id="taskList"></ul>
+
+    <div class="eisen-grid" id="eisenGrid">
+      <div class="eisen-cell q-faire" data-q="faire">
+        <div class="eisen-head"><span class="eisen-title">Faire</span><span class="eisen-sub">Urgent + Important</span></div>
+        <ul class="task-list"></ul>
+      </div>
+      <div class="eisen-cell q-planifier" data-q="planifier">
+        <div class="eisen-head"><span class="eisen-title">Planifier</span><span class="eisen-sub">Important, pas urgent</span></div>
+        <ul class="task-list"></ul>
+      </div>
+      <div class="eisen-cell q-deleguer" data-q="deleguer">
+        <div class="eisen-head"><span class="eisen-title">Déléguer</span><span class="eisen-sub">Urgent, pas important</span></div>
+        <ul class="task-list"></ul>
+      </div>
+      <div class="eisen-cell q-eliminer" data-q="eliminer">
+        <div class="eisen-head"><span class="eisen-title">Éliminer</span><span class="eisen-sub">Ni urgent ni important</span></div>
+        <ul class="task-list"></ul>
+      </div>
+    </div>
   </main>
 </div>
 
@@ -335,8 +416,8 @@
     </div>
     <div class="field">
       <div class="flags">
+        <button class="flag" id="editImportant" data-flag="important"><span class="star">★</span> Important</button>
         <button class="flag" id="editUrgent" data-flag="urgent">⚡ Urgent</button>
-        <button class="flag" id="editImportant" data-flag="important">★ Important</button>
       </div>
     </div>
     <div class="modal-actions">
@@ -354,6 +435,7 @@
    CONFIG
    ========================================================= */
 const STORAGE_KEY = "todo_app_v1";
+const THEME_KEY = "todo_theme";
 
 // Quadrants de la matrice d'Eisenhower : urgent x important
 const QUADRANTS = {
@@ -592,7 +674,8 @@ function render() {
   // Titre + sous-titre
   const titles = {
     todo:  { t: "Todo", s: "Toutes les tâches à accomplir" },
-    today: { t: "Aujourd'hui", s: new Date().toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" }) }
+    today: { t: "Aujourd'hui", s: new Date().toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" }) },
+    eisenhower: { t: "Eisenhower", s: "Tes tâches classées par urgence et importance" }
   };
   document.getElementById("viewTitle").textContent = titles[state.view].t;
   document.getElementById("viewSub").textContent = titles[state.view].s;
@@ -612,11 +695,24 @@ function render() {
     b.classList.toggle("active", b.dataset.view === state.view);
   });
 
-  // Liste
+  // Affichage : liste simple OU matrice Eisenhower
+  const listEl = document.getElementById("taskList");
+  const gridEl = document.getElementById("eisenGrid");
+  if (state.view === "eisenhower") {
+    listEl.style.display = "none";
+    gridEl.style.display = "grid";
+    renderEisenhower();
+  } else {
+    gridEl.style.display = "none";
+    listEl.style.display = "flex";
+    renderList();
+  }
+}
+
+function renderList() {
   const list = visibleTasks();
   const ul = document.getElementById("taskList");
   ul.innerHTML = "";
-
   if (list.length === 0) {
     const empty = document.createElement("div");
     empty.className = "empty";
@@ -627,6 +723,23 @@ function render() {
   } else {
     list.forEach(t => ul.appendChild(taskCard(t)));
   }
+}
+
+function renderEisenhower() {
+  const active = state.tasks.filter(t => !t.completed);
+  document.querySelectorAll("#eisenGrid .eisen-cell").forEach(cell => {
+    const ul = cell.querySelector(".task-list");
+    ul.innerHTML = "";
+    const tasks = active.filter(t => quadrantOf(t) === cell.dataset.q);
+    if (tasks.length === 0) {
+      const d = document.createElement("div");
+      d.className = "eisen-empty";
+      d.textContent = "—";
+      ul.appendChild(d);
+    } else {
+      tasks.forEach(t => ul.appendChild(taskCard(t)));
+    }
+  });
 }
 
 /* =========================================================
@@ -738,9 +851,15 @@ function navigate(view) {
 /* =========================================================
    ÉVÉNEMENTS
    ========================================================= */
-function openSidebar() {
-  document.getElementById("sidebar").classList.add("open");
-  document.getElementById("scrim").classList.add("open");
+function toggleSidebar() {
+  const sidebar = document.getElementById("sidebar");
+  const mobile = window.matchMedia("(max-width: 720px)").matches;
+  if (mobile) {
+    const open = sidebar.classList.toggle("open");
+    document.getElementById("scrim").classList.toggle("open", open);
+  } else {
+    document.body.classList.toggle("sidebar-hidden");
+  }
 }
 function closeSidebar() {
   document.getElementById("sidebar").classList.remove("open");
@@ -778,8 +897,8 @@ function bindEvents() {
     document.getElementById("quickInput").focus();
   });
 
-  // Clics sur les tâches (délégation)
-  document.getElementById("taskList").addEventListener("click", e => {
+  // Clics sur les tâches (délégation sur tout le main : liste + matrice)
+  document.querySelector(".main").addEventListener("click", e => {
     const taskEl = e.target.closest(".task");
     if (!taskEl) return;
     const id = taskEl.dataset.id;
@@ -801,9 +920,27 @@ function bindEvents() {
     if (e.target.id === "overlay") closeEditor();
   });
 
-  // Burger mobile
-  document.getElementById("burger").addEventListener("click", openSidebar);
+  // Afficher / masquer le menu latéral
+  document.getElementById("sidebarToggle").addEventListener("click", toggleSidebar);
   document.getElementById("scrim").addEventListener("click", closeSidebar);
+
+  // Bascule thème clair / nuit
+  document.getElementById("themeToggle").addEventListener("click", toggleTheme);
+}
+
+/* =========================================================
+   THÈME CLAIR / NUIT
+   ========================================================= */
+function setTheme(dark) {
+  document.body.classList.toggle("dark", dark);
+  document.getElementById("themeToggle").textContent = dark ? "☀️" : "🌙";
+  localStorage.setItem(THEME_KEY, dark ? "dark" : "light");
+}
+function initTheme() {
+  setTheme(localStorage.getItem(THEME_KEY) === "dark");
+}
+function toggleTheme() {
+  setTheme(!document.body.classList.contains("dark"));
 }
 
 /* =========================================================
@@ -813,6 +950,7 @@ function init() {
   db.load();
   applyMode();
   bindEvents();
+  initTheme();
   render();
 }
 init();
