@@ -519,6 +519,7 @@ function parseInput(raw) {
   let text = " " + raw.trim() + " ";
   let date = null;     // objet Date (jour) ou null
   let time = null;     // "HH:MM" ou null
+  let urgent = false, important = false;
 
   const consume = (regex, fn) => {
     const m = text.match(regex);
@@ -589,11 +590,17 @@ function parseInput(raw) {
     if (date < today) date.setFullYear(year + 1);
   });
 
+  // --- Priorité : mots "urgent" / "important" dans le texte ---
+  consume(/\burgente?s?\b/i, () => { urgent = true; });
+  consume(/\bimportante?s?\b/i, () => { important = true; });
+
   const title = text.replace(/\s+/g, " ").trim();
   return {
     title: title || raw.trim(),
     dueDate: date ? date.getTime() : null,
-    dueTime: time
+    dueTime: time,
+    urgent,
+    important
   };
 }
 
@@ -766,8 +773,8 @@ function addTask() {
     note: "",
     dueDate: parsed.dueDate,
     dueTime: parsed.dueTime,
-    urgent: state.newFlags.urgent,
-    important: state.newFlags.important,
+    urgent: state.newFlags.urgent || parsed.urgent,
+    important: state.newFlags.important || parsed.important,
     completed: false,
     createdAt: Date.now()
   });
