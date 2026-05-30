@@ -260,6 +260,21 @@
     background: var(--card); outline: none;
   }
 
+  /* ===== DRAG AND DROP (matrice) ===== */
+  .eisen-cell .task { cursor: grab; touch-action: pan-y; }
+  .task.dragging { opacity: .35; }
+  .drag-ghost {
+    position: fixed; z-index: 100; pointer-events: none;
+    opacity: .95; background: var(--card); border-radius: var(--radius);
+    box-shadow: 0 10px 28px rgba(0,0,0,.28); padding: 8px 10px;
+    transform: rotate(1.5deg); border-left: 3px solid var(--muted);
+  }
+  .eisen-cell.drop-target {
+    background: rgba(74,111,165,.08);
+    outline: 2px dashed var(--accent); outline-offset: -2px;
+  }
+  body.is-dragging { cursor: grabbing; user-select: none; touch-action: none; overflow: hidden; }
+
   /* ===== MODAL ÉDITION ===== */
   .overlay {
     position: fixed; inset: 0; background: rgba(0,0,0,.35);
@@ -948,6 +963,112 @@ function closeSidebar() {
   document.getElementById("scrim").classList.remove("open");
 }
 
+/* =========================================================
+   DRAG AND DROP DANS LA MATRICE (souris + tactile)
+   Glisse une tâche d'une case à l'autre -> change urgent/important.
+   ========================================================= */
+let drag = null;
+let lastDragEnd = 0;
+
+function cellUnderPoint(x, y) {
+  const el = document.elementFromPoint(x, y);
+  return el ? el.closest(".eisen-cell") : null;
+}
+
+function onDragPointerDown(e) {
+  if (e.button != null && e.button !== 0) return;            // clic gauche / tactile uniquement
+  const taskEl = e.target.closest(".task");
+  if (!taskEl) return;
+  if (e.target.closest("[data-action='toggle'], [data-action='delete']")) return; // laisser cocher/supprimer
+
+  drag = {
+    id: taskEl.dataset.id, taskEl,
+    fromQ: taskEl.closest(".eisen-cell").dataset.q,
+    startX: e.clientX, startY: e.clientY,
+    started: false, isTouch: e.pointerType === "touch", timer: null
+  };
+
+  // Mobile : appui long pour activer (sinon = défilement)
+  if (drag.isTouch) drag.timer = setTimeout(() => startDrag(), 320);
+
+  window.addEventListener("pointermove", onDragPointerMove);
+  window.addEventListener("pointerup", onDragPointerUp);
+  window.addEventListener("pointercancel", cancelDrag);
+}
+
+function startDrag() {
+  if (!drag || drag.started) return;
+  drag.started = true;
+
+  const rect = drag.taskEl.getBoundingClientRect();
+  const ghost = drag.taskEl.cloneNode(true);
+  ghost.className = "task drag-ghost";
+  ghost.style.width = rect.width + "px";
+  ghost.style.left = rect.left + "px";
+  ghost.style.top = rect.top + "px";
+  document.body.appendChild(ghost);
+
+  drag.ghost = ghost;
+  drag.offsetX = drag.startX - rect.left;
+  drag.offsetY = drag.startY - rect.top;
+  drag.taskEl.classList.add("dragging");
+  document.body.classList.add("is-dragging");
+  if (navigator.vibrate) navigator.vibrate(15);
+}
+
+function onDragPointerMove(e) {
+  if (!drag) return;
+  const dx = Math.abs(e.clientX - drag.startX);
+  const dy = Math.abs(e.clientY - drag.startY);
+
+  if (!drag.started) {
+    if (drag.isTouch) {
+      if (dx > 8 || dy > 8) cancelDrag();   // a bougé avant l'appui long -> défilement
+    } else if (dx > 6 || dy > 6) {
+      startDrag();                          // souris : seuil avant de glisser
+    }
+    if (!drag || !drag.started) return;
+  }
+
+  e.preventDefault();
+  drag.ghost.style.left = (e.clientX - drag.offsetX) + "px";
+  drag.ghost.style.top = (e.clientY - drag.offsetY) + "px";
+
+  const cell = cellUnderPoint(e.clientX, e.clientY);
+  document.querySelectorAll(".eisen-cell").forEach(c => c.classList.toggle("drop-target", c === cell));
+}
+
+function onDragPointerUp(e) {
+  if (!drag) return;
+  const wasDragging = drag.started;
+  if (wasDragging) {
+    const cell = cellUnderPoint(e.clientX, e.clientY);
+    if (cell && cell.dataset.q !== drag.fromQ) {
+      const flags = QUADRANT_FLAGS[cell.dataset.q];
+      db.update(drag.id, { urgent: flags.urgent, important: flags.important });
+    }
+  }
+  cleanupDrag();
+  if (wasDragging) { lastDragEnd = Date.now(); render(); }
+}
+
+function cancelDrag() {
+  cleanupDrag();
+}
+
+function cleanupDrag() {
+  if (!drag) return;
+  if (drag.timer) clearTimeout(drag.timer);
+  if (drag.ghost) drag.ghost.remove();
+  if (drag.taskEl) drag.taskEl.classList.remove("dragging");
+  document.body.classList.remove("is-dragging");
+  document.querySelectorAll(".eisen-cell").forEach(c => c.classList.remove("drop-target"));
+  window.removeEventListener("pointermove", onDragPointerMove);
+  window.removeEventListener("pointerup", onDragPointerUp);
+  window.removeEventListener("pointercancel", cancelDrag);
+  drag = null;
+}
+
 function bindEvents() {
   // Ajout rapide
   document.getElementById("quickSubmit").addEventListener("click", addTask);
@@ -981,6 +1102,7 @@ function bindEvents() {
 
   // Clics sur les tâches (délégation sur tout le main : liste + matrice)
   document.querySelector(".main").addEventListener("click", e => {
+    if (Date.now() - lastDragEnd < 300) return;  // un drag vient de se terminer
     const taskEl = e.target.closest(".task");
     if (!taskEl) return;
     const id = taskEl.dataset.id;
@@ -1008,6 +1130,7 @@ function bindEvents() {
 
   // Ajout direct dans une case de la matrice Eisenhower
   const grid = document.getElementById("eisenGrid");
+  grid.addEventListener("pointerdown", onDragPointerDown);
   grid.addEventListener("click", e => {
     const btn = e.target.closest(".eisen-add-btn");
     if (!btn) return;
