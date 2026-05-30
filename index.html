@@ -262,7 +262,7 @@
 
   /* ===== DRAG AND DROP (matrice) ===== */
   .eisen-cell .task { cursor: grab; touch-action: pan-y; }
-  .task.dragging { opacity: .35; }
+  .task.dragging { opacity: .35; pointer-events: none; }
   .drag-ghost {
     position: fixed; z-index: 100; pointer-events: none;
     opacity: .95; background: var(--card); border-radius: var(--radius);
@@ -487,22 +487,15 @@
 const STORAGE_KEY = "todo_app_v1";
 const THEME_KEY = "todo_theme";
 
-// Quadrants de la matrice d'Eisenhower : urgent x important
+// Matrice d'Eisenhower : pour chaque quadrant, son libellé et les drapeaux urgent/important.
+// La classe CSS d'un quadrant est toujours "q-" + sa clé (ex : q-faire).
 const QUADRANTS = {
-  faire:     { cls: "q-faire",     label: "Faire" },        // urgent + important
-  planifier: { cls: "q-planifier", label: "Planifier" },    // important, pas urgent
-  deleguer:  { cls: "q-deleguer",  label: "Déléguer" },      // urgent, pas important
-  eliminer:  { cls: "q-eliminer",  label: "Éliminer" }       // ni l'un ni l'autre
+  faire:     { label: "Faire",     urgent: true,  important: true },
+  planifier: { label: "Planifier", urgent: false, important: true },
+  deleguer:  { label: "Déléguer",  urgent: true,  important: false },
+  eliminer:  { label: "Éliminer",  urgent: false, important: false }
 };
 const QUADRANT_ORDER = ["faire", "planifier", "deleguer", "eliminer"];
-
-// Priorité imposée par chaque case de la matrice
-const QUADRANT_FLAGS = {
-  faire:     { urgent: true,  important: true },
-  planifier: { urgent: false, important: true },
-  deleguer:  { urgent: true,  important: false },
-  eliminer:  { urgent: false, important: false }
-};
 
 function quadrantOf(task) {
   if (task.urgent && task.important) return "faire";
@@ -554,6 +547,12 @@ function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
+const $ = id => document.getElementById(id);
+
+function startOfDay(d) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
+function endOfToday() { return startOfDay(new Date()).getTime() + 86400000 - 1; }
+function isDueToday(t) { return t.dueDate != null && t.dueDate <= endOfToday(); }
+
 /* =========================================================
    PARSER DE DATES (français, maison)
    Extrait une date/heure du texte et renvoie le titre nettoyé.
@@ -570,8 +569,6 @@ const NUM_WORDS = {
   un:1, une:1, deux:2, trois:3, quatre:4, cinq:5,
   six:6, sept:7, huit:8, neuf:9, dix:10
 };
-
-function startOfDay(d) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
 
 function parseInput(raw) {
   let text = " " + raw.trim() + " ";
@@ -626,7 +623,6 @@ function parseInput(raw) {
     date = new Date(today);
     let diff = (target - date.getDay() + 7) % 7;
     if (diff === 0) diff = 7;                 // "lundi" = le prochain lundi
-    if (m[2]) diff += (diff <= 7 ? 0 : 0);    // "prochain" : déjà couvert
     date.setDate(date.getDate() + diff);
   });
 
@@ -699,11 +695,7 @@ function esc(s) {
    ========================================================= */
 function visibleTasks() {
   let list = state.tasks.filter(t => !t.completed);
-
-  if (state.view === "today") {
-    const end = startOfDay(new Date()).getTime() + 86400000 - 1;
-    list = list.filter(t => t.dueDate != null && t.dueDate <= end);
-  }
+  if (state.view === "today") list = list.filter(isDueToday);
   return sortTasks(list);
 }
 
@@ -725,11 +717,10 @@ function sortTasks(list) {
 }
 
 function taskCard(task) {
-  const q = QUADRANTS[quadrantOf(task)];
   const due = formatDue(task);
 
   const li = document.createElement("li");
-  li.className = "task " + q.cls + (task.completed ? " done" : "");
+  li.className = "task q-" + quadrantOf(task) + (task.completed ? " done" : "");
   li.dataset.id = task.id;
 
   li.innerHTML = `
@@ -755,14 +746,12 @@ function render() {
   document.getElementById("viewSub").textContent = titles[state.view].s;
 
   // Tri visible seulement sur Todo
-  document.getElementById("toolbar").style.display = state.view === "todo" ? "flex" : "none";
+  $("toolbar").style.display = state.view === "todo" ? "flex" : "none";
 
   // Compteurs
-  const todoCount = state.tasks.filter(t => !t.completed).length;
-  const end = startOfDay(new Date()).getTime() + 86400000 - 1;
-  const todayCount = state.tasks.filter(t => !t.completed && t.dueDate != null && t.dueDate <= end).length;
-  document.getElementById("count-todo").textContent = todoCount || "";
-  document.getElementById("count-today").textContent = todayCount || "";
+  const active = state.tasks.filter(t => !t.completed);
+  $("count-todo").textContent = active.length || "";
+  $("count-today").textContent = active.filter(isDueToday).length || "";
 
   // Nav active
   document.querySelectorAll(".nav-item[data-view]").forEach(b => {
@@ -770,8 +759,8 @@ function render() {
   });
 
   // Affichage : liste simple OU matrice Eisenhower
-  const listEl = document.getElementById("taskList");
-  const gridEl = document.getElementById("eisenGrid");
+  const listEl = $("taskList");
+  const gridEl = $("eisenGrid");
   if (state.view === "eisenhower") {
     listEl.style.display = "none";
     gridEl.style.display = "grid";
@@ -819,23 +808,33 @@ function renderEisenhower() {
 /* =========================================================
    ACTIONS
    ========================================================= */
-function addTask() {
-  const input = document.getElementById("quickInput");
-  const raw = input.value.trim();
-  if (!raw) return;
-
+// Fabrique une tâche à partir d'un texte. flags force la priorité (sinon celle déduite du texte).
+function makeTask(raw, flags) {
   const parsed = parseInput(raw);
-  db.add({
+  return {
     id: uid(),
     title: parsed.title,
     note: "",
     dueDate: parsed.dueDate,
     dueTime: parsed.dueTime,
-    urgent: state.newFlags.urgent || parsed.urgent,
-    important: state.newFlags.important || parsed.important,
+    urgent: flags ? flags.urgent : parsed.urgent,
+    important: flags ? flags.important : parsed.important,
     completed: false,
     createdAt: Date.now()
-  });
+  };
+}
+
+function addTask() {
+  const input = $("quickInput");
+  const raw = input.value.trim();
+  if (!raw) return;
+
+  // Les boutons cliqués s'ajoutent à la priorité déduite du texte
+  const parsed = parseInput(raw);
+  const task = makeTask(raw);
+  task.urgent = state.newFlags.urgent || parsed.urgent;
+  task.important = state.newFlags.important || parsed.important;
+  db.add(task);
 
   input.value = "";
   state.newFlags = { urgent: false, important: false };
@@ -846,19 +845,7 @@ function addTask() {
 
 // Ajout depuis une case de la matrice : la priorité du quadrant est imposée
 function addTaskInQuadrant(q, raw) {
-  const parsed = parseInput(raw);
-  const flags = QUADRANT_FLAGS[q];
-  db.add({
-    id: uid(),
-    title: parsed.title,
-    note: "",
-    dueDate: parsed.dueDate,
-    dueTime: parsed.dueTime,
-    urgent: flags.urgent,
-    important: flags.important,
-    completed: false,
-    createdAt: Date.now()
-  });
+  db.add(makeTask(raw, QUADRANTS[q]));
 }
 
 function closeEisenAdd(input) {
@@ -1036,17 +1023,53 @@ function onDragPointerMove(e) {
 
   const cell = cellUnderPoint(e.clientX, e.clientY);
   document.querySelectorAll(".eisen-cell").forEach(c => c.classList.toggle("drop-target", c === cell));
+
+  // Repositionne la carte (l'original) à la place visée, dans la case survolée
+  if (cell) {
+    const list = cell.querySelector(".task-list");
+    const emptyMark = list.querySelector(".eisen-empty");
+    if (emptyMark) emptyMark.remove();
+    const before = insertBeforeEl(list, e.clientY);
+    if (before) list.insertBefore(drag.taskEl, before);
+    else list.appendChild(drag.taskEl);
+  }
+}
+
+// Renvoie la tâche avant laquelle insérer (ou null pour la fin de la case)
+function insertBeforeEl(list, y) {
+  const items = [...list.querySelectorAll(".task:not(.dragging)")];
+  for (const el of items) {
+    const r = el.getBoundingClientRect();
+    if (y < r.top + r.height / 2) return el;
+  }
+  return null;
+}
+
+// Reconstruit l'ordre de state.tasks à partir de l'ordre affiché dans la matrice
+function syncOrderFromDOM() {
+  const domIds = [...document.querySelectorAll("#eisenGrid .eisen-cell .task")]
+    .map(el => el.dataset.id).filter(Boolean);
+  const byId = {};
+  state.tasks.forEach(t => { byId[t.id] = t; });
+  const seen = new Set(domIds);
+  const ordered = domIds.map(id => byId[id]).filter(Boolean);
+  const rest = state.tasks.filter(t => !seen.has(t.id));  // tâches terminées (non affichées)
+  state.tasks = [...ordered, ...rest];
 }
 
 function onDragPointerUp(e) {
   if (!drag) return;
   const wasDragging = drag.started;
   if (wasDragging) {
-    const cell = cellUnderPoint(e.clientX, e.clientY);
-    if (cell && cell.dataset.q !== drag.fromQ) {
-      const flags = QUADRANT_FLAGS[cell.dataset.q];
-      db.update(drag.id, { urgent: flags.urgent, important: flags.important });
+    // Case où la carte a effectivement atterri (elle a été déplacée dans le DOM)
+    const cell = drag.taskEl.closest(".eisen-cell");
+    if (cell) {
+      const flags = QUADRANTS[cell.dataset.q];
+      const t = state.tasks.find(t => t.id === drag.id);
+      if (t) { t.urgent = flags.urgent; t.important = flags.important; }
     }
+    syncOrderFromDOM();
+    db.save();
   }
   cleanupDrag();
   if (wasDragging) { lastDragEnd = Date.now(); render(); }
@@ -1072,8 +1095,9 @@ function cleanupDrag() {
 function bindEvents() {
   // Ajout rapide
   document.getElementById("quickSubmit").addEventListener("click", addTask);
-  document.getElementById("quickInput").addEventListener("keydown", e => {
-    if (e.key === "Enter") addTask();
+  // Entrée n'importe où dans la zone de saisie = ajouter (jamais activer un bouton focusé)
+  document.querySelector(".quick-add").addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); addTask(); }
   });
 
   // Toggles urgent / important (ajout)
