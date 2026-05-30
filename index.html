@@ -28,6 +28,13 @@
     --q-eliminer: #9aa3ad;   /* Ni l'un ni l'autre */
 
     --star: #F2B705;         /* étoile "Important" */
+
+    /* Statuts de projet (Kanban) */
+    --st-pas_commence: #E8924A;
+    --st-en_cours:     #4A6FA5;
+    --st-en_pause:     #C9637E;
+    --st-delegue:      #9B7EBD;
+    --st-termine:      #2D936C;
   }
 
   /* Mode nuit (thème des quiz capitales) */
@@ -239,7 +246,7 @@
   .eisen-cell .task { box-shadow: none; background: transparent; padding: 8px 6px; border-left-color: transparent; }
   .eisen-cell .task:hover { background: rgba(0,0,0,.03); }
   body.dark .eisen-cell .task:hover { background: rgba(255,255,255,.04); }
-  .eisen-empty { color: var(--muted); font-size: 13px; padding: 6px; }
+  .col-empty { color: var(--muted); font-size: 13px; padding: 6px; }
   .eisen-add { margin-top: 6px; }
   .eisen-add-btn {
     display: flex; align-items: center; width: 100%;
@@ -265,15 +272,72 @@
   .task.dragging { opacity: .35; pointer-events: none; }
   .drag-ghost {
     position: fixed; z-index: 100; pointer-events: none;
-    opacity: .95; background: var(--card); border-radius: var(--radius);
+    opacity: .95; border-radius: var(--radius); background: var(--card);
     box-shadow: 0 10px 28px rgba(0,0,0,.28); padding: 8px 10px;
-    transform: rotate(1.5deg); border-left: 3px solid var(--muted);
+    transform: rotate(1.5deg);
   }
+  .task.drag-ghost { padding: 12px 14px; }
   .eisen-cell.drop-target {
     background: rgba(74,111,165,.08);
     outline: 2px dashed var(--accent); outline-offset: -2px;
   }
   body.is-dragging { cursor: grabbing; user-select: none; touch-action: none; overflow: hidden; }
+
+  /* ===== KANBAN PROJETS ===== */
+  .kanban-board { display: none; gap: 14px; align-items: flex-start; overflow-x: auto; padding-bottom: 8px; }
+  .kanban-col {
+    flex: 1 1 0; min-width: 240px;
+    background: var(--card); border: 1px solid var(--border);
+    border-top: 3px solid var(--muted); border-radius: var(--radius);
+    padding: 14px; box-shadow: var(--shadow);
+  }
+  .kanban-col.st-pas_commence { border-top-color: var(--st-pas_commence); }
+  .kanban-col.st-en_cours { border-top-color: var(--st-en_cours); }
+  .kanban-col.st-en_pause { border-top-color: var(--st-en_pause); }
+  .kanban-col.st-delegue { border-top-color: var(--st-delegue); }
+  .kanban-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .kanban-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .st-pas_commence .kanban-dot { background: var(--st-pas_commence); }
+  .st-en_cours .kanban-dot { background: var(--st-en_cours); }
+  .st-en_pause .kanban-dot { background: var(--st-en_pause); }
+  .st-delegue .kanban-dot { background: var(--st-delegue); }
+  .kanban-title { font-weight: 600; font-size: 14px; }
+  .kanban-count { color: var(--muted); font-size: 13px; }
+  .kanban-list { list-style: none; display: flex; flex-direction: column; gap: 8px; min-height: 8px; }
+
+  .proj-card {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 12px;
+    padding: 12px; cursor: grab; touch-action: pan-y; transition: background .15s;
+  }
+  .proj-card:hover { border-color: var(--accent); }
+  .proj-card.dragging { opacity: .35; pointer-events: none; }
+  .proj-head { display: flex; align-items: center; gap: 8px; }
+  .proj-icon { font-size: 18px; flex-shrink: 0; }
+  .proj-name { font-weight: 600; font-size: 15px; word-break: break-word; }
+  .proj-meta { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .proj-add {
+    display: flex; align-items: center; gap: 6px; width: 100%; margin-top: 8px;
+    background: none; border: none; cursor: pointer; color: var(--muted);
+    font-family: inherit; font-size: 13px; padding: 4px; border-radius: 8px;
+    transition: color .15s;
+  }
+  .proj-add:hover { color: var(--accent); }
+  .proj-add .plus-sm { font-size: 16px; font-weight: 600; line-height: 1; color: var(--accent); }
+
+  .col-add { margin-top: 10px; }
+  .col-add-btn {
+    display: flex; align-items: center; gap: 6px; width: 100%;
+    background: none; border: none; cursor: pointer; color: var(--muted);
+    font-family: inherit; font-size: 14px; padding: 6px; border-radius: 8px;
+    transition: color .15s;
+  }
+  .col-add-btn:hover { color: var(--accent); }
+  .col-add-btn .plus-sm { font-size: 18px; font-weight: 600; line-height: 1; color: var(--accent); }
+  .col-add-input, .proj-add-input {
+    width: 100%; font-family: inherit; font-size: 14px; color: var(--text);
+    border: 1px solid var(--accent); border-radius: 8px; padding: 9px 10px;
+    background: var(--card); outline: none; margin-top: 6px;
+  }
 
   /* ===== MODAL ÉDITION ===== */
   .overlay {
@@ -340,6 +404,8 @@
     .view-title { font-size: 24px; }
     .quick-submit { padding: 12px 14px; }
     .eisen-grid { grid-template-columns: 1fr; }
+    .kanban-board { flex-direction: column; }
+    .kanban-col { width: 100%; min-width: 0; }
   }
 
   /* ===== MODE EMBED (Notion) : pas de sidebar ni burger ===== */
@@ -373,7 +439,13 @@
       <span class="icon">🎯</span> Eisenhower
     </button>
     <button class="nav-item soon">
-      <span class="icon">🏷️</span> Projets &amp; labels <span class="count">bientôt</span>
+      <span class="icon">🛒</span> Liste de course <span class="count">bientôt</span>
+    </button>
+    <button class="nav-item" data-view="projects">
+      <span class="icon">📁</span> Projets
+    </button>
+    <button class="nav-item soon">
+      <span class="icon">🏷️</span> Labels <span class="count">bientôt</span>
     </button>
   </aside>
 
@@ -411,40 +483,9 @@
 
     <ul class="task-list" id="taskList"></ul>
 
-    <div class="eisen-grid" id="eisenGrid">
-      <div class="eisen-cell q-faire" data-q="faire">
-        <div class="eisen-head"><span class="eisen-title">Faire</span><span class="eisen-sub">Important + Urgent</span></div>
-        <ul class="task-list"></ul>
-        <div class="eisen-add">
-          <button class="eisen-add-btn" type="button"><span class="plus-sm">+</span></button>
-          <input class="eisen-add-input" type="text" placeholder="Nouvelle tâche…" autocomplete="off" hidden>
-        </div>
-      </div>
-      <div class="eisen-cell q-planifier" data-q="planifier">
-        <div class="eisen-head"><span class="eisen-title">Planifier</span><span class="eisen-sub">Important, pas urgent</span></div>
-        <ul class="task-list"></ul>
-        <div class="eisen-add">
-          <button class="eisen-add-btn" type="button"><span class="plus-sm">+</span></button>
-          <input class="eisen-add-input" type="text" placeholder="Nouvelle tâche…" autocomplete="off" hidden>
-        </div>
-      </div>
-      <div class="eisen-cell q-deleguer" data-q="deleguer">
-        <div class="eisen-head"><span class="eisen-title">Déléguer</span><span class="eisen-sub">Urgent, pas important</span></div>
-        <ul class="task-list"></ul>
-        <div class="eisen-add">
-          <button class="eisen-add-btn" type="button"><span class="plus-sm">+</span></button>
-          <input class="eisen-add-input" type="text" placeholder="Nouvelle tâche…" autocomplete="off" hidden>
-        </div>
-      </div>
-      <div class="eisen-cell q-eliminer" data-q="eliminer">
-        <div class="eisen-head"><span class="eisen-title">Éliminer</span><span class="eisen-sub">Ni urgent ni important</span></div>
-        <ul class="task-list"></ul>
-        <div class="eisen-add">
-          <button class="eisen-add-btn" type="button"><span class="plus-sm">+</span></button>
-          <input class="eisen-add-input" type="text" placeholder="Nouvelle tâche…" autocomplete="off" hidden>
-        </div>
-      </div>
-    </div>
+    <div class="eisen-grid" id="eisenGrid"></div>
+
+    <div class="kanban-board" id="kanbanBoard"></div>
   </main>
 </div>
 
@@ -487,13 +528,13 @@
 const STORAGE_KEY = "todo_app_v1";
 const THEME_KEY = "todo_theme";
 
-// Matrice d'Eisenhower : pour chaque quadrant, son libellé et les drapeaux urgent/important.
+// Matrice d'Eisenhower : pour chaque quadrant, libellé, description et drapeaux urgent/important.
 // La classe CSS d'un quadrant est toujours "q-" + sa clé (ex : q-faire).
 const QUADRANTS = {
-  faire:     { label: "Faire",     urgent: true,  important: true },
-  planifier: { label: "Planifier", urgent: false, important: true },
-  deleguer:  { label: "Déléguer",  urgent: true,  important: false },
-  eliminer:  { label: "Éliminer",  urgent: false, important: false }
+  faire:     { label: "Faire",     desc: "Important + Urgent",     urgent: true,  important: true },
+  planifier: { label: "Planifier", desc: "Important, pas urgent",  urgent: false, important: true },
+  deleguer:  { label: "Déléguer",  desc: "Urgent, pas important",  urgent: true,  important: false },
+  eliminer:  { label: "Éliminer",  desc: "Ni urgent ni important", urgent: false, important: false }
 };
 const QUADRANT_ORDER = ["faire", "planifier", "deleguer", "eliminer"];
 
@@ -504,11 +545,23 @@ function quadrantOf(task) {
   return "eliminer";
 }
 
+// Statuts d'un projet. Les 4 premiers forment les colonnes du Kanban ;
+// "termine" n'y figure pas (les projets terminés ont leur propre vue).
+const STATUSES = {
+  pas_commence: { label: "Pas commencé", cls: "st-pas_commence" },
+  en_cours:     { label: "En cours",     cls: "st-en_cours" },
+  en_pause:     { label: "En pause",     cls: "st-en_pause" },
+  delegue:      { label: "Délégué",      cls: "st-delegue" },
+  termine:      { label: "Terminé",      cls: "st-termine" }
+};
+const KANBAN_STATUSES = ["pas_commence", "en_cours", "en_pause", "delegue"];
+
 /* =========================================================
    STATE
    ========================================================= */
 let state = {
   tasks: [],
+  projects: [],
   view: "todo",
   sort: "due",
   editingId: null,
@@ -516,29 +569,49 @@ let state = {
 };
 
 /* =========================================================
-   DATA LAYER (localStorage)
-   Tout passe par db.* — c'est le seul module à remplacer
-   quand on migrera vers Firebase (étape 5).
+   DATA LAYER
+   Tout passe par db.* — c'est le seul module à remplacer quand on
+   migrera vers une sync en ligne (Firebase, étape 5) : il suffira de
+   réécrire load/save, le reste de l'app ne changera pas.
    ========================================================= */
+
+// Transforme des données brutes (localStorage OU futur Firebase) en {tasks, projects}.
+// Gère l'ancien format (simple tableau de tâches) pour ne rien perdre.
+function normalizeData(raw) {
+  if (Array.isArray(raw)) return { tasks: raw, projects: [] };
+  if (raw && typeof raw === "object") return { tasks: raw.tasks || [], projects: raw.projects || [] };
+  return { tasks: [], projects: [] };
+}
+
 const db = {
   load() {
-    try {
-      state.tasks = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
-    } catch { state.tasks = []; }
+    let raw = null;
+    try { raw = JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch {}
+    const data = normalizeData(raw);
+    state.tasks = data.tasks;
+    state.projects = data.projects;
   },
   save() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.tasks));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ tasks: state.tasks, projects: state.projects }));
   },
-  add(task) {
-    state.tasks.push(task);
-    this.save();
-  },
+  // --- Tâches ---
+  add(task) { state.tasks.push(task); this.save(); },
   update(id, changes) {
     const t = state.tasks.find(t => t.id === id);
     if (t) { Object.assign(t, changes); this.save(); }
   },
   remove(id) {
     state.tasks = state.tasks.filter(t => t.id !== id);
+    this.save();
+  },
+  // --- Projets ---
+  addProject(p) { state.projects.push(p); this.save(); },
+  updateProject(id, changes) {
+    const p = state.projects.find(p => p.id === id);
+    if (p) { Object.assign(p, changes); this.save(); }
+  },
+  removeProject(id) {
+    state.projects = state.projects.filter(p => p.id !== id);
     this.save();
   }
 };
@@ -695,7 +768,8 @@ function esc(s) {
    ========================================================= */
 function visibleTasks() {
   let list = state.tasks.filter(t => !t.completed);
-  if (state.view === "today") list = list.filter(isDueToday);
+  if (state.view === "todo") list = list.filter(t => t.projectId == null);
+  else if (state.view === "today") list = list.filter(isDueToday);
   return sortTasks(list);
 }
 
@@ -740,17 +814,19 @@ function render() {
   const titles = {
     todo:  { t: "Todo", s: "Toutes les tâches à accomplir" },
     today: { t: "Aujourd'hui", s: new Date().toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" }) },
-    eisenhower: { t: "Eisenhower", s: "Tes tâches classées par urgence et importance" }
+    eisenhower: { t: "Eisenhower", s: "Tes tâches classées par urgence et importance" },
+    projects: { t: "Projets", s: "Tes projets, organisés par statut" }
   };
   document.getElementById("viewTitle").textContent = titles[state.view].t;
   document.getElementById("viewSub").textContent = titles[state.view].s;
 
-  // Tri visible seulement sur Todo
+  // La saisie rapide et le tri ne concernent que les vues de tâches
   $("toolbar").style.display = state.view === "todo" ? "flex" : "none";
+  document.querySelector(".quick-add").style.display = state.view === "projects" ? "none" : "block";
 
   // Compteurs
   const active = state.tasks.filter(t => !t.completed);
-  $("count-todo").textContent = active.length || "";
+  $("count-todo").textContent = active.filter(t => t.projectId == null).length || "";
   $("count-today").textContent = active.filter(isDueToday).length || "";
 
   // Nav active
@@ -758,15 +834,21 @@ function render() {
     b.classList.toggle("active", b.dataset.view === state.view);
   });
 
-  // Affichage : liste simple OU matrice Eisenhower
+  // Affichage : liste simple, matrice Eisenhower, ou Kanban des projets
   const listEl = $("taskList");
   const gridEl = $("eisenGrid");
+  const kanbanEl = $("kanbanBoard");
+  listEl.style.display = "none";
+  gridEl.style.display = "none";
+  kanbanEl.style.display = "none";
+
   if (state.view === "eisenhower") {
-    listEl.style.display = "none";
     gridEl.style.display = "grid";
     renderEisenhower();
+  } else if (state.view === "projects") {
+    kanbanEl.style.display = "flex";
+    renderKanban();
   } else {
-    gridEl.style.display = "none";
     listEl.style.display = "flex";
     renderList();
   }
@@ -788,20 +870,87 @@ function renderList() {
   }
 }
 
+// Remplit une <ul> avec des cartes, ou un tiret si la liste est vide.
+// Partagé par la matrice Eisenhower et le Kanban (même comportement de colonne).
+function fillColumn(ul, items, makeCard) {
+  ul.innerHTML = "";
+  if (items.length === 0) {
+    const d = document.createElement("div");
+    d.className = "col-empty";
+    d.textContent = "—";
+    ul.appendChild(d);
+  } else {
+    items.forEach(it => ul.appendChild(makeCard(it)));
+  }
+}
+
 function renderEisenhower() {
-  const active = state.tasks.filter(t => !t.completed);
-  document.querySelectorAll("#eisenGrid .eisen-cell").forEach(cell => {
-    const ul = cell.querySelector(".task-list");
-    ul.innerHTML = "";
-    const tasks = active.filter(t => quadrantOf(t) === cell.dataset.q);
-    if (tasks.length === 0) {
-      const d = document.createElement("div");
-      d.className = "eisen-empty";
-      d.textContent = "—";
-      ul.appendChild(d);
-    } else {
-      tasks.forEach(t => ul.appendChild(taskCard(t)));
-    }
+  const board = $("eisenGrid");
+  board.innerHTML = "";
+  const active = state.tasks.filter(t => !t.completed && t.projectId == null);
+  QUADRANT_ORDER.forEach(key => {
+    const q = QUADRANTS[key];
+    const cell = document.createElement("div");
+    cell.className = "eisen-cell q-" + key;
+    cell.dataset.q = key;
+    cell.innerHTML = `
+      <div class="eisen-head"><span class="eisen-title">${q.label}</span><span class="eisen-sub">${q.desc}</span></div>
+      <ul class="task-list"></ul>
+      <div class="eisen-add">
+        <button class="eisen-add-btn" type="button"><span class="plus-sm">+</span></button>
+        <input class="eisen-add-input" type="text" placeholder="Nouvelle tâche…" autocomplete="off" hidden>
+      </div>
+    `;
+    fillColumn(cell.querySelector(".task-list"), active.filter(t => quadrantOf(t) === key), taskCard);
+    board.appendChild(cell);
+  });
+}
+
+// Nombre de tâches actives d'un projet
+function projectTaskCount(projectId) {
+  return state.tasks.filter(t => t.projectId === projectId && !t.completed).length;
+}
+
+function projectCard(project) {
+  const li = document.createElement("li");
+  li.className = "proj-card";
+  li.dataset.id = project.id;
+  const count = projectTaskCount(project.id);
+  li.innerHTML = `
+    <div class="proj-head">
+      <span class="proj-icon">${esc(project.icon || "📁")}</span>
+      <span class="proj-name">${esc(project.name)}</span>
+    </div>
+    <div class="proj-meta">${count} tâche${count > 1 ? "s" : ""}</div>
+    <button class="proj-add" type="button"><span class="plus-sm">+</span> Tâche</button>
+    <input class="proj-add-input" type="text" placeholder="Nouvelle tâche…" autocomplete="off" hidden>
+  `;
+  return li;
+}
+
+function renderKanban() {
+  const board = $("kanbanBoard");
+  board.innerHTML = "";
+  KANBAN_STATUSES.forEach(key => {
+    const st = STATUSES[key];
+    const projects = state.projects.filter(p => p.status === key);
+    const col = document.createElement("div");
+    col.className = "kanban-col " + st.cls;
+    col.dataset.status = key;
+    col.innerHTML = `
+      <div class="kanban-head">
+        <span class="kanban-dot"></span>
+        <span class="kanban-title">${st.label}</span>
+        <span class="kanban-count">${projects.length || ""}</span>
+      </div>
+      <ul class="kanban-list"></ul>
+      <div class="col-add">
+        <button class="col-add-btn" type="button"><span class="plus-sm">+</span> Projet</button>
+        <input class="col-add-input" type="text" placeholder="Nom du projet…" autocomplete="off" hidden>
+      </div>
+    `;
+    fillColumn(col.querySelector(".kanban-list"), projects, projectCard);
+    board.appendChild(col);
   });
 }
 
@@ -809,7 +958,7 @@ function renderEisenhower() {
    ACTIONS
    ========================================================= */
 // Fabrique une tâche à partir d'un texte. flags force la priorité (sinon celle déduite du texte).
-function makeTask(raw, flags) {
+function makeTask(raw, flags, projectId = null) {
   const parsed = parseInput(raw);
   return {
     id: uid(),
@@ -820,7 +969,8 @@ function makeTask(raw, flags) {
     urgent: flags ? flags.urgent : parsed.urgent,
     important: flags ? flags.important : parsed.important,
     completed: false,
-    createdAt: Date.now()
+    createdAt: Date.now(),
+    projectId
   };
 }
 
@@ -829,11 +979,10 @@ function addTask() {
   const raw = input.value.trim();
   if (!raw) return;
 
-  // Les boutons cliqués s'ajoutent à la priorité déduite du texte
-  const parsed = parseInput(raw);
+  // makeTask a déjà déduit urgent/important du texte ; on y ajoute les boutons cliqués
   const task = makeTask(raw);
-  task.urgent = state.newFlags.urgent || parsed.urgent;
-  task.important = state.newFlags.important || parsed.important;
+  task.urgent = task.urgent || state.newFlags.urgent;
+  task.important = task.important || state.newFlags.important;
   db.add(task);
 
   input.value = "";
@@ -852,6 +1001,23 @@ function closeEisenAdd(input) {
   input.hidden = true;
   input.value = "";
   input.closest(".eisen-add").querySelector(".eisen-add-btn").hidden = false;
+}
+
+/* ---- Projets ---- */
+// Crée un projet dans la colonne (statut) donnée. Emoji par défaut, éditable plus tard.
+function addProject(status, name) {
+  db.addProject({
+    id: uid(),
+    name,
+    icon: "📁",
+    status,
+    createdAt: Date.now()
+  });
+}
+
+// Ajoute une tâche rattachée à un projet (sans priorité Eisenhower imposée)
+function addTaskToProject(projectId, raw) {
+  db.add(makeTask(raw, null, projectId));
 }
 
 function toggleTask(id) {
@@ -951,26 +1117,58 @@ function closeSidebar() {
 }
 
 /* =========================================================
-   DRAG AND DROP DANS LA MATRICE (souris + tactile)
-   Glisse une tâche d'une case à l'autre -> change urgent/important.
+   DRAG AND DROP GÉNÉRIQUE (souris + tactile)
+   Un seul moteur pour la matrice Eisenhower ET le Kanban des projets.
+   On l'active sur un "board" via makeDraggable(board, config) où config décrit :
+     item    : sélecteur des cartes déplaçables (".task", ".proj-card")
+     column  : sélecteur des colonnes (".eisen-cell", ".kanban-col")
+     list    : sélecteur de la zone listée dans une colonne
+     onDrop  : (carte, colonne) => applique l'attribut (priorité, statut…)
+     persist : () => réordonne la collection depuis le DOM puis sauvegarde
    ========================================================= */
 let drag = null;
 let lastDragEnd = 0;
 
-function cellUnderPoint(x, y) {
-  const el = document.elementFromPoint(x, y);
-  return el ? el.closest(".eisen-cell") : null;
+function makeDraggable(board, config) {
+  board.addEventListener("pointerdown", e => onDragPointerDown(e, board, config));
 }
 
-function onDragPointerDown(e) {
-  if (e.button != null && e.button !== 0) return;            // clic gauche / tactile uniquement
-  const taskEl = e.target.closest(".task");
-  if (!taskEl) return;
-  if (e.target.closest("[data-action='toggle'], [data-action='delete']")) return; // laisser cocher/supprimer
+// Réordonne un tableau d'objets {id} selon l'ordre des éléments affichés
+function reorderFromDOM(collection, domSelector) {
+  const ids = [...document.querySelectorAll(domSelector)].map(el => el.dataset.id).filter(Boolean);
+  const byId = {};
+  collection.forEach(o => { byId[o.id] = o; });
+  const seen = new Set(ids);
+  const ordered = ids.map(id => byId[id]).filter(Boolean);
+  const rest = collection.filter(o => !seen.has(o.id));  // éléments non affichés (ex : tâches terminées)
+  return [...ordered, ...rest];
+}
+
+function columnUnderPoint(x, y, selector) {
+  const el = document.elementFromPoint(x, y);
+  return el ? el.closest(selector) : null;
+}
+
+// Renvoie la carte avant laquelle insérer (ou null pour la fin de la colonne)
+function insertBeforeEl(list, y, itemSelector) {
+  const items = [...list.querySelectorAll(itemSelector + ":not(.dragging)")];
+  for (const el of items) {
+    const r = el.getBoundingClientRect();
+    if (y < r.top + r.height / 2) return el;
+  }
+  return null;
+}
+
+function onDragPointerDown(e, board, config) {
+  if (e.button != null && e.button !== 0) return;                 // clic gauche / tactile uniquement
+  const itemEl = e.target.closest(config.item);
+  if (!itemEl || !board.contains(itemEl)) return;
+  // ne pas démarrer sur un contrôle interne (cocher, supprimer, bouton +, champ de saisie)
+  if (e.target.closest("button, input, [data-action='toggle'], [data-action='delete']")) return;
 
   drag = {
-    id: taskEl.dataset.id, taskEl,
-    fromQ: taskEl.closest(".eisen-cell").dataset.q,
+    config, board, itemEl,
+    id: itemEl.dataset.id,
     startX: e.clientX, startY: e.clientY,
     started: false, isTouch: e.pointerType === "touch", timer: null
   };
@@ -987,9 +1185,9 @@ function startDrag() {
   if (!drag || drag.started) return;
   drag.started = true;
 
-  const rect = drag.taskEl.getBoundingClientRect();
-  const ghost = drag.taskEl.cloneNode(true);
-  ghost.className = "task drag-ghost";
+  const rect = drag.itemEl.getBoundingClientRect();
+  const ghost = drag.itemEl.cloneNode(true);
+  ghost.classList.add("drag-ghost");
   ghost.style.width = rect.width + "px";
   ghost.style.left = rect.left + "px";
   ghost.style.top = rect.top + "px";
@@ -998,13 +1196,14 @@ function startDrag() {
   drag.ghost = ghost;
   drag.offsetX = drag.startX - rect.left;
   drag.offsetY = drag.startY - rect.top;
-  drag.taskEl.classList.add("dragging");
+  drag.itemEl.classList.add("dragging");
   document.body.classList.add("is-dragging");
   if (navigator.vibrate) navigator.vibrate(15);
 }
 
 function onDragPointerMove(e) {
   if (!drag) return;
+  const { config } = drag;
   const dx = Math.abs(e.clientX - drag.startX);
   const dy = Math.abs(e.clientY - drag.startY);
 
@@ -1021,71 +1220,42 @@ function onDragPointerMove(e) {
   drag.ghost.style.left = (e.clientX - drag.offsetX) + "px";
   drag.ghost.style.top = (e.clientY - drag.offsetY) + "px";
 
-  const cell = cellUnderPoint(e.clientX, e.clientY);
-  document.querySelectorAll(".eisen-cell").forEach(c => c.classList.toggle("drop-target", c === cell));
+  const col = columnUnderPoint(e.clientX, e.clientY, config.column);
+  drag.board.querySelectorAll(config.column).forEach(c => c.classList.toggle("drop-target", c === col));
 
-  // Repositionne la carte (l'original) à la place visée, dans la case survolée
-  if (cell) {
-    const list = cell.querySelector(".task-list");
-    const emptyMark = list.querySelector(".eisen-empty");
+  // Repositionne la carte à la place visée, dans la colonne survolée
+  if (col) {
+    const list = col.querySelector(config.list);
+    const emptyMark = list.querySelector(".col-empty");
     if (emptyMark) emptyMark.remove();
-    const before = insertBeforeEl(list, e.clientY);
-    if (before) list.insertBefore(drag.taskEl, before);
-    else list.appendChild(drag.taskEl);
+    const before = insertBeforeEl(list, e.clientY, config.item);
+    if (before) list.insertBefore(drag.itemEl, before);
+    else list.appendChild(drag.itemEl);
   }
 }
 
-// Renvoie la tâche avant laquelle insérer (ou null pour la fin de la case)
-function insertBeforeEl(list, y) {
-  const items = [...list.querySelectorAll(".task:not(.dragging)")];
-  for (const el of items) {
-    const r = el.getBoundingClientRect();
-    if (y < r.top + r.height / 2) return el;
-  }
-  return null;
-}
-
-// Reconstruit l'ordre de state.tasks à partir de l'ordre affiché dans la matrice
-function syncOrderFromDOM() {
-  const domIds = [...document.querySelectorAll("#eisenGrid .eisen-cell .task")]
-    .map(el => el.dataset.id).filter(Boolean);
-  const byId = {};
-  state.tasks.forEach(t => { byId[t.id] = t; });
-  const seen = new Set(domIds);
-  const ordered = domIds.map(id => byId[id]).filter(Boolean);
-  const rest = state.tasks.filter(t => !seen.has(t.id));  // tâches terminées (non affichées)
-  state.tasks = [...ordered, ...rest];
-}
-
-function onDragPointerUp(e) {
+function onDragPointerUp() {
   if (!drag) return;
+  const { config } = drag;
   const wasDragging = drag.started;
   if (wasDragging) {
-    // Case où la carte a effectivement atterri (elle a été déplacée dans le DOM)
-    const cell = drag.taskEl.closest(".eisen-cell");
-    if (cell) {
-      const flags = QUADRANTS[cell.dataset.q];
-      const t = state.tasks.find(t => t.id === drag.id);
-      if (t) { t.urgent = flags.urgent; t.important = flags.important; }
-    }
-    syncOrderFromDOM();
-    db.save();
+    const col = drag.itemEl.closest(config.column);  // colonne d'arrivée réelle
+    if (col) config.onDrop(drag.itemEl, col);
+    config.persist();
   }
   cleanupDrag();
   if (wasDragging) { lastDragEnd = Date.now(); render(); }
 }
 
-function cancelDrag() {
-  cleanupDrag();
-}
+function cancelDrag() { cleanupDrag(); }
 
 function cleanupDrag() {
   if (!drag) return;
   if (drag.timer) clearTimeout(drag.timer);
   if (drag.ghost) drag.ghost.remove();
-  if (drag.taskEl) drag.taskEl.classList.remove("dragging");
+  if (drag.itemEl) drag.itemEl.classList.remove("dragging");
   document.body.classList.remove("is-dragging");
-  document.querySelectorAll(".eisen-cell").forEach(c => c.classList.remove("drop-target"));
+  if (drag.board) drag.board.querySelectorAll(drag.config.column).forEach(c => c.classList.remove("drop-target"));
   window.removeEventListener("pointermove", onDragPointerMove);
   window.removeEventListener("pointerup", onDragPointerUp);
   window.removeEventListener("pointercancel", cancelDrag);
@@ -1152,9 +1322,30 @@ function bindEvents() {
   document.getElementById("sidebarToggle").addEventListener("click", toggleSidebar);
   document.getElementById("scrim").addEventListener("click", closeSidebar);
 
-  // Ajout direct dans une case de la matrice Eisenhower
+  // Drag and drop : matrice Eisenhower (change la priorité de la tâche)
   const grid = document.getElementById("eisenGrid");
-  grid.addEventListener("pointerdown", onDragPointerDown);
+  makeDraggable(grid, {
+    item: ".task", column: ".eisen-cell", list: ".task-list",
+    onDrop(itemEl, colEl) {
+      const flags = QUADRANTS[colEl.dataset.q];
+      const t = state.tasks.find(t => t.id === itemEl.dataset.id);
+      if (t) { t.urgent = flags.urgent; t.important = flags.important; }
+    },
+    persist() { state.tasks = reorderFromDOM(state.tasks, "#eisenGrid .task"); db.save(); }
+  });
+
+  // Drag and drop : Kanban des projets (change le statut du projet)
+  const kanban = document.getElementById("kanbanBoard");
+  makeDraggable(kanban, {
+    item: ".proj-card", column: ".kanban-col", list: ".kanban-list",
+    onDrop(itemEl, colEl) {
+      const p = state.projects.find(p => p.id === itemEl.dataset.id);
+      if (p) p.status = colEl.dataset.status;
+    },
+    persist() { state.projects = reorderFromDOM(state.projects, "#kanbanBoard .proj-card"); db.save(); }
+  });
+
+  // Ajout inline dans la matrice Eisenhower (bouton + d'une case)
   grid.addEventListener("click", e => {
     const btn = e.target.closest(".eisen-add-btn");
     if (!btn) return;
@@ -1181,6 +1372,37 @@ function bindEvents() {
   grid.addEventListener("focusout", e => {
     const input = e.target.closest(".eisen-add-input");
     if (input && !input.value.trim()) closeEisenAdd(input);
+  });
+
+  // Kanban : ouvrir un champ de saisie (nouveau projet OU nouvelle tâche d'un projet)
+  kanban.addEventListener("click", e => {
+    const colAdd = e.target.closest(".col-add-btn");
+    const projAdd = e.target.closest(".proj-add");
+    if (colAdd) {
+      colAdd.hidden = true;
+      const input = colAdd.closest(".col-add").querySelector(".col-add-input");
+      input.hidden = false; input.focus();
+    } else if (projAdd) {
+      projAdd.hidden = true;
+      const input = projAdd.closest(".proj-card").querySelector(".proj-add-input");
+      input.hidden = false; input.focus();
+    }
+  });
+  kanban.addEventListener("keydown", e => {
+    const input = e.target.closest(".col-add-input, .proj-add-input");
+    if (!input) return;
+    if (e.key === "Enter") {
+      const raw = input.value.trim();
+      if (!raw) return;
+      if (input.classList.contains("col-add-input")) {
+        addProject(input.closest(".kanban-col").dataset.status, raw);
+      } else {
+        addTaskToProject(input.closest(".proj-card").dataset.id, raw);
+      }
+      render();
+    } else if (e.key === "Escape") {
+      render();   // referme les champs en redessinant
+    }
   });
 
   // Bascule thème clair / nuit
