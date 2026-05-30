@@ -73,8 +73,8 @@
   .main {
     flex: 1;
     padding: 40px 48px;
-    max-width: 760px;
     width: 100%;
+    min-width: 0;
   }
 
   /* ===== SIDEBAR ===== */
@@ -508,6 +508,10 @@ const MONTHS = {
   janvier:0, février:1, fevrier:1, mars:2, avril:3, mai:4, juin:5,
   juillet:6, août:7, aout:7, septembre:8, octobre:9, novembre:10, décembre:11, decembre:11
 };
+const NUM_WORDS = {
+  un:1, une:1, deux:2, trois:3, quatre:4, cinq:5,
+  six:6, sept:7, huit:8, neuf:9, dix:10
+};
 
 function startOfDay(d) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
 
@@ -545,11 +549,16 @@ function parseInput(raw) {
     date = new Date(today); date.setDate(date.getDate() + 1);
   }
 
-  // --- "dans X jours / semaines" ---
-  if (!date) consume(/\bdans\s+(\d{1,3})\s+(jours?|semaines?)\b/i, m => {
+  // --- "dans X jours/semaines/mois/ans" (X en chiffres ou en lettres) ---
+  if (!date) consume(/\bdans\s+(\d{1,3}|un|une|deux|trois|quatre|cinq|six|sept|huit|neuf|dix)\s+(jours?|journ[ée]es?|semaines?|mois|ans?|années?)\b/i, m => {
     date = new Date(today);
-    const n = parseInt(m[1], 10);
-    date.setDate(date.getDate() + (/semaine/i.test(m[2]) ? n * 7 : n));
+    const w = m[1].toLowerCase();
+    const n = /^\d+$/.test(w) ? parseInt(w, 10) : NUM_WORDS[w];
+    const unit = m[2].toLowerCase();
+    if (/semaine/.test(unit)) date.setDate(date.getDate() + n * 7);
+    else if (/mois/.test(unit)) date.setMonth(date.getMonth() + n);
+    else if (/an/.test(unit)) date.setFullYear(date.getFullYear() + n);
+    else date.setDate(date.getDate() + n);
   });
 
   // --- Jour de la semaine : "lundi", "lundi prochain" ---
