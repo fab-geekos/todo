@@ -339,6 +339,33 @@
     background: var(--card); outline: none; margin-top: 6px;
   }
 
+  /* ===== VUE DÉTAILLÉE D'UN PROJET ===== */
+  .project-view { display: none; }
+  .proj-detail-head { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+  .proj-detail-icon {
+    font-size: 26px; background: none; border: none; cursor: pointer;
+    border-radius: 10px; padding: 2px 6px; line-height: 1; transition: background .2s;
+  }
+  .proj-detail-icon:hover { background: var(--bg); }
+  .proj-detail-name {
+    flex: 1; min-width: 160px; font-family: inherit; font-size: 22px; font-weight: 700;
+    color: var(--text); border: none; background: none; outline: none;
+    border-bottom: 2px solid transparent; padding: 2px 0;
+  }
+  .proj-detail-name:focus { border-bottom-color: var(--accent); }
+  .proj-status-select {
+    font-family: inherit; font-size: 14px; color: var(--text); cursor: pointer;
+    border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px; background: var(--card);
+  }
+  .proj-subviews { display: flex; gap: 8px; margin-bottom: 18px; }
+  .subview-btn {
+    font-family: inherit; font-size: 14px; cursor: pointer; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 10px; padding: 7px 16px;
+    background: var(--card); transition: all .2s;
+  }
+  .subview-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  #projListWrap .quick-add-row { margin-bottom: 14px; }
+
   /* ===== MODAL ÉDITION ===== */
   .overlay {
     position: fixed; inset: 0; background: rgba(0,0,0,.35);
@@ -431,18 +458,18 @@
     <button class="nav-item" data-view="today">
       <span class="icon">📅</span> Aujourd'hui <span class="count" id="count-today"></span>
     </button>
-    <div class="nav-sep"></div>
     <button class="nav-item soon">
       <span class="icon">🗓️</span> Prochainement <span class="count">bientôt</span>
     </button>
     <button class="nav-item" data-view="eisenhower">
       <span class="icon">🎯</span> Eisenhower
     </button>
-    <button class="nav-item soon">
-      <span class="icon">🛒</span> Liste de course <span class="count">bientôt</span>
-    </button>
+    <div class="nav-sep"></div>
     <button class="nav-item" data-view="projects">
       <span class="icon">📁</span> Projets
+    </button>
+    <button class="nav-item soon">
+      <span class="icon">🛒</span> Liste de course <span class="count">bientôt</span>
     </button>
     <button class="nav-item soon">
       <span class="icon">🏷️</span> Labels <span class="count">bientôt</span>
@@ -486,6 +513,28 @@
     <div class="eisen-grid" id="eisenGrid"></div>
 
     <div class="kanban-board" id="kanbanBoard"></div>
+
+    <div class="project-view" id="projectView">
+      <div class="proj-detail-head">
+        <button class="icon-btn" id="projBack" aria-label="Retour aux projets">←</button>
+        <button class="proj-detail-icon" id="projIcon" aria-label="Changer l'icône">📁</button>
+        <input class="proj-detail-name" id="projName" type="text" placeholder="Nom du projet">
+        <select class="proj-status-select" id="projStatus" aria-label="Statut du projet"></select>
+      </div>
+      <div class="proj-subviews">
+        <button class="subview-btn" data-sub="list">Liste</button>
+        <button class="subview-btn" data-sub="eisen">Matrice</button>
+      </div>
+      <div id="projListWrap">
+        <div class="quick-add-row">
+          <input class="quick-input" id="projTaskInput" type="text"
+                 placeholder="Ajouter une tâche au projet…" autocomplete="off">
+          <button class="quick-submit" id="projTaskSubmit">Ajouter</button>
+        </div>
+        <ul class="task-list" id="projTaskList"></ul>
+      </div>
+      <div class="eisen-grid" id="projEisenGrid"></div>
+    </div>
   </main>
 </div>
 
@@ -554,7 +603,7 @@ const STATUSES = {
   delegue:      { label: "Délégué",      cls: "st-delegue" },
   termine:      { label: "Terminé",      cls: "st-termine" }
 };
-const KANBAN_STATUSES = ["pas_commence", "en_cours", "en_pause", "delegue"];
+const KANBAN_STATUSES = ["en_cours", "en_pause", "delegue", "pas_commence"];
 
 /* =========================================================
    STATE
@@ -565,6 +614,8 @@ let state = {
   view: "todo",
   sort: "due",
   editingId: null,
+  projectId: null,        // projet actuellement ouvert (vue détaillée)
+  projSub: "list",        // sous-vue du projet : "list" ou "eisen"
   newFlags: { urgent: false, important: false }
 };
 
@@ -810,37 +861,42 @@ function taskCard(task) {
 }
 
 function render() {
-  // Titre + sous-titre
+  // Titre + sous-titre (la page projet a son propre en-tête, donc titre vide)
   const titles = {
     todo:  { t: "Todo", s: "Toutes les tâches à accomplir" },
     today: { t: "Aujourd'hui", s: new Date().toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" }) },
     eisenhower: { t: "Eisenhower", s: "Tes tâches classées par urgence et importance" },
     projects: { t: "Projets", s: "Tes projets, organisés par statut" }
   };
-  document.getElementById("viewTitle").textContent = titles[state.view].t;
-  document.getElementById("viewSub").textContent = titles[state.view].s;
+  const info = titles[state.view] || { t: "", s: "" };
+  document.getElementById("viewTitle").textContent = info.t;
+  document.getElementById("viewSub").textContent = info.s;
 
-  // La saisie rapide et le tri ne concernent que les vues de tâches
+  // La saisie rapide et le tri ne concernent que les vues de tâches simples
+  const tasksView = state.view === "todo" || state.view === "today";
   $("toolbar").style.display = state.view === "todo" ? "flex" : "none";
-  document.querySelector(".quick-add").style.display = state.view === "projects" ? "none" : "block";
+  document.querySelector(".quick-add").style.display = tasksView ? "block" : "none";
 
   // Compteurs
   const active = state.tasks.filter(t => !t.completed);
   $("count-todo").textContent = active.filter(t => t.projectId == null).length || "";
   $("count-today").textContent = active.filter(isDueToday).length || "";
 
-  // Nav active
+  // Nav active (la page projet garde "Projets" en surbrillance)
   document.querySelectorAll(".nav-item[data-view]").forEach(b => {
-    b.classList.toggle("active", b.dataset.view === state.view);
+    const on = b.dataset.view === state.view || (state.view === "project" && b.dataset.view === "projects");
+    b.classList.toggle("active", on);
   });
 
-  // Affichage : liste simple, matrice Eisenhower, ou Kanban des projets
+  // Affichage : on masque tout, puis on montre la zone de la vue courante
   const listEl = $("taskList");
   const gridEl = $("eisenGrid");
   const kanbanEl = $("kanbanBoard");
+  const projEl = $("projectView");
   listEl.style.display = "none";
   gridEl.style.display = "none";
   kanbanEl.style.display = "none";
+  projEl.style.display = "none";
 
   if (state.view === "eisenhower") {
     gridEl.style.display = "grid";
@@ -848,26 +904,33 @@ function render() {
   } else if (state.view === "projects") {
     kanbanEl.style.display = "flex";
     renderKanban();
+  } else if (state.view === "project") {
+    projEl.style.display = "block";
+    renderProjectView();
   } else {
     listEl.style.display = "flex";
     renderList();
   }
 }
 
-function renderList() {
-  const list = visibleTasks();
-  const ul = document.getElementById("taskList");
+// Remplit une <ul> avec une liste de tâches (ou un message si vide). Réutilisable partout.
+function renderTasksInto(ul, tasks, emptyHtml) {
   ul.innerHTML = "";
-  if (list.length === 0) {
+  if (tasks.length === 0) {
     const empty = document.createElement("div");
     empty.className = "empty";
-    empty.innerHTML = state.view === "today"
-      ? `<div class="big">🎉</div>Rien de prévu aujourd'hui.`
-      : `<div class="big">📭</div>Aucune tâche. Ajoute-en une ci-dessus.`;
+    empty.innerHTML = emptyHtml;
     ul.appendChild(empty);
   } else {
-    list.forEach(t => ul.appendChild(taskCard(t)));
+    tasks.forEach(t => ul.appendChild(taskCard(t)));
   }
+}
+
+function renderList() {
+  const emptyHtml = state.view === "today"
+    ? `<div class="big">🎉</div>Rien de prévu aujourd'hui.`
+    : `<div class="big">📭</div>Aucune tâche. Ajoute-en une ci-dessus.`;
+  renderTasksInto($("taskList"), visibleTasks(), emptyHtml);
 }
 
 // Remplit une <ul> avec des cartes, ou un tiret si la liste est vide.
@@ -884,10 +947,11 @@ function fillColumn(ul, items, makeCard) {
   }
 }
 
-function renderEisenhower() {
-  const board = $("eisenGrid");
+// Construit une matrice Eisenhower dans n'importe quel conteneur, pour une liste de tâches.
+// Utilisée pour la vue globale ET pour la matrice d'un projet.
+function renderEisenhowerInto(board, tasks) {
   board.innerHTML = "";
-  const active = state.tasks.filter(t => !t.completed && t.projectId == null);
+  const active = tasks.filter(t => !t.completed);
   QUADRANT_ORDER.forEach(key => {
     const q = QUADRANTS[key];
     const cell = document.createElement("div");
@@ -906,6 +970,10 @@ function renderEisenhower() {
   });
 }
 
+function renderEisenhower() {
+  renderEisenhowerInto($("eisenGrid"), state.tasks.filter(t => t.projectId == null));
+}
+
 // Nombre de tâches actives d'un projet
 function projectTaskCount(projectId) {
   return state.tasks.filter(t => t.projectId === projectId && !t.completed).length;
@@ -920,6 +988,7 @@ function projectCard(project) {
     <div class="proj-head">
       <span class="proj-icon">${esc(project.icon || "📁")}</span>
       <span class="proj-name">${esc(project.name)}</span>
+      <button class="proj-del" type="button" aria-label="Supprimer le projet">×</button>
     </div>
     <div class="proj-meta">${count} tâche${count > 1 ? "s" : ""}</div>
     <button class="proj-add" type="button"><span class="plus-sm">+</span> Tâche</button>
@@ -992,9 +1061,10 @@ function addTask() {
   render();
 }
 
-// Ajout depuis une case de la matrice : la priorité du quadrant est imposée
-function addTaskInQuadrant(q, raw) {
-  db.add(makeTask(raw, QUADRANTS[q]));
+// Ajout depuis une case de matrice : la priorité du quadrant est imposée.
+// projectId rattache la tâche à un projet (null = tâche libre).
+function addTaskInQuadrant(q, raw, projectId = null) {
+  db.add(makeTask(raw, QUADRANTS[q], projectId));
 }
 
 function closeEisenAdd(input) {
@@ -1018,6 +1088,48 @@ function addProject(status, name) {
 // Ajoute une tâche rattachée à un projet (sans priorité Eisenhower imposée)
 function addTaskToProject(projectId, raw) {
   db.add(makeTask(raw, null, projectId));
+}
+
+// Ouvre la page détaillée d'un projet
+function openProject(id) {
+  state.view = "project";
+  state.projectId = id;
+  state.projSub = "list";
+  render();
+}
+
+// Affiche l'en-tête du projet + la sous-vue active (liste ou matrice)
+function renderProjectView() {
+  const p = state.projects.find(p => p.id === state.projectId);
+  if (!p) { navigate("projects"); return; }   // projet supprimé -> retour au Kanban
+
+  $("projIcon").textContent = p.icon || "📁";
+  $("projName").value = p.name;
+
+  // Remplit le sélecteur de statut (les 5 statuts, Terminé inclus)
+  const sel = $("projStatus");
+  sel.innerHTML = Object.keys(STATUSES)
+    .map(k => `<option value="${k}">${STATUSES[k].label}</option>`).join("");
+  sel.value = p.status;
+
+  // Bouton de sous-vue actif
+  document.querySelectorAll(".subview-btn").forEach(b =>
+    b.classList.toggle("active", b.dataset.sub === state.projSub));
+
+  const tasks = state.tasks.filter(t => t.projectId === p.id);
+  const listWrap = $("projListWrap");
+  const eisenBoard = $("projEisenGrid");
+
+  if (state.projSub === "eisen") {
+    listWrap.style.display = "none";
+    eisenBoard.style.display = "grid";
+    renderEisenhowerInto(eisenBoard, tasks);
+  } else {
+    eisenBoard.style.display = "none";
+    listWrap.style.display = "block";
+    renderTasksInto($("projTaskList"), tasks.filter(t => !t.completed),
+      `<div class="big">📭</div>Aucune tâche dans ce projet.`);
+  }
 }
 
 function toggleTask(id) {
@@ -1322,20 +1434,11 @@ function bindEvents() {
   document.getElementById("sidebarToggle").addEventListener("click", toggleSidebar);
   document.getElementById("scrim").addEventListener("click", closeSidebar);
 
-  // Drag and drop : matrice Eisenhower (change la priorité de la tâche)
-  const grid = document.getElementById("eisenGrid");
-  makeDraggable(grid, {
-    item: ".task", column: ".eisen-cell", list: ".task-list",
-    onDrop(itemEl, colEl) {
-      const flags = QUADRANTS[colEl.dataset.q];
-      const t = state.tasks.find(t => t.id === itemEl.dataset.id);
-      if (t) { t.urgent = flags.urgent; t.important = flags.important; }
-    },
-    persist() { state.tasks = reorderFromDOM(state.tasks, "#eisenGrid .task"); db.save(); }
-  });
+  // Drag and drop : matrice Eisenhower (globale) et Kanban des projets
+  setupEisenBoard($("eisenGrid"), () => null);          // vue globale : tâches libres
+  setupEisenBoard($("projEisenGrid"), () => state.projectId); // matrice d'un projet
 
-  // Drag and drop : Kanban des projets (change le statut du projet)
-  const kanban = document.getElementById("kanbanBoard");
+  const kanban = $("kanbanBoard");
   makeDraggable(kanban, {
     item: ".proj-card", column: ".kanban-col", list: ".kanban-list",
     onDrop(itemEl, colEl) {
@@ -1345,37 +1448,9 @@ function bindEvents() {
     persist() { state.projects = reorderFromDOM(state.projects, "#kanbanBoard .proj-card"); db.save(); }
   });
 
-  // Ajout inline dans la matrice Eisenhower (bouton + d'une case)
-  grid.addEventListener("click", e => {
-    const btn = e.target.closest(".eisen-add-btn");
-    if (!btn) return;
-    btn.hidden = true;
-    const input = btn.closest(".eisen-add").querySelector(".eisen-add-input");
-    input.hidden = false;
-    input.focus();
-  });
-  grid.addEventListener("keydown", e => {
-    const input = e.target.closest(".eisen-add-input");
-    if (!input) return;
-    if (e.key === "Enter") {
-      const raw = input.value.trim();
-      if (raw) {
-        addTaskInQuadrant(input.closest(".eisen-cell").dataset.q, raw);
-        input.value = "";
-        render();
-        input.focus();
-      }
-    } else if (e.key === "Escape") {
-      closeEisenAdd(input);
-    }
-  });
-  grid.addEventListener("focusout", e => {
-    const input = e.target.closest(".eisen-add-input");
-    if (input && !input.value.trim()) closeEisenAdd(input);
-  });
-
-  // Kanban : ouvrir un champ de saisie (nouveau projet OU nouvelle tâche d'un projet)
+  // Kanban : ouvrir une carte projet, ou un champ d'ajout (projet / tâche)
   kanban.addEventListener("click", e => {
+    if (Date.now() - lastDragEnd < 300) return;       // pas juste après un drag
     const colAdd = e.target.closest(".col-add-btn");
     const projAdd = e.target.closest(".proj-add");
     if (colAdd) {
@@ -1386,6 +1461,9 @@ function bindEvents() {
       projAdd.hidden = true;
       const input = projAdd.closest(".proj-card").querySelector(".proj-add-input");
       input.hidden = false; input.focus();
+    } else if (!e.target.closest(".proj-add-input")) {
+      const card = e.target.closest(".proj-card");
+      if (card) openProject(card.dataset.id);
     }
   });
   kanban.addEventListener("keydown", e => {
@@ -1405,8 +1483,79 @@ function bindEvents() {
     }
   });
 
+  // Vue détaillée d'un projet
+  $("projBack").addEventListener("click", () => navigate("projects"));
+  $("projName").addEventListener("change", e => {
+    if (state.projectId) db.updateProject(state.projectId, { name: e.target.value.trim() || "Sans titre" });
+  });
+  $("projIcon").addEventListener("click", () => {
+    const current = state.projects.find(p => p.id === state.projectId);
+    const icon = prompt("Emoji du projet :", current ? current.icon : "📁");
+    if (icon != null) { db.updateProject(state.projectId, { icon: icon.trim() || "📁" }); render(); }
+  });
+  $("projStatus").addEventListener("change", e => {
+    if (state.projectId) { db.updateProject(state.projectId, { status: e.target.value }); }
+  });
+  document.querySelectorAll(".subview-btn").forEach(b => {
+    b.addEventListener("click", () => { state.projSub = b.dataset.sub; render(); });
+  });
+  $("projTaskSubmit").addEventListener("click", addProjectTaskFromInput);
+  $("projTaskInput").addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); addProjectTaskFromInput(); }
+  });
+
   // Bascule thème clair / nuit
   document.getElementById("themeToggle").addEventListener("click", toggleTheme);
+}
+
+// Câble une matrice Eisenhower (drag + ajout inline par case). getProjectId rattache
+// les nouvelles tâches à un projet (null pour la vue globale).
+function setupEisenBoard(board, getProjectId) {
+  makeDraggable(board, {
+    item: ".task", column: ".eisen-cell", list: ".task-list",
+    onDrop(itemEl, colEl) {
+      const flags = QUADRANTS[colEl.dataset.q];
+      const t = state.tasks.find(t => t.id === itemEl.dataset.id);
+      if (t) { t.urgent = flags.urgent; t.important = flags.important; }
+    },
+    persist() { state.tasks = reorderFromDOM(state.tasks, "#" + board.id + " .task"); db.save(); }
+  });
+  board.addEventListener("click", e => {
+    const btn = e.target.closest(".eisen-add-btn");
+    if (!btn) return;
+    btn.hidden = true;
+    const input = btn.closest(".eisen-add").querySelector(".eisen-add-input");
+    input.hidden = false; input.focus();
+  });
+  board.addEventListener("keydown", e => {
+    const input = e.target.closest(".eisen-add-input");
+    if (!input) return;
+    if (e.key === "Enter") {
+      const raw = input.value.trim();
+      if (raw) {
+        addTaskInQuadrant(input.closest(".eisen-cell").dataset.q, raw, getProjectId());
+        input.value = "";
+        render();
+      }
+    } else if (e.key === "Escape") {
+      closeEisenAdd(input);
+    }
+  });
+  board.addEventListener("focusout", e => {
+    const input = e.target.closest(".eisen-add-input");
+    if (input && !input.value.trim()) closeEisenAdd(input);
+  });
+}
+
+// Ajoute une tâche au projet ouvert depuis le champ de la sous-vue liste
+function addProjectTaskFromInput() {
+  const input = $("projTaskInput");
+  const raw = input.value.trim();
+  if (!raw || !state.projectId) return;
+  addTaskToProject(state.projectId, raw);
+  input.value = "";
+  render();
+  $("projTaskInput").focus();
 }
 
 /* =========================================================
