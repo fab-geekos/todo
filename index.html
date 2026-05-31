@@ -327,13 +327,20 @@
   .proj-meta { font-size: 12px; color: var(--muted); margin-top: 6px; }
   .proj-empty { font-size: 12px; color: var(--muted); margin-top: 6px; font-style: italic; }
   .proj-progress {
-    display: flex; flex-wrap: wrap; gap: 3px; margin-top: 8px;
+    display: flex; align-items: center; gap: 8px; margin-top: 8px;
   }
-  .prog-cell {
-    width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0;
-    border: 1.5px solid var(--border); background: transparent; transition: background .15s;
+  .proj-bar {
+    flex: 1; height: 7px; border-radius: 4px; background: var(--border); overflow: hidden;
   }
-  .prog-cell.done { background: var(--success); border-color: var(--success); }
+  .proj-bar-fill {
+    height: 100%; border-radius: 4px; background: var(--muted); transition: width .3s ease;
+  }
+  .proj-bar-fill.st-pas_commence { background: var(--st-pas_commence); }
+  .proj-bar-fill.st-en_cours { background: var(--st-en_cours); }
+  .proj-bar-fill.st-en_pause { background: var(--st-en_pause); }
+  .proj-bar-fill.st-delegue { background: var(--st-delegue); }
+  .proj-bar-fill.st-termine { background: var(--st-termine); }
+  .proj-pct { font-size: 12px; color: var(--muted); font-weight: 600; flex-shrink: 0; min-width: 32px; text-align: right; }
   .proj-add {
     display: flex; align-items: center; gap: 6px; width: 100%; margin-top: 8px;
     background: none; border: none; cursor: pointer; color: var(--muted);
@@ -1118,16 +1125,17 @@ function projectCard(project) {
   const tasks = projectTasks(project.id);
   const { done, total } = projectProgress(project.id);
 
-  // Barre de progression : une case par tâche (verte si faite). Tooltip = titre + état.
+  // Barre de progression : se remplit selon le %, couleur = celle du statut du projet.
   let progressHtml;
   if (total === 0) {
     progressHtml = `<div class="proj-empty">Aucune tâche</div>`;
   } else {
-    const cells = tasks.map(t =>
-      `<span class="prog-cell${t.completed ? " done" : ""}" title="${esc(t.title)} — ${t.completed ? "fait" : "à faire"}"></span>`
-    ).join("");
+    const pct = Math.round((done / total) * 100);
     progressHtml = `
-      <div class="proj-progress">${cells}</div>
+      <div class="proj-progress">
+        <div class="proj-bar"><div class="proj-bar-fill ${STATUSES[project.status].cls}" style="width:${pct}%"></div></div>
+        <span class="proj-pct">${pct}%</span>
+      </div>
       <div class="proj-meta">${done}/${total} fait${done > 1 ? "s" : ""}</div>`;
   }
 
