@@ -706,7 +706,7 @@ let state = {
   sort: "due",
   editingId: null,
   projectId: null,        // projet actuellement ouvert (vue détaillée)
-  projSub: "list",        // sous-vue du projet : "list" ou "eisen"
+  projSub: "eisen",       // sous-vue du projet par défaut : "eisen" (matrice) ou "list"
   projectsTab: "active",  // onglet de la vue Projets : "active" (tableau) ou "done" (terminés)
   contactSearch: "",      // texte de recherche dans la vue Contacts
   newFlags: { urgent: false, important: false }
@@ -1316,7 +1316,7 @@ function pickContact() {
 function openProject(id) {
   state.view = "project";
   state.projectId = id;
-  state.projSub = "list";
+  state.projSub = "eisen";
   render();
 }
 
