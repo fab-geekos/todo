@@ -395,6 +395,11 @@
     cursor: pointer; border-radius: 8px; padding: 2px 6px; transition: background .15s;
   }
   .contact-bday:hover { background: var(--bg); }
+  .contact-bday-input {
+    width: 70px; font-family: inherit; font-size: 13px; color: var(--text);
+    border: 1px solid var(--accent); border-radius: 8px; padding: 4px 8px;
+    background: var(--card); outline: none; text-align: center;
+  }
   .contact-del {
     opacity: 0; background: none; border: none; cursor: pointer;
     color: var(--muted); font-size: 18px; line-height: 1; padding: 0 2px; transition: opacity .2s, color .2s;
@@ -512,7 +517,7 @@
       <span class="icon">📁</span> Projets
     </button>
     <button class="nav-item" data-view="contacts">
-      <span class="icon">👥</span> Contacts
+      <span class="icon">🧑</span> Contacts
     </button>
     <button class="nav-item soon">
       <span class="icon">🛒</span> Liste de course <span class="count">bientôt</span>
@@ -568,7 +573,7 @@
       </div>
       <div class="proj-subviews">
         <button class="subview-btn" data-sub="list">Liste</button>
-        <button class="subview-btn" data-sub="eisen">Matrice</button>
+        <button class="subview-btn" data-sub="eisen">Eisenhower</button>
       </div>
       <div id="projListWrap">
         <div class="quick-add-row">
@@ -1294,6 +1299,8 @@ function contactCard(contact) {
     <div class="contact-head">
       <span class="contact-name">${esc(contact.name)}</span>
       <span class="contact-bday" data-action="bday">🎂 ${bday ? esc(bday) : "Ajouter"}</span>
+      <input class="contact-bday-input" type="text" inputmode="numeric" maxlength="5"
+             placeholder="JJ/MM" value="${contact.birthday ? esc(contact.birthday.split("-").reverse().join("/")) : ""}" hidden>
       <button class="contact-del" type="button" data-action="del" aria-label="Supprimer">×</button>
     </div>
     ${projectsHtml}
@@ -1314,7 +1321,7 @@ function renderContacts() {
     empty.className = "empty";
     empty.innerHTML = q
       ? `<div class="big">🔍</div>Aucun contact trouvé.`
-      : `<div class="big">👥</div>Aucun contact. Ajoute-en un, ou délègue un projet.`;
+      : `<div class="big">🧑</div>Aucun contact. Ajoute-en un, ou délègue un projet.`;
     ul.appendChild(empty);
   } else {
     list.forEach(c => ul.appendChild(contactCard(c)));
@@ -1726,10 +1733,34 @@ function bindEvents() {
     if (action === "del") {
       deleteContact(id);
     } else if (action === "bday") {
-      editBirthday(id);
+      // ouvre le champ de saisie de l'anniversaire
+      const label = e.target.closest(".contact-bday");
+      const input = card.querySelector(".contact-bday-input");
+      label.hidden = true;
+      input.hidden = false;
+      input.focus();
+      input.select();
     } else if (projEl) {
       openProject(projEl.dataset.proj);
     }
+  });
+  // Saisie de l'anniversaire : insertion auto du "/" après le jour
+  $("contactList").addEventListener("input", e => {
+    const input = e.target.closest(".contact-bday-input");
+    if (!input) return;
+    let v = input.value.replace(/[^\d]/g, "").slice(0, 4);     // ne garder que les chiffres (JJMM)
+    if (v.length >= 3) v = v.slice(0, 2) + "/" + v.slice(2);   // JJ + / + MM
+    input.value = v;
+  });
+  $("contactList").addEventListener("keydown", e => {
+    const input = e.target.closest(".contact-bday-input");
+    if (!input) return;
+    if (e.key === "Enter") { e.preventDefault(); input.blur(); }
+    else if (e.key === "Escape") { render(); }
+  });
+  $("contactList").addEventListener("focusout", e => {
+    const input = e.target.closest(".contact-bday-input");
+    if (input) saveBirthday(input.closest(".contact-card").dataset.id, input.value);
   });
 
   // Bascule thème clair / nuit
@@ -1746,19 +1777,14 @@ function deleteContact(id) {
   render();
 }
 
-// Saisie de l'anniversaire au format JJ/MM, stocké en "MM-JJ"
-function editBirthday(id) {
-  const c = state.contacts.find(c => c.id === id);
-  if (!c) return;
-  const current = c.birthday ? c.birthday.split("-").reverse().join("/") : "";
-  const answer = prompt("Anniversaire (JJ/MM) :", current);
-  if (answer === null) return;
-  const t = answer.trim();
+// Enregistre l'anniversaire saisi (JJ/MM) au format stocké "MM-JJ". Vide = effacer.
+function saveBirthday(id, raw) {
+  const t = (raw || "").trim();
   if (t === "") { db.updateContact(id, { birthday: null }); render(); return; }
   const m = t.match(/^(\d{1,2})\/(\d{1,2})$/);
-  if (!m) { alert("Format attendu : JJ/MM (ex : 14/07)"); return; }
+  if (!m) { render(); return; }   // format incomplet : on annule sans rien casser
   const day = parseInt(m[1], 10), mon = parseInt(m[2], 10);
-  if (day < 1 || day > 31 || mon < 1 || mon > 12) { alert("Date invalide."); return; }
+  if (day < 1 || day > 31 || mon < 1 || mon > 12) { render(); return; }
   const pad = n => String(n).padStart(2, "0");
   db.updateContact(id, { birthday: pad(mon) + "-" + pad(day) });
   render();
