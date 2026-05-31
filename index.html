@@ -18,6 +18,7 @@
     --muted: #888;
     --card: #fff;
     --border: #ececec;
+    --hover: #fcfcfc;
     --radius: 14px;
     --shadow: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
 
@@ -44,10 +45,9 @@
     --card: #131b2e;
     --muted: #64748b;
     --border: #1e293b;
+    --hover: #1a2438;
     --shadow: 0 1px 3px rgba(0,0,0,.4);
   }
-  body.dark .task:hover { background: #1a2438; }
-  body.dark .icon-btn:hover { background: #1a2438; }
   body.dark .field input, body.dark .field textarea { background: var(--card); }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -129,7 +129,7 @@
     flex-shrink: 0; transition: background .2s; box-shadow: var(--shadow);
     display: grid; place-items: center;
   }
-  .icon-btn:hover { background: var(--bg); }
+  .icon-btn:hover { background: var(--hover); }
 
   .toolbar {
     display: flex; align-items: center; gap: 10px;
@@ -180,7 +180,7 @@
     cursor: pointer; transition: background .15s;
     animation: fadeUp .25s ease;
   }
-  .task:hover { background: #fcfcfc; }
+  .task:hover { background: var(--hover); }
   .task.q-faire { border-left-color: var(--q-faire); }
   .task.q-planifier { border-left-color: var(--q-planifier); }
   .task.q-deleguer { border-left-color: var(--q-deleguer); }
@@ -484,8 +484,7 @@
     width: 42px; height: 42px; cursor: pointer; font-size: 20px; color: var(--text);
     box-shadow: var(--shadow); display: grid; place-items: center; transition: background .2s;
   }
-  .menu-btn:hover { background: var(--bg); }
-  body.dark .menu-btn:hover { background: #1a2438; }
+  .menu-btn:hover { background: var(--hover); }
   /* Desktop : repli de la sidebar */
   @media (min-width: 721px) {
     body.sidebar-hidden .sidebar { display: none; }
@@ -802,6 +801,11 @@ function uid() {
 
 const $ = id => document.getElementById(id);
 
+// Accès à un élément par son id dans chaque collection
+const getTask = id => state.tasks.find(t => t.id === id);
+const getProject = id => state.projects.find(p => p.id === id);
+const getContact = id => state.contacts.find(c => c.id === id);
+
 function startOfDay(d) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
 function endOfToday() { return startOfDay(new Date()).getTime() + DAY_MS - 1; }
 function isDueToday(t) { return t.dueDate != null && t.dueDate <= endOfToday(); }
@@ -975,7 +979,7 @@ function taskCard(task) {
 
   // Nom du projet, affiché seulement dans les vues globales (pas quand on est déjà dans le projet)
   const project = (task.projectId && state.view !== "project")
-    ? state.projects.find(p => p.id === task.projectId)
+    ? getProject(task.projectId)
     : null;
 
   // Méta sous le titre : date d'échéance, projet, et contact (si projet délégué)
@@ -984,7 +988,7 @@ function taskCard(task) {
   if (project) {
     metaParts.push(`<span class="task-project">${esc(project.icon || DEFAULT_PROJECT_ICON)} ${esc(project.name)}</span>`);
     if (project.status === "delegue" && project.assigneeId) {
-      const contact = state.contacts.find(c => c.id === project.assigneeId);
+      const contact = getContact(project.assigneeId);
       if (contact) metaParts.push(`<span class="task-contact">🧑 ${esc(contact.name)}</span>`);
     }
   }
@@ -1333,7 +1337,7 @@ function addTaskToProject(projectId, raw, flags) {
 
 // Supprime définitivement un projet et toutes ses tâches (après confirmation)
 function deleteProject(id) {
-  const p = state.projects.find(p => p.id === id);
+  const p = getProject(id);
   if (!p) return;
   const n = state.tasks.filter(t => t.projectId === id).length;
   const msg = `Supprimer définitivement le projet « ${p.name} »`
@@ -1389,7 +1393,7 @@ function openProject(id) {
 
 // Affiche l'en-tête du projet + la sous-vue active (liste ou matrice)
 function renderProjectView() {
-  const p = state.projects.find(p => p.id === state.projectId);
+  const p = getProject(state.projectId);
   if (!p) { navigate("projects"); return; }   // projet supprimé -> retour au Kanban
 
   $("projIcon").textContent = p.icon || DEFAULT_PROJECT_ICON;
@@ -1483,7 +1487,7 @@ function renderContacts() {
 }
 
 function toggleTask(id) {
-  const t = state.tasks.find(t => t.id === id);
+  const t = getTask(id);
   if (!t) return;
   db.update(id, { completed: !t.completed, completedAt: !t.completed ? Date.now() : null });
   render();
@@ -1496,7 +1500,7 @@ function deleteTask(id) {
 
 /* ---- Modal d'édition ---- */
 function openEditor(id) {
-  const t = state.tasks.find(t => t.id === id);
+  const t = getTask(id);
   if (!t) return;
   state.editingId = id;
 
@@ -1793,7 +1797,7 @@ function bindEvents() {
   makeDraggable(kanban, {
     item: ".proj-card", column: ".kanban-col", list: ".kanban-list",
     onDrop(itemEl, colEl) {
-      const p = state.projects.find(p => p.id === itemEl.dataset.id);
+      const p = getProject(itemEl.dataset.id);
       if (!p) return;
       const newStatus = colEl.dataset.status;
       if (newStatus === "delegue" && p.status !== "delegue") {
@@ -1827,7 +1831,7 @@ function bindEvents() {
     if (state.projectId) db.updateProject(state.projectId, { name: e.target.value.trim() || "Sans titre" });
   });
   $("projIcon").addEventListener("click", () => {
-    const current = state.projects.find(p => p.id === state.projectId);
+    const current = getProject(state.projectId);
     const icon = prompt("Emoji du projet :", current ? current.icon : DEFAULT_PROJECT_ICON);
     if (icon != null) { db.updateProject(state.projectId, { icon: icon.trim() || DEFAULT_PROJECT_ICON }); render(); }
   });
@@ -1898,7 +1902,7 @@ function bindEvents() {
 
 // Supprime un contact (les projets délégués perdent leur assignation, sans être supprimés)
 function deleteContact(id) {
-  const c = state.contacts.find(c => c.id === id);
+  const c = getContact(id);
   if (!c) return;
   if (!confirm(`Supprimer le contact « ${c.name} » ?`)) return;
   state.projects.forEach(p => { if (p.assigneeId === id) p.assigneeId = null; });
@@ -1929,7 +1933,7 @@ function setupEisenBoard(board, getProjectId, opts = {}) {
     item: ".task", column: ".eisen-cell", list: ".task-list",
     onDrop(itemEl, colEl) {
       const flags = QUADRANTS[colEl.dataset.q];
-      const t = state.tasks.find(t => t.id === itemEl.dataset.id);
+      const t = getTask(itemEl.dataset.id);
       if (t) { t.urgent = flags.urgent; t.important = flags.important; }
     },
     persist() {
