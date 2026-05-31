@@ -585,8 +585,8 @@
     <div class="eisen-grid" id="eisenGrid"></div>
 
     <div class="projects-tabs" id="projectsTabs">
-      <button class="subview-btn" data-ptab="active">Tableau</button>
-      <button class="subview-btn" data-ptab="done">Terminés</button>
+      <button class="subview-btn" data-ptab="active">Avancement</button>
+      <button class="subview-btn" data-ptab="done">Archive</button>
     </div>
     <div class="kanban-board" id="kanbanBoard"></div>
     <ul class="done-list" id="projectsDone"></ul>
@@ -1033,7 +1033,7 @@ function render() {
     tabsEl.style.display = "flex";
     // onglet actif
     const doneCount = state.projects.filter(p => p.status === "termine").length;
-    tabsEl.querySelector('[data-ptab="done"]').textContent = "Terminés" + (doneCount ? ` (${doneCount})` : "");
+    tabsEl.querySelector('[data-ptab="done"]').textContent = "Archive" + (doneCount ? ` (${doneCount})` : "");
     tabsEl.querySelectorAll(".subview-btn").forEach(b =>
       b.classList.toggle("active", b.dataset.ptab === state.projectsTab));
     if (state.projectsTab === "done") {
