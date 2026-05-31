@@ -217,6 +217,10 @@
     font-size: 12px; color: var(--muted);
     display: inline-flex; align-items: center; gap: 4px;
   }
+  .task-contact {
+    font-size: 12px; color: var(--muted);
+    display: inline-flex; align-items: center; gap: 4px;
+  }
 
   .task-del {
     opacity: 0; background: none; border: none; cursor: pointer;
@@ -308,6 +312,9 @@
   .kanban-list { list-style: none; display: flex; flex-direction: column; gap: 8px; min-height: 8px; }
 
   .projects-tabs { display: none; gap: 8px; margin-bottom: 18px; }
+  #projectsPriorities { display: none; margin-top: 32px; }
+  .section-title { font-size: 18px; font-weight: 700; margin-bottom: 2px; }
+  .section-sub { font-size: 13px; color: var(--muted); margin-bottom: 16px; }
   .done-list { display: none; list-style: none; flex-direction: column; gap: 10px; max-width: 560px; }
   .done-list .proj-card { cursor: pointer; }
   .done-list .proj-add, .done-list .proj-add-input { display: none; }  /* pas d'ajout de tâche sur un projet terminé */
@@ -589,6 +596,11 @@
       <button class="subview-btn" data-ptab="done">Archive</button>
     </div>
     <div class="kanban-board" id="kanbanBoard"></div>
+    <div id="projectsPriorities">
+      <h2 class="section-title">🎯 Priorités du moment</h2>
+      <p class="section-sub">Tâches des projets en cours et délégués</p>
+      <div class="eisen-grid" id="projectsEisenGrid"></div>
+    </div>
     <ul class="done-list" id="projectsDone"></ul>
 
     <div class="project-view" id="projectView">
@@ -959,10 +971,16 @@ function taskCard(task) {
     ? state.projects.find(p => p.id === task.projectId)
     : null;
 
-  // Méta sous le titre : date d'échéance et/ou projet
+  // Méta sous le titre : date d'échéance, projet, et contact (si projet délégué)
   const metaParts = [];
   if (due) metaParts.push(`<span class="due ${due.cls}">📅 ${esc(due.label)}</span>`);
-  if (project) metaParts.push(`<span class="task-project">${esc(project.icon || DEFAULT_PROJECT_ICON)} ${esc(project.name)}</span>`);
+  if (project) {
+    metaParts.push(`<span class="task-project">${esc(project.icon || DEFAULT_PROJECT_ICON)} ${esc(project.name)}</span>`);
+    if (project.status === "delegue" && project.assigneeId) {
+      const contact = state.contacts.find(c => c.id === project.assigneeId);
+      if (contact) metaParts.push(`<span class="task-contact">🧑 ${esc(contact.name)}</span>`);
+    }
+  }
   const metaHtml = metaParts.length ? `<div class="task-meta">${metaParts.join("")}</div>` : "";
 
   const li = document.createElement("li");
@@ -1016,6 +1034,7 @@ function render() {
   const kanbanEl = $("kanbanBoard");
   const tabsEl = $("projectsTabs");
   const doneEl = $("projectsDone");
+  const prioEl = $("projectsPriorities");
   const projEl = $("projectView");
   const contactsEl = $("contactsView");
   listEl.style.display = "none";
@@ -1023,6 +1042,7 @@ function render() {
   kanbanEl.style.display = "none";
   tabsEl.style.display = "none";
   doneEl.style.display = "none";
+  prioEl.style.display = "none";
   projEl.style.display = "none";
   contactsEl.style.display = "none";
 
@@ -1041,7 +1061,9 @@ function render() {
       renderProjectsDone();
     } else {
       kanbanEl.style.display = "flex";
+      prioEl.style.display = "block";
       renderKanban();
+      renderProjectsEisenhower();
     }
   } else if (state.view === "project") {
     projEl.style.display = "block";
@@ -1090,8 +1112,10 @@ function fillColumn(ul, items, makeCard, emptyText = "—") {
 }
 
 // Construit une matrice Eisenhower dans n'importe quel conteneur, pour une liste de tâches.
-// Utilisée pour la vue globale ET pour la matrice d'un projet.
-function renderEisenhowerInto(board, tasks) {
+// Utilisée pour la vue globale, la matrice d'un projet, et la synthèse des projets actifs.
+// opts.showAdd (défaut true) : afficher ou non le bouton "+" d'ajout par case.
+function renderEisenhowerInto(board, tasks, opts = {}) {
+  const showAdd = opts.showAdd !== false;
   board.innerHTML = "";
   const active = tasks.filter(t => !t.completed);
   QUADRANT_ORDER.forEach(key => {
@@ -1102,10 +1126,11 @@ function renderEisenhowerInto(board, tasks) {
     cell.innerHTML = `
       <div class="eisen-head"><span class="eisen-title">${q.label}</span><span class="eisen-sub">${q.desc}</span></div>
       <ul class="task-list"></ul>
+      ${showAdd ? `
       <div class="eisen-add">
         <button class="eisen-add-btn" type="button"><span class="plus-sm">+</span></button>
         <input class="eisen-add-input" type="text" placeholder="Nouvelle tâche…" autocomplete="off" hidden>
-      </div>
+      </div>` : ""}
     `;
     fillColumn(cell.querySelector(".task-list"), active.filter(t => quadrantOf(t) === key), taskCard);
     board.appendChild(cell);
@@ -1114,6 +1139,15 @@ function renderEisenhowerInto(board, tasks) {
 
 function renderEisenhower() {
   renderEisenhowerInto($("eisenGrid"), state.tasks);
+}
+
+// Synthèse : tâches des projets En cours et Délégué, classées par priorité.
+function renderProjectsEisenhower() {
+  const activeIds = state.projects
+    .filter(p => p.status === "en_cours" || p.status === "delegue")
+    .map(p => p.id);
+  const tasks = state.tasks.filter(t => activeIds.includes(t.projectId));
+  renderEisenhowerInto($("projectsEisenGrid"), tasks, { showAdd: false });
 }
 
 // Tâches d'un projet (dans l'ordre de state.tasks)
@@ -1720,6 +1754,7 @@ function bindEvents() {
   // Drag and drop : matrice Eisenhower (globale) et Kanban des projets
   setupEisenBoard($("eisenGrid"), () => null);          // vue globale : tâches libres
   setupEisenBoard($("projEisenGrid"), () => state.projectId); // matrice d'un projet
+  setupEisenBoard($("projectsEisenGrid"), () => null, { reorder: false }); // synthèse projets actifs
 
   const kanban = $("kanbanBoard");
   makeDraggable(kanban, {
@@ -1853,7 +1888,10 @@ function saveBirthday(id, raw) {
 
 // Câble une matrice Eisenhower (drag + ajout inline par case). getProjectId rattache
 // les nouvelles tâches à un projet (null pour la vue globale).
-function setupEisenBoard(board, getProjectId) {
+// opts.reorder (défaut true) : réordonner state.tasks selon l'ordre affiché. Désactivé
+// pour la synthèse multi-projets (le drag n'y sert qu'à changer la priorité).
+function setupEisenBoard(board, getProjectId, opts = {}) {
+  const reorder = opts.reorder !== false;
   makeDraggable(board, {
     item: ".task", column: ".eisen-cell", list: ".task-list",
     onDrop(itemEl, colEl) {
@@ -1861,7 +1899,10 @@ function setupEisenBoard(board, getProjectId) {
       const t = state.tasks.find(t => t.id === itemEl.dataset.id);
       if (t) { t.urgent = flags.urgent; t.important = flags.important; }
     },
-    persist() { state.tasks = reorderFromDOM(state.tasks, "#" + board.id + " .task"); db.save(); }
+    persist() {
+      if (reorder) state.tasks = reorderFromDOM(state.tasks, "#" + board.id + " .task");
+      db.save();
+    }
   });
   board.addEventListener("click", e => {
     const btn = e.target.closest(".eisen-add-btn");
