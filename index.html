@@ -317,7 +317,7 @@
   .section-sub { font-size: 13px; color: var(--muted); margin-bottom: 16px; }
   .done-list { display: none; list-style: none; flex-direction: column; gap: 10px; max-width: 560px; }
   .done-list .proj-card { cursor: pointer; }
-  .done-list .proj-add, .done-list .proj-add-input { display: none; }  /* pas d'ajout de tâche sur un projet terminé */
+  .done-list .proj-add, .done-list .proj-add-zone { display: none; }  /* pas d'ajout de tâche sur un projet terminé */
 
   .proj-card {
     background: var(--bg); border: 1px solid var(--border); border-radius: 12px;
@@ -372,6 +372,8 @@
     border: 1px solid var(--accent); border-radius: 8px; padding: 9px 10px;
     background: var(--card); outline: none; margin-top: 6px;
   }
+  .proj-add-zone .flags { gap: 6px; margin-top: 8px; }
+  .proj-add-zone .flag { font-size: 12px; padding: 4px 10px; }
 
   /* ===== VUE DÉTAILLÉE D'UN PROJET ===== */
   .project-view { display: none; }
@@ -615,10 +617,16 @@
         <button class="subview-btn" data-sub="eisen">Eisenhower</button>
       </div>
       <div id="projListWrap">
-        <div class="quick-add-row">
-          <input class="quick-input" id="projTaskInput" type="text"
-                 placeholder="Ajouter une tâche au projet…" autocomplete="off">
-          <button class="quick-submit" id="projTaskSubmit">Ajouter</button>
+        <div class="quick-add">
+          <div class="quick-add-row">
+            <input class="quick-input" id="projTaskInput" type="text"
+                   placeholder="Ajouter une tâche au projet…" autocomplete="off">
+            <button class="quick-submit" id="projTaskSubmit">Ajouter</button>
+          </div>
+          <div class="flags">
+            <button class="flag" data-flag="important"><span class="star">★</span> Important</button>
+            <button class="flag" data-flag="urgent">⚡ Urgent</button>
+          </div>
         </div>
         <ul class="task-list" id="projTaskList"></ul>
       </div>
@@ -720,8 +728,7 @@ let state = {
   projectId: null,        // projet actuellement ouvert (vue détaillée)
   projSub: "eisen",       // sous-vue du projet par défaut : "eisen" (matrice) ou "list"
   projectsTab: "active",  // onglet de la vue Projets : "active" (tableau) ou "done" (terminés)
-  contactSearch: "",      // texte de recherche dans la vue Contacts
-  newFlags: { urgent: false, important: false }
+  contactSearch: ""       // texte de recherche dans la vue Contacts
 };
 
 /* =========================================================
@@ -1194,7 +1201,10 @@ function projectCard(project) {
     </div>
     ${progressHtml}
     <button class="proj-add" type="button"><span class="plus-sm">+</span> Tâche</button>
-    <input class="proj-add-input" type="text" placeholder="Nouvelle tâche…" autocomplete="off" hidden>
+    <div class="proj-add-zone" hidden>
+      <input class="proj-add-input" type="text" placeholder="Nouvelle tâche…" autocomplete="off">
+      ${flagsHtml()}
+    </div>
   `;
   return li;
 }
@@ -1252,19 +1262,39 @@ function makeTask(raw, flags, projectId = null) {
   };
 }
 
+/* =========================================================
+   COMPOSANT « BOUTONS DE PRIORITÉ » (Important / Urgent)
+   Un seul endroit qui génère le HTML, lit l'état et réinitialise.
+   Réutilisé par la saisie rapide, le + Tâche d'un projet, et la vue Liste d'un projet.
+   Le toggle est géré globalement (voir le listener délégué dans bindEvents).
+   ========================================================= */
+function flagsHtml(flags) {
+  flags = flags || {};
+  return `<div class="flags">
+    <button class="flag${flags.important ? " on" : ""}" data-flag="important"><span class="star">★</span> Important</button>
+    <button class="flag${flags.urgent ? " on" : ""}" data-flag="urgent">⚡ Urgent</button>
+  </div>`;
+}
+
+// Lit l'état des boutons de priorité dans un conteneur -> { urgent, important }
+function readFlags(container) {
+  const on = sel => !!(container && container.querySelector(`.flag.on[data-flag="${sel}"]`));
+  return { urgent: on("urgent"), important: on("important") };
+}
+
 function addTask() {
   const input = $("quickInput");
   const raw = input.value.trim();
   if (!raw) return;
 
-  // makeTask a déjà déduit urgent/important du texte ; on y ajoute les boutons cliqués
+  // makeTask déduit urgent/important du texte ; on y ajoute les boutons cliqués
+  const flags = readFlags(document.querySelector(".quick-add"));
   const task = makeTask(raw);
-  task.urgent = task.urgent || state.newFlags.urgent;
-  task.important = task.important || state.newFlags.important;
+  task.urgent = task.urgent || flags.urgent;
+  task.important = task.important || flags.important;
   db.add(task);
 
   input.value = "";
-  state.newFlags = { urgent: false, important: false };
   document.querySelectorAll(".quick-add .flag").forEach(f => f.classList.remove("on"));
   input.focus();
   render();
@@ -1294,9 +1324,11 @@ function addProject(status, name) {
   db.addProject(p);
 }
 
-// Ajoute une tâche rattachée à un projet (sans priorité Eisenhower imposée)
-function addTaskToProject(projectId, raw) {
-  db.add(makeTask(raw, null, projectId));
+// Ajoute une tâche rattachée à un projet, avec priorité éventuelle (boutons Important/Urgent)
+function addTaskToProject(projectId, raw, flags) {
+  const task = makeTask(raw, null, projectId);
+  if (flags) { task.urgent = task.urgent || flags.urgent; task.important = task.important || flags.important; }
+  db.add(task);
 }
 
 // Supprime définitivement un projet et toutes ses tâches (après confirmation)
@@ -1700,12 +1732,12 @@ function bindEvents() {
     if (e.key === "Enter") { e.preventDefault(); addTask(); }
   });
 
-  // Toggles urgent / important (ajout)
-  document.querySelectorAll(".quick-add .flag").forEach(flag => {
-    flag.addEventListener("click", () => {
-      const key = flag.dataset.flag;
-      state.newFlags[key] = !state.newFlags[key];
-      flag.classList.toggle("on", state.newFlags[key]);
+  // Boutons de priorité (saisie rapide + vue Liste d'un projet) : toggle générique.
+  // Les cartes projet du Kanban sont gérées séparément par onProjectBoardClick.
+  document.querySelectorAll(".quick-add").forEach(zone => {
+    zone.addEventListener("click", e => {
+      const flag = e.target.closest(".flag");
+      if (flag) flag.classList.toggle("on");
     });
   });
 
@@ -1937,14 +1969,16 @@ function addProjectTaskFromInput() {
   const input = $("projTaskInput");
   const raw = input.value.trim();
   if (!raw || !state.projectId) return;
-  addTaskToProject(state.projectId, raw);
+  const wrap = input.closest(".quick-add");
+  addTaskToProject(state.projectId, raw, readFlags(wrap));
   input.value = "";
+  wrap.querySelectorAll(".flag").forEach(f => f.classList.remove("on"));
   render();
   $("projTaskInput").focus();
 }
 
 // Clic sur une carte projet (Kanban ou liste des terminés) : supprimer, ouvrir un champ
-// d'ajout (projet/tâche), ou ouvrir le projet. Les branches col-add ne servent qu'au Kanban.
+// d'ajout (projet/tâche), basculer un bouton de priorité, ou ouvrir le projet.
 function onProjectBoardClick(e) {
   if (Date.now() - lastDragEnd < 300) return;       // pas juste après un drag
   const delBtn = e.target.closest(".proj-del");
@@ -1957,10 +1991,14 @@ function onProjectBoardClick(e) {
     const input = colAdd.closest(".col-add").querySelector(".col-add-input");
     input.hidden = false; input.focus();
   } else if (projAdd) {
+    // ouvre la zone d'ajout (champ + boutons de priorité)
     projAdd.hidden = true;
-    const input = projAdd.closest(".proj-card").querySelector(".proj-add-input");
-    input.hidden = false; input.focus();
-  } else if (!e.target.closest(".proj-add-input")) {
+    const zone = projAdd.closest(".proj-card").querySelector(".proj-add-zone");
+    zone.hidden = false;
+    zone.querySelector(".proj-add-input").focus();
+  } else if (e.target.closest(".flag")) {
+    e.target.closest(".flag").classList.toggle("on");   // priorité dans la zone d'ajout
+  } else if (!e.target.closest(".proj-add-zone")) {
     const card = e.target.closest(".proj-card");
     if (card) openProject(card.dataset.id);
   }
@@ -1975,7 +2013,8 @@ function onProjectBoardKeydown(e) {
     if (input.classList.contains("col-add-input")) {
       addProject(input.closest(".kanban-col").dataset.status, raw);
     } else {
-      addTaskToProject(input.closest(".proj-card").dataset.id, raw);
+      const flags = readFlags(input.closest(".proj-add-zone"));
+      addTaskToProject(input.closest(".proj-card").dataset.id, raw, flags);
     }
     render();
   } else if (e.key === "Escape") {
