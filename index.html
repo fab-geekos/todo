@@ -235,20 +235,12 @@
   .task-note { font-size: 13px; color: var(--muted); margin-top: 2px; word-break: break-word; }
   .task-meta { display: flex; align-items: center; gap: 8px; margin-top: 5px; flex-wrap: wrap; }
   .task-body .proj-progress { margin-top: 7px; max-width: 240px; }
-  .due {
+  .due, .task-project, .task-contact {
     font-size: 12px; color: var(--muted);
     display: inline-flex; align-items: center; gap: 4px;
   }
   .due.today { color: var(--success); font-weight: 500; }
   .due.overdue { color: var(--alert); font-weight: 500; }
-  .task-project {
-    font-size: 12px; color: var(--muted);
-    display: inline-flex; align-items: center; gap: 4px;
-  }
-  .task-contact {
-    font-size: 12px; color: var(--muted);
-    display: inline-flex; align-items: center; gap: 4px;
-  }
 
   .task-addsub {
     opacity: 0; background: none; border: none; cursor: pointer;
@@ -294,9 +286,6 @@
   .eisen-cell .task-row { padding: 8px 6px; }
   .eisen-cell .task-row:hover { background: rgba(0,0,0,.03); }
   body.dark .eisen-cell .task-row:hover { background: rgba(255,255,255,.04); }
-  /* En matrice, pas de chevron/ajout/zone de sous-tâche (racines simples) */
-  .eisen-cell .task-chevron, .eisen-cell .task-chevron-spacer,
-  .eisen-cell .task-addsub, .eisen-cell .task-addsub-zone { display: none; }
   .col-empty { color: var(--muted); font-size: 13px; padding: 6px; }
   .eisen-add { margin-top: 6px; }
   .eisen-add-btn {
@@ -599,6 +588,9 @@
     </button>
     <button class="nav-item soon">
       <span class="icon">🏷️</span> Labels <span class="count">bientôt</span>
+    </button>
+    <button class="nav-item soon">
+      <span class="icon">💉</span> Vaccins <span class="count">bientôt</span>
     </button>
   </aside>
 
@@ -1121,23 +1113,14 @@ function render() {
     b.classList.toggle("active", on);
   });
 
-  // Affichage : on masque tout, puis on montre la zone de la vue courante
-  const listEl = $("taskList");
+  // Affichage : on masque tous les conteneurs de vues, puis on montre celui de la vue courante
+  ["taskList","eisenGrid","kanbanBoard","projectsTabs","projectsDone","projectsPriorities","projectView","contactsView"]
+    .forEach(id => { $(id).style.display = "none"; });
   const gridEl = $("eisenGrid");
   const kanbanEl = $("kanbanBoard");
   const tabsEl = $("projectsTabs");
   const doneEl = $("projectsDone");
   const prioEl = $("projectsPriorities");
-  const projEl = $("projectView");
-  const contactsEl = $("contactsView");
-  listEl.style.display = "none";
-  gridEl.style.display = "none";
-  kanbanEl.style.display = "none";
-  tabsEl.style.display = "none";
-  doneEl.style.display = "none";
-  prioEl.style.display = "none";
-  projEl.style.display = "none";
-  contactsEl.style.display = "none";
 
   if (state.view === "eisenhower") {
     gridEl.style.display = "grid";
@@ -1160,13 +1143,13 @@ function render() {
       renderProjectsEisenhower();
     }
   } else if (state.view === "project") {
-    projEl.style.display = "block";
+    $("projectView").style.display = "block";
     renderProjectView();
   } else if (state.view === "contacts") {
-    contactsEl.style.display = "block";
+    $("contactsView").style.display = "block";
     renderContacts();
   } else {
-    listEl.style.display = "flex";
+    $("taskList").style.display = "flex";
     renderList();
   }
 }
@@ -1228,7 +1211,7 @@ function renderEisenhowerInto(board, tasks, opts = {}) {
         <input class="eisen-add-input" type="text" placeholder="Nouvelle tâche…" autocomplete="off" hidden>
       </div>` : ""}
     `;
-    fillColumn(cell.querySelector(".task-list"), active.filter(t => quadrantOf(t) === key), t => taskCard(t, false));
+    fillColumn(cell.querySelector(".task-list"), active.filter(t => quadrantOf(t) === key), t => taskCard(t, true));
     board.appendChild(cell);
   });
 }
