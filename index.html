@@ -303,6 +303,11 @@
   .kanban-count { color: var(--muted); font-size: 13px; }
   .kanban-list { list-style: none; display: flex; flex-direction: column; gap: 8px; min-height: 8px; }
 
+  .projects-tabs { display: none; gap: 8px; margin-bottom: 18px; }
+  .done-list { display: none; list-style: none; flex-direction: column; gap: 10px; max-width: 560px; }
+  .done-list .proj-card { cursor: pointer; }
+  .done-list .proj-add, .done-list .proj-add-input { display: none; }  /* pas d'ajout de tâche sur un projet terminé */
+
   .proj-card {
     background: var(--bg); border: 1px solid var(--border); border-radius: 12px;
     padding: 12px; cursor: grab; touch-action: pan-y; transition: background .15s;
@@ -320,6 +325,15 @@
   .proj-card:hover .proj-del { opacity: 1; }
   .proj-del:hover { color: var(--alert); }
   .proj-meta { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .proj-empty { font-size: 12px; color: var(--muted); margin-top: 6px; font-style: italic; }
+  .proj-progress {
+    display: flex; flex-wrap: wrap; gap: 3px; margin-top: 8px;
+  }
+  .prog-cell {
+    width: 14px; height: 14px; border-radius: 4px; flex-shrink: 0;
+    border: 1.5px solid var(--border); background: transparent; transition: background .15s;
+  }
+  .prog-cell.done { background: var(--success); border-color: var(--success); }
   .proj-add {
     display: flex; align-items: center; gap: 6px; width: 100%; margin-top: 8px;
     background: none; border: none; cursor: pointer; color: var(--muted);
@@ -564,7 +578,12 @@
 
     <div class="eisen-grid" id="eisenGrid"></div>
 
+    <div class="projects-tabs" id="projectsTabs">
+      <button class="subview-btn" data-ptab="active">Tableau</button>
+      <button class="subview-btn" data-ptab="done">Terminés</button>
+    </div>
     <div class="kanban-board" id="kanbanBoard"></div>
+    <ul class="done-list" id="projectsDone"></ul>
 
     <div class="project-view" id="projectView">
       <div class="proj-detail-head">
@@ -682,6 +701,7 @@ let state = {
   editingId: null,
   projectId: null,        // projet actuellement ouvert (vue détaillée)
   projSub: "list",        // sous-vue du projet : "list" ou "eisen"
+  projectsTab: "active",  // onglet de la vue Projets : "active" (tableau) ou "done" (terminés)
   contactSearch: "",      // texte de recherche dans la vue Contacts
   newFlags: { urgent: false, important: false }
 };
@@ -977,11 +997,15 @@ function render() {
   const listEl = $("taskList");
   const gridEl = $("eisenGrid");
   const kanbanEl = $("kanbanBoard");
+  const tabsEl = $("projectsTabs");
+  const doneEl = $("projectsDone");
   const projEl = $("projectView");
   const contactsEl = $("contactsView");
   listEl.style.display = "none";
   gridEl.style.display = "none";
   kanbanEl.style.display = "none";
+  tabsEl.style.display = "none";
+  doneEl.style.display = "none";
   projEl.style.display = "none";
   contactsEl.style.display = "none";
 
@@ -989,8 +1013,19 @@ function render() {
     gridEl.style.display = "grid";
     renderEisenhower();
   } else if (state.view === "projects") {
-    kanbanEl.style.display = "flex";
-    renderKanban();
+    tabsEl.style.display = "flex";
+    // onglet actif
+    const doneCount = state.projects.filter(p => p.status === "termine").length;
+    tabsEl.querySelector('[data-ptab="done"]').textContent = "Terminés" + (doneCount ? ` (${doneCount})` : "");
+    tabsEl.querySelectorAll(".subview-btn").forEach(b =>
+      b.classList.toggle("active", b.dataset.ptab === state.projectsTab));
+    if (state.projectsTab === "done") {
+      doneEl.style.display = "flex";
+      renderProjectsDone();
+    } else {
+      kanbanEl.style.display = "flex";
+      renderKanban();
+    }
   } else if (state.view === "project") {
     projEl.style.display = "block";
     renderProjectView();
@@ -1023,14 +1058,14 @@ function renderList() {
   renderTasksInto($("taskList"), visibleTasks(), emptyHtml);
 }
 
-// Remplit une <ul> avec des cartes, ou un tiret si la liste est vide.
-// Partagé par la matrice Eisenhower et le Kanban (même comportement de colonne).
-function fillColumn(ul, items, makeCard) {
+// Remplit une <ul> avec des cartes, ou un message si la liste est vide.
+// Partagé par la matrice Eisenhower, le Kanban et la liste des projets terminés.
+function fillColumn(ul, items, makeCard, emptyText = "—") {
   ul.innerHTML = "";
   if (items.length === 0) {
     const d = document.createElement("div");
     d.className = "col-empty";
-    d.textContent = "—";
+    d.textContent = emptyText;
     ul.appendChild(d);
   } else {
     items.forEach(it => ul.appendChild(makeCard(it)));
@@ -1064,23 +1099,45 @@ function renderEisenhower() {
   renderEisenhowerInto($("eisenGrid"), state.tasks.filter(t => t.projectId == null));
 }
 
-// Nombre de tâches actives d'un projet
-function projectTaskCount(projectId) {
-  return state.tasks.filter(t => t.projectId === projectId && !t.completed).length;
+// Tâches d'un projet (dans l'ordre de state.tasks)
+function projectTasks(projectId) {
+  return state.tasks.filter(t => t.projectId === projectId);
+}
+
+// Avancement d'un projet : { done, total }
+function projectProgress(projectId) {
+  const tasks = projectTasks(projectId);
+  return { done: tasks.filter(t => t.completed).length, total: tasks.length };
 }
 
 function projectCard(project) {
   const li = document.createElement("li");
   li.className = "proj-card";
   li.dataset.id = project.id;
-  const count = projectTaskCount(project.id);
+
+  const tasks = projectTasks(project.id);
+  const { done, total } = projectProgress(project.id);
+
+  // Barre de progression : une case par tâche (verte si faite). Tooltip = titre + état.
+  let progressHtml;
+  if (total === 0) {
+    progressHtml = `<div class="proj-empty">Aucune tâche</div>`;
+  } else {
+    const cells = tasks.map(t =>
+      `<span class="prog-cell${t.completed ? " done" : ""}" title="${esc(t.title)} — ${t.completed ? "fait" : "à faire"}"></span>`
+    ).join("");
+    progressHtml = `
+      <div class="proj-progress">${cells}</div>
+      <div class="proj-meta">${done}/${total} fait${done > 1 ? "s" : ""}</div>`;
+  }
+
   li.innerHTML = `
     <div class="proj-head">
       <span class="proj-icon">${esc(project.icon || DEFAULT_PROJECT_ICON)}</span>
       <span class="proj-name">${esc(project.name)}</span>
       <button class="proj-del" type="button" aria-label="Supprimer le projet">×</button>
     </div>
-    <div class="proj-meta">${count} tâche${count > 1 ? "s" : ""}</div>
+    ${progressHtml}
     <button class="proj-add" type="button"><span class="plus-sm">+</span> Tâche</button>
     <input class="proj-add-input" type="text" placeholder="Nouvelle tâche…" autocomplete="off" hidden>
   `;
@@ -1112,6 +1169,12 @@ function renderKanban() {
     fillColumn(col.querySelector(".kanban-list"), projects, projectCard);
     board.appendChild(col);
   });
+}
+
+// Liste des projets terminés (réutilise la carte projet)
+function renderProjectsDone() {
+  const done = state.projects.filter(p => p.status === "termine");
+  fillColumn($("projectsDone"), done, projectCard, "Aucun projet terminé.");
 }
 
 /* =========================================================
@@ -1657,43 +1720,17 @@ function bindEvents() {
     persist() { state.projects = reorderFromDOM(state.projects, "#kanbanBoard .proj-card"); db.save(); }
   });
 
-  // Kanban : supprimer, ouvrir une carte, ou ouvrir un champ d'ajout (projet / tâche)
-  kanban.addEventListener("click", e => {
-    if (Date.now() - lastDragEnd < 300) return;       // pas juste après un drag
-    const delBtn = e.target.closest(".proj-del");
-    const colAdd = e.target.closest(".col-add-btn");
-    const projAdd = e.target.closest(".proj-add");
-    if (delBtn) {
-      const card = delBtn.closest(".proj-card");
-      deleteProject(card.dataset.id);
-    } else if (colAdd) {
-      colAdd.hidden = true;
-      const input = colAdd.closest(".col-add").querySelector(".col-add-input");
-      input.hidden = false; input.focus();
-    } else if (projAdd) {
-      projAdd.hidden = true;
-      const input = projAdd.closest(".proj-card").querySelector(".proj-add-input");
-      input.hidden = false; input.focus();
-    } else if (!e.target.closest(".proj-add-input")) {
-      const card = e.target.closest(".proj-card");
-      if (card) openProject(card.dataset.id);
-    }
-  });
-  kanban.addEventListener("keydown", e => {
-    const input = e.target.closest(".col-add-input, .proj-add-input");
-    if (!input) return;
-    if (e.key === "Enter") {
-      const raw = input.value.trim();
-      if (!raw) return;
-      if (input.classList.contains("col-add-input")) {
-        addProject(input.closest(".kanban-col").dataset.status, raw);
-      } else {
-        addTaskToProject(input.closest(".proj-card").dataset.id, raw);
-      }
-      render();
-    } else if (e.key === "Escape") {
-      render();   // referme les champs en redessinant
-    }
+  // Clics et saisies sur les cartes projet : mêmes handlers pour le Kanban et la liste des terminés
+  kanban.addEventListener("click", onProjectBoardClick);
+  kanban.addEventListener("keydown", onProjectBoardKeydown);
+  const doneList = $("projectsDone");
+  doneList.addEventListener("click", onProjectBoardClick);
+  doneList.addEventListener("keydown", onProjectBoardKeydown);
+
+  // Onglets de la vue Projets : Tableau / Terminés
+  $("projectsTabs").addEventListener("click", e => {
+    const btn = e.target.closest(".subview-btn");
+    if (btn) { state.projectsTab = btn.dataset.ptab; render(); }
   });
 
   // Vue détaillée d'un projet
@@ -1842,6 +1879,46 @@ function addProjectTaskFromInput() {
   input.value = "";
   render();
   $("projTaskInput").focus();
+}
+
+// Clic sur une carte projet (Kanban ou liste des terminés) : supprimer, ouvrir un champ
+// d'ajout (projet/tâche), ou ouvrir le projet. Les branches col-add ne servent qu'au Kanban.
+function onProjectBoardClick(e) {
+  if (Date.now() - lastDragEnd < 300) return;       // pas juste après un drag
+  const delBtn = e.target.closest(".proj-del");
+  const colAdd = e.target.closest(".col-add-btn");
+  const projAdd = e.target.closest(".proj-add");
+  if (delBtn) {
+    deleteProject(delBtn.closest(".proj-card").dataset.id);
+  } else if (colAdd) {
+    colAdd.hidden = true;
+    const input = colAdd.closest(".col-add").querySelector(".col-add-input");
+    input.hidden = false; input.focus();
+  } else if (projAdd) {
+    projAdd.hidden = true;
+    const input = projAdd.closest(".proj-card").querySelector(".proj-add-input");
+    input.hidden = false; input.focus();
+  } else if (!e.target.closest(".proj-add-input")) {
+    const card = e.target.closest(".proj-card");
+    if (card) openProject(card.dataset.id);
+  }
+}
+
+function onProjectBoardKeydown(e) {
+  const input = e.target.closest(".col-add-input, .proj-add-input");
+  if (!input) return;
+  if (e.key === "Enter") {
+    const raw = input.value.trim();
+    if (!raw) return;
+    if (input.classList.contains("col-add-input")) {
+      addProject(input.closest(".kanban-col").dataset.status, raw);
+    } else {
+      addTaskToProject(input.closest(".proj-card").dataset.id, raw);
+    }
+    render();
+  } else if (e.key === "Escape") {
+    render();   // referme les champs en redessinant
+  }
 }
 
 /* =========================================================
