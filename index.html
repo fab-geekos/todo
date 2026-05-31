@@ -213,6 +213,10 @@
   }
   .due.today { color: var(--success); font-weight: 500; }
   .due.overdue { color: var(--alert); font-weight: 500; }
+  .task-project {
+    font-size: 12px; color: var(--muted);
+    display: inline-flex; align-items: center; gap: 4px;
+  }
 
   .task-del {
     opacity: 0; background: none; border: none; cursor: pointer;
@@ -925,8 +929,8 @@ function esc(s) {
    ========================================================= */
 function visibleTasks() {
   let list = state.tasks.filter(t => !t.completed);
-  if (state.view === "todo") list = list.filter(t => t.projectId == null);
-  else if (state.view === "today") list = list.filter(isDueToday);
+  // Todo montre toutes les tâches ; Aujourd'hui filtre sur l'échéance du jour
+  if (state.view === "today") list = list.filter(isDueToday);
   return sortTasks(list);
 }
 
@@ -950,6 +954,17 @@ function sortTasks(list) {
 function taskCard(task) {
   const due = formatDue(task);
 
+  // Nom du projet, affiché seulement dans les vues globales (pas quand on est déjà dans le projet)
+  const project = (task.projectId && state.view !== "project")
+    ? state.projects.find(p => p.id === task.projectId)
+    : null;
+
+  // Méta sous le titre : date d'échéance et/ou projet
+  const metaParts = [];
+  if (due) metaParts.push(`<span class="due ${due.cls}">📅 ${esc(due.label)}</span>`);
+  if (project) metaParts.push(`<span class="task-project">${esc(project.icon || DEFAULT_PROJECT_ICON)} ${esc(project.name)}</span>`);
+  const metaHtml = metaParts.length ? `<div class="task-meta">${metaParts.join("")}</div>` : "";
+
   const li = document.createElement("li");
   li.className = "task q-" + quadrantOf(task) + (task.completed ? " done" : "");
   li.dataset.id = task.id;
@@ -959,7 +974,7 @@ function taskCard(task) {
     <div class="task-body" data-action="edit">
       <div class="task-title">${esc(task.title)}</div>
       ${task.note ? `<div class="task-note">${esc(task.note)}</div>` : ""}
-      ${due ? `<div class="task-meta"><span class="due ${due.cls}">📅 ${esc(due.label)}</span></div>` : ""}
+      ${metaHtml}
     </div>
     <button class="task-del" data-action="delete" aria-label="Supprimer">×</button>
   `;
@@ -986,7 +1001,7 @@ function render() {
 
   // Compteurs
   const active = state.tasks.filter(t => !t.completed);
-  $("count-todo").textContent = active.filter(t => t.projectId == null).length || "";
+  $("count-todo").textContent = active.length || "";
   $("count-today").textContent = active.filter(isDueToday).length || "";
 
   // Nav active (la page projet garde "Projets" en surbrillance)
@@ -1098,7 +1113,7 @@ function renderEisenhowerInto(board, tasks) {
 }
 
 function renderEisenhower() {
-  renderEisenhowerInto($("eisenGrid"), state.tasks.filter(t => t.projectId == null));
+  renderEisenhowerInto($("eisenGrid"), state.tasks);
 }
 
 // Tâches d'un projet (dans l'ordre de state.tasks)
