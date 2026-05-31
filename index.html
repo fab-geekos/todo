@@ -333,13 +333,8 @@
     flex: 1; height: 7px; border-radius: 4px; background: var(--border); overflow: hidden;
   }
   .proj-bar-fill {
-    height: 100%; border-radius: 4px; background: var(--muted); transition: width .3s ease;
+    height: 100%; border-radius: 4px; background: var(--proj-color, var(--muted)); transition: width .3s ease;
   }
-  .proj-bar-fill.st-pas_commence { background: var(--st-pas_commence); }
-  .proj-bar-fill.st-en_cours { background: var(--st-en_cours); }
-  .proj-bar-fill.st-en_pause { background: var(--st-en_pause); }
-  .proj-bar-fill.st-delegue { background: var(--st-delegue); }
-  .proj-bar-fill.st-termine { background: var(--st-termine); }
   .proj-pct { font-size: 12px; color: var(--muted); font-weight: 600; flex-shrink: 0; min-width: 32px; text-align: right; }
   .proj-add {
     display: flex; align-items: center; gap: 6px; width: 100%; margin-top: 8px;
@@ -348,7 +343,7 @@
     transition: color .15s;
   }
   .proj-add:hover { color: var(--accent); }
-  .proj-add .plus-sm { font-size: 16px; font-weight: 600; line-height: 1; color: var(--accent); }
+  .proj-add .plus-sm { font-size: 16px; font-weight: 600; line-height: 1; color: var(--proj-color, var(--accent)); }
 
   .col-add { margin-top: 10px; }
   .col-add-btn {
@@ -1121,6 +1116,8 @@ function projectCard(project) {
   const li = document.createElement("li");
   li.className = "proj-card";
   li.dataset.id = project.id;
+  // Couleur du statut, partagée par la barre de progression et le bouton "+ Tâche"
+  li.style.setProperty("--proj-color", `var(--st-${project.status})`);
 
   const tasks = projectTasks(project.id);
   const { done, total } = projectProgress(project.id);
@@ -1133,7 +1130,7 @@ function projectCard(project) {
     const pct = Math.round((done / total) * 100);
     progressHtml = `
       <div class="proj-progress">
-        <div class="proj-bar"><div class="proj-bar-fill ${STATUSES[project.status].cls}" style="width:${pct}%"></div></div>
+        <div class="proj-bar"><div class="proj-bar-fill" style="width:${pct}%"></div></div>
         <span class="proj-pct">${pct}%</span>
       </div>
       <div class="proj-meta">${done}/${total} fait${done > 1 ? "s" : ""}</div>`;
