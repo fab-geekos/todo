@@ -172,20 +172,38 @@
   /* ===== TASK LIST ===== */
   .task-list { list-style: none; display: flex; flex-direction: column; gap: 2px; }
 
+  /* Carte = UN SEUL contour par tâche racine (englobe ses sous-tâches) */
   .task {
     border-radius: var(--radius);
     border-left: 3px solid transparent;
     background: var(--card); box-shadow: var(--shadow);
-    cursor: pointer; transition: background .15s;
-    animation: fadeUp .25s ease;
-    margin-left: calc(var(--depth, 0) * 22px);   /* indentation des sous-tâches */
+    animation: fadeUp .25s ease; overflow: hidden;
   }
-  .task-row { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; }
-  .task:hover { background: var(--hover); }
   .task.q-faire { border-left-color: var(--q-faire); }
   .task.q-planifier { border-left-color: var(--q-planifier); }
   .task.q-deleguer { border-left-color: var(--q-deleguer); }
   .task.q-eliminer { border-left-color: var(--q-eliminer); }
+
+  /* Une ligne (racine ou sous-tâche) à l'intérieur de la carte */
+  .task-row {
+    display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px;
+    cursor: pointer; transition: background .15s;
+    padding-left: calc(14px + var(--depth, 0) * 22px);   /* indentation des sous-tâches */
+  }
+  .task-row:hover { background: var(--hover); }
+  /* Séparateur léger entre lignes + trait vertical d'indentation pour les sous-tâches */
+  .task-row + .task-row,
+  .task-addsub-zone + .task-row { border-top: 1px solid var(--border); }
+  .task-row[style*="--depth:1"], .task-row[style*="--depth:2"], .task-row[style*="--depth:3"] {
+    position: relative;
+  }
+  .task-row[style*="--depth:1"]::before,
+  .task-row[style*="--depth:2"]::before,
+  .task-row[style*="--depth:3"]::before {
+    content: ""; position: absolute; top: 0; bottom: 0;
+    left: calc(8px + (var(--depth) - 1) * 22px);
+    width: 2px; background: var(--border); border-radius: 2px;
+  }
 
   .task-chevron, .task-chevron-spacer {
     width: 18px; flex-shrink: 0; margin-top: 2px;
@@ -199,20 +217,21 @@
     border: 2px solid var(--muted); cursor: pointer; margin-top: 2px;
     transition: all .2s; background: none; position: relative;
   }
-  .task.q-faire .checkbox { border-color: var(--q-faire); }
-  .task.q-planifier .checkbox { border-color: var(--q-planifier); }
-  .task.q-deleguer .checkbox { border-color: var(--q-deleguer); }
+  /* Le contour coloré (priorité) ne s'applique qu'aux racines (depth 0) */
+  .task.q-faire .task-row[style*="--depth:0"] .checkbox { border-color: var(--q-faire); }
+  .task.q-planifier .task-row[style*="--depth:0"] .checkbox { border-color: var(--q-planifier); }
+  .task.q-deleguer .task-row[style*="--depth:0"] .checkbox { border-color: var(--q-deleguer); }
   .checkbox:hover { transform: scale(1.1); }
   .checkbox::after {
     content: '✓'; position: absolute; inset: 0; display: grid; place-items: center;
     color: #fff; font-size: 12px; opacity: 0; transition: opacity .15s;
   }
-  .task.done .checkbox { background: var(--success); border-color: var(--success); }
-  .task.done .checkbox::after { opacity: 1; }
+  .task-row.done .checkbox { background: var(--success); border-color: var(--success); }
+  .task-row.done .checkbox::after { opacity: 1; }
 
   .task-body { flex: 1; min-width: 0; }
   .task-title { font-size: 15px; word-break: break-word; }
-  .task.done .task-title { text-decoration: line-through; color: var(--muted); }
+  .task-row.done .task-title { text-decoration: line-through; color: var(--muted); }
   .task-note { font-size: 13px; color: var(--muted); margin-top: 2px; word-break: break-word; }
   .task-meta { display: flex; align-items: center; gap: 8px; margin-top: 5px; flex-wrap: wrap; }
   .task-body .proj-progress { margin-top: 7px; max-width: 240px; }
@@ -235,27 +254,21 @@
     opacity: 0; background: none; border: none; cursor: pointer;
     align-self: center; padding: 0 4px; flex-shrink: 0; transition: opacity .2s;
   }
-  .task-addsub .plus-sm { font-size: 16px; font-weight: 600; line-height: 1; color: var(--q-color, var(--accent)); }
-  .task:hover .task-addsub { opacity: 1; }
-  .task.q-faire { --q-color: var(--q-faire); }
-  .task.q-planifier { --q-color: var(--q-planifier); }
-  .task.q-deleguer { --q-color: var(--q-deleguer); }
-  .task.q-eliminer { --q-color: var(--q-eliminer); }
-  .task-addsub-zone { padding: 0 14px 12px 48px; }
+  .task-addsub .plus-sm { font-size: 16px; font-weight: 600; line-height: 1; color: var(--accent); }
+  .task-row:hover .task-addsub { opacity: 1; }
+  .task-addsub-zone { padding: 0 14px 12px calc(48px + var(--depth, 0) * 22px); }
   .task-addsub-input {
     width: 100%; font-family: inherit; font-size: 14px; color: var(--text);
     border: 1px solid var(--accent); border-radius: 8px; padding: 8px 10px;
     background: var(--card); outline: none;
   }
-  .task-addsub-zone .flags { gap: 6px; margin-top: 8px; }
-  .task-addsub-zone .flag { font-size: 12px; padding: 4px 10px; }
 
   .task-del {
     opacity: 0; background: none; border: none; cursor: pointer;
     color: var(--muted); font-size: 18px; padding: 0 4px; align-self: center;
     transition: opacity .2s, color .2s;
   }
-  .task:hover .task-del { opacity: 1; }
+  .task-row:hover .task-del { opacity: 1; }
   .task-del:hover { color: var(--alert); }
 
   .empty {
@@ -277,11 +290,11 @@
   .eisen-head { display: flex; flex-direction: column; margin-bottom: 8px; }
   .eisen-title { font-weight: 600; font-size: 15px; }
   .eisen-sub { font-size: 12px; color: var(--muted); }
-  .eisen-cell .task { box-shadow: none; background: transparent; border-left-color: transparent; margin-left: 0; }
+  .eisen-cell .task { box-shadow: none; background: transparent; border-left-color: transparent; }
   .eisen-cell .task-row { padding: 8px 6px; }
-  .eisen-cell .task:hover { background: rgba(0,0,0,.03); }
-  body.dark .eisen-cell .task:hover { background: rgba(255,255,255,.04); }
-  /* En matrice, pas de chevron/ajout/zone de sous-tâche ni indentation (racines simples) */
+  .eisen-cell .task-row:hover { background: rgba(0,0,0,.03); }
+  body.dark .eisen-cell .task-row:hover { background: rgba(255,255,255,.04); }
+  /* En matrice, pas de chevron/ajout/zone de sous-tâche (racines simples) */
   .eisen-cell .task-chevron, .eisen-cell .task-chevron-spacer,
   .eisen-cell .task-addsub, .eisen-cell .task-addsub-zone { display: none; }
   .col-empty { color: var(--muted); font-size: 13px; padding: 6px; }
@@ -1014,15 +1027,13 @@ function sortTasks(list) {
   return copy;
 }
 
-function taskCard(task) {
+// HTML d'UNE ligne de tâche (racine ou sous-tâche), sans carte englobante.
+// depth : 0 = racine, 1+ = sous-tâche (indentation par un trait vertical).
+function taskRowHtml(task, depth) {
   const due = formatDue(task);
 
-  // Nom du projet, affiché seulement dans les vues globales (pas quand on est déjà dans le projet)
-  const project = (task.projectId && state.view !== "project")
-    ? getProject(task.projectId)
-    : null;
-
-  // Méta sous le titre : date d'échéance, projet, et contact (si projet délégué)
+  // Nom du projet, affiché seulement dans les vues globales (pas dans la vue projet)
+  const project = (task.projectId && state.view !== "project") ? getProject(task.projectId) : null;
   const metaParts = [];
   if (due) metaParts.push(`<span class="due ${due.cls}">📅 ${esc(due.label)}</span>`);
   if (project) {
@@ -1034,8 +1045,6 @@ function taskCard(task) {
   }
   const metaHtml = metaParts.length ? `<div class="task-meta">${metaParts.join("")}</div>` : "";
 
-  // Sous-tâches : chevron pour déplier, barre de progression, bouton + (jusqu'au niveau max)
-  const kids = childTasks(task.id);
   const { done, total } = subtaskProgress(task.id);
   const expanded = !state.collapsedTasks.has(task.id);
   const chevronHtml = total > 0
@@ -1043,13 +1052,10 @@ function taskCard(task) {
     : `<span class="task-chevron-spacer"></span>`;
   const progressHtml = total > 0 ? progressBarHtml(done, total) : "";
   const canAddChild = taskDepth(task) < MAX_TASK_DEPTH;
+  const doneCls = task.completed ? " done" : "";
 
-  const li = document.createElement("li");
-  li.className = "task q-" + quadrantOf(task) + (task.completed ? " done" : "");
-  li.dataset.id = task.id;
-
-  li.innerHTML = `
-    <div class="task-row">
+  return `
+    <div class="task-row${doneCls}" data-id="${task.id}" style="--depth:${depth}">
       ${chevronHtml}
       <button class="checkbox" data-action="toggle" aria-label="Terminer"></button>
       <div class="task-body" data-action="edit">
@@ -1061,11 +1067,28 @@ function taskCard(task) {
       ${canAddChild ? `<button class="task-addsub" data-action="add-sub" aria-label="Ajouter une sous-tâche"><span class="plus-sm">+</span></button>` : ""}
       <button class="task-del" data-action="delete" aria-label="Supprimer">×</button>
     </div>
-    <div class="task-addsub-zone" hidden>
+    <div class="task-addsub-zone" data-id="${task.id}" hidden>
       <input class="task-addsub-input" type="text" placeholder="Nouvelle sous-tâche…" autocomplete="off">
-      ${flagsHtml()}
     </div>
   `;
+}
+
+// Lignes d'une tâche et de toute sa descendance dépliée (récursif), pour une seule carte.
+function taskTreeRows(task, depth) {
+  let html = taskRowHtml(task, depth);
+  if (!state.collapsedTasks.has(task.id)) {
+    childTasks(task.id).forEach(child => { html += taskTreeRows(child, depth + 1); });
+  }
+  return html;
+}
+
+// Carte d'une tâche racine : un seul contour qui englobe la racine ET ses sous-tâches.
+// (En matrice, on n'affiche que la racine : voir le 2e argument.)
+function taskCard(task, withChildren = true) {
+  const li = document.createElement("li");
+  li.className = "task q-" + quadrantOf(task) + (task.completed ? " done" : "");
+  li.dataset.id = task.id;
+  li.innerHTML = withChildren ? taskTreeRows(task, 0) : taskRowHtml(task, 0);
   return li;
 }
 
@@ -1087,9 +1110,9 @@ function render() {
   $("toolbar").style.display = state.view === "todo" ? "flex" : "none";
   document.querySelector(".quick-add").style.display = tasksView ? "block" : "none";
 
-  // Compteurs
+  // Compteurs : Todo compte les racines (cohérent avec l'affichage) ; Aujourd'hui compte toute échéance du jour
   const active = state.tasks.filter(t => !t.completed);
-  $("count-todo").textContent = active.length || "";
+  $("count-todo").textContent = active.filter(t => t.parentTaskId == null).length || "";
   $("count-today").textContent = active.filter(isDueToday).length || "";
 
   // Nav active (la page projet garde "Projets" en surbrillance)
@@ -1148,9 +1171,8 @@ function render() {
   }
 }
 
-// Remplit une <ul> avec une liste de tâches (ou un message si vide). Réutilisable partout.
-// Affiche une liste de tâches. En mode arbre (défaut), chaque racine déploie ses sous-tâches ;
-// en mode plat (flat=true), chaque tâche est affichée seule, sans hiérarchie.
+// Affiche une liste de tâches. Mode arbre (défaut) : chaque racine est une carte qui englobe
+// ses sous-tâches. Mode plat (flat=true) : chaque tâche est une carte seule (vue Aujourd'hui).
 function renderTasksInto(ul, tasks, emptyHtml, flat = false) {
   ul.innerHTML = "";
   if (tasks.length === 0) {
@@ -1160,22 +1182,7 @@ function renderTasksInto(ul, tasks, emptyHtml, flat = false) {
     ul.appendChild(empty);
     return;
   }
-  if (flat) {
-    tasks.forEach(t => ul.appendChild(taskCard(t)));
-  } else {
-    tasks.forEach(t => appendTaskTree(ul, t, 0));
-  }
-}
-
-// Ajoute une tâche puis, si elle est dépliée, ses sous-tâches en dessous (récursif).
-// Les sous-tâches cochées restent visibles (barrées) : ça sert de checklist de progression.
-function appendTaskTree(ul, task, depth) {
-  const card = taskCard(task);
-  if (depth > 0) card.style.setProperty("--depth", depth);
-  ul.appendChild(card);
-  if (!state.collapsedTasks.has(task.id)) {
-    childTasks(task.id).forEach(child => appendTaskTree(ul, child, depth + 1));
-  }
+  tasks.forEach(t => ul.appendChild(taskCard(t, !flat)));
 }
 
 function renderList() {
@@ -1221,7 +1228,7 @@ function renderEisenhowerInto(board, tasks, opts = {}) {
         <input class="eisen-add-input" type="text" placeholder="Nouvelle tâche…" autocomplete="off" hidden>
       </div>` : ""}
     `;
-    fillColumn(cell.querySelector(".task-list"), active.filter(t => quadrantOf(t) === key), taskCard);
+    fillColumn(cell.querySelector(".task-list"), active.filter(t => quadrantOf(t) === key), t => taskCard(t, false));
     board.appendChild(cell);
   });
 }
@@ -1239,15 +1246,11 @@ function renderProjectsEisenhower() {
   renderEisenhowerInto($("projectsEisenGrid"), tasks, { showAdd: false });
 }
 
-// Tâches d'un projet (dans l'ordre de state.tasks)
-function projectTasks(projectId) {
-  return state.tasks.filter(t => t.projectId === projectId);
-}
-
-// Avancement d'un projet : { done, total }
+// Avancement d'un projet : { done, total }, sur les tâches RACINES du projet
+// (une racine reflète déjà l'état de ses sous-tâches via la complétion automatique).
 function projectProgress(projectId) {
-  const tasks = projectTasks(projectId);
-  return { done: tasks.filter(t => t.completed).length, total: tasks.length };
+  const roots = state.tasks.filter(t => t.projectId === projectId && t.parentTaskId == null);
+  return { done: roots.filter(t => t.completed).length, total: roots.length };
 }
 
 /* ---- Hiérarchie des sous-tâches (parentTaskId, 3 niveaux max) ---- */
@@ -1627,21 +1630,24 @@ function toggleChildren(id) {
   render();
 }
 
-// Ouvre le champ d'ajout de sous-tâche d'une tâche (affiche champ + boutons de priorité)
-function openSubtaskInput(taskEl) {
-  const zone = taskEl.querySelector(".task-addsub-zone");
+// Ouvre le champ d'ajout de sous-tâche d'une tâche (par id)
+function openSubtaskInput(taskId) {
+  const wasCollapsed = state.collapsedTasks.has(taskId);
+  state.collapsedTasks.delete(taskId);     // s'assurer que la tâche est dépliée
+  if (wasCollapsed) render();               // re-render si on vient de déplier
+  const zone = document.querySelector(`.task-addsub-zone[data-id="${taskId}"]`);
   if (!zone) return;
-  state.collapsedTasks.delete(taskEl.dataset.id);  // s'assurer que la tâche est dépliée
   zone.hidden = false;
   zone.querySelector(".task-addsub-input").focus();
 }
 
-// Crée une sous-tâche rattachée à un parent (hérite du projet du parent)
-function addSubtask(parentId, raw, flags) {
+// Crée une sous-tâche rattachée à un parent (hérite du projet du parent).
+// Les sous-tâches n'ont jamais de priorité : si une sous-tâche devient urgente,
+// elle a vocation à être promue en tâche racine à part entière.
+function addSubtask(parentId, raw) {
   const parent = getTask(parentId);
   if (!parent || taskDepth(parent) >= MAX_TASK_DEPTH) return;
-  const task = makeTask(raw, null, parent.projectId, parentId);
-  if (flags) { task.urgent = task.urgent || flags.urgent; task.important = task.important || flags.important; }
+  const task = makeTask(raw, { urgent: false, important: false }, parent.projectId, parentId);
   state.tasks.push(task);
   refreshCompletionUpwards(parentId);   // le parent n'est plus "fait" s'il l'était
   db.save();
@@ -1922,32 +1928,30 @@ function bindEvents() {
     document.getElementById("quickInput").focus();
   });
 
-  // Clics sur les tâches (délégation sur tout le main : liste + matrice)
+  // Clics sur les tâches (délégation sur tout le main : liste + matrice).
+  // L'id vient de la LIGNE (.task-row) car une carte racine contient plusieurs lignes.
   document.querySelector(".main").addEventListener("click", e => {
     if (Date.now() - lastDragEnd < 300) return;  // un drag vient de se terminer
-    const taskEl = e.target.closest(".task");
-    if (!taskEl) return;
-    const id = taskEl.dataset.id;
+    const row = e.target.closest(".task-row");
+    if (!row) return;
+    const id = row.dataset.id;
     const action = e.target.closest("[data-action]")?.dataset.action;
     if (action === "toggle") toggleTask(id);
     else if (action === "delete") deleteTask(id);
     else if (action === "toggle-children") toggleChildren(id);
-    else if (action === "add-sub") openSubtaskInput(taskEl);
-    else if (e.target.closest(".task-addsub-zone .flag")) {
-      e.target.closest(".flag").classList.toggle("on");   // priorité de la sous-tâche
-    } else if (action === "edit") openEditor(id);
+    else if (action === "add-sub") openSubtaskInput(id);
+    else if (action === "edit") openEditor(id);
   });
 
-  // Saisie d'une sous-tâche : Entrée valide, Échap referme
+  // Saisie d'une sous-tâche : Entrée valide, Échap referme (pas de priorité sur les sous-tâches)
   document.querySelector(".main").addEventListener("keydown", e => {
     const input = e.target.closest(".task-addsub-input");
     if (!input) return;
     if (e.key === "Enter") {
-      const taskEl = input.closest(".task");
+      const parentId = input.closest(".task-addsub-zone").dataset.id;
       const raw = input.value.trim();
       if (raw) {
-        const flags = readFlags(input.closest(".task-addsub-zone"));
-        addSubtask(taskEl.dataset.id, raw, flags);
+        addSubtask(parentId, raw);
         render();
       }
     } else if (e.key === "Escape") {
