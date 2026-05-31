@@ -313,7 +313,14 @@
   .proj-card.dragging { opacity: .35; pointer-events: none; }
   .proj-head { display: flex; align-items: center; gap: 8px; }
   .proj-icon { font-size: 18px; flex-shrink: 0; }
-  .proj-name { font-weight: 600; font-size: 15px; word-break: break-word; }
+  .proj-name { font-weight: 600; font-size: 15px; word-break: break-word; flex: 1; }
+  .proj-del {
+    opacity: 0; background: none; border: none; cursor: pointer;
+    color: var(--muted); font-size: 18px; line-height: 1; padding: 0 2px;
+    flex-shrink: 0; transition: opacity .2s, color .2s;
+  }
+  .proj-card:hover .proj-del { opacity: 1; }
+  .proj-del:hover { color: var(--alert); }
   .proj-meta { font-size: 12px; color: var(--muted); margin-top: 6px; }
   .proj-add {
     display: flex; align-items: center; gap: 6px; width: 100%; margin-top: 8px;
@@ -1013,10 +1020,11 @@ function renderKanban() {
         <span class="kanban-count">${projects.length || ""}</span>
       </div>
       <ul class="kanban-list"></ul>
+      ${key === "pas_commence" ? `
       <div class="col-add">
         <button class="col-add-btn" type="button"><span class="plus-sm">+</span> Projet</button>
         <input class="col-add-input" type="text" placeholder="Nom du projet…" autocomplete="off" hidden>
-      </div>
+      </div>` : ""}
     `;
     fillColumn(col.querySelector(".kanban-list"), projects, projectCard);
     board.appendChild(col);
@@ -1088,6 +1096,20 @@ function addProject(status, name) {
 // Ajoute une tâche rattachée à un projet (sans priorité Eisenhower imposée)
 function addTaskToProject(projectId, raw) {
   db.add(makeTask(raw, null, projectId));
+}
+
+// Supprime définitivement un projet et toutes ses tâches (après confirmation)
+function deleteProject(id) {
+  const p = state.projects.find(p => p.id === id);
+  if (!p) return;
+  const n = state.tasks.filter(t => t.projectId === id).length;
+  const msg = `Supprimer définitivement le projet « ${p.name} »`
+    + (n ? ` et ses ${n} tâche${n > 1 ? "s" : ""} ?` : " ?");
+  if (!confirm(msg)) return;
+  state.tasks = state.tasks.filter(t => t.projectId !== id);  // retire les tâches du projet
+  db.removeProject(id);                                        // retire le projet (et sauvegarde)
+  if (state.view === "project" && state.projectId === id) navigate("projects");
+  else render();
 }
 
 // Ouvre la page détaillée d'un projet
@@ -1448,12 +1470,16 @@ function bindEvents() {
     persist() { state.projects = reorderFromDOM(state.projects, "#kanbanBoard .proj-card"); db.save(); }
   });
 
-  // Kanban : ouvrir une carte projet, ou un champ d'ajout (projet / tâche)
+  // Kanban : supprimer, ouvrir une carte, ou ouvrir un champ d'ajout (projet / tâche)
   kanban.addEventListener("click", e => {
     if (Date.now() - lastDragEnd < 300) return;       // pas juste après un drag
+    const delBtn = e.target.closest(".proj-del");
     const colAdd = e.target.closest(".col-add-btn");
     const projAdd = e.target.closest(".proj-add");
-    if (colAdd) {
+    if (delBtn) {
+      const card = delBtn.closest(".proj-card");
+      deleteProject(card.dataset.id);
+    } else if (colAdd) {
       colAdd.hidden = true;
       const input = colAdd.closest(".col-add").querySelector(".col-add-input");
       input.hidden = false; input.focus();
