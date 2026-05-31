@@ -337,7 +337,9 @@
     transition: color .15s;
   }
   .col-add-btn:hover { color: var(--accent); }
-  .col-add-btn .plus-sm { font-size: 18px; font-weight: 600; line-height: 1; color: var(--st-pas_commence); }
+  .col-add-btn .plus-sm { font-size: 18px; font-weight: 600; line-height: 1; }
+  .st-pas_commence .col-add-btn .plus-sm { color: var(--st-pas_commence); }
+  .st-delegue .col-add-btn .plus-sm { color: var(--st-delegue); }
   .col-add-input, .proj-add-input {
     width: 100%; font-family: inherit; font-size: 14px; color: var(--text);
     border: 1px solid var(--accent); border-radius: 8px; padding: 9px 10px;
@@ -637,6 +639,8 @@
    ========================================================= */
 const STORAGE_KEY = "todo_app_v1";
 const THEME_KEY = "todo_theme";
+const DAY_MS = 86400000;                 // millisecondes dans une journée
+const DEFAULT_PROJECT_ICON = "📁";       // icône par défaut d'un nouveau projet
 
 // Matrice d'Eisenhower : pour chaque quadrant, libellé, description et drapeaux urgent/important.
 // La classe CSS d'un quadrant est toujours "q-" + sa clé (ex : q-faire).
@@ -754,7 +758,7 @@ function uid() {
 const $ = id => document.getElementById(id);
 
 function startOfDay(d) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
-function endOfToday() { return startOfDay(new Date()).getTime() + 86400000 - 1; }
+function endOfToday() { return startOfDay(new Date()).getTime() + DAY_MS - 1; }
 function isDueToday(t) { return t.dueDate != null && t.dueDate <= endOfToday(); }
 
 /* =========================================================
@@ -872,7 +876,7 @@ function formatDue(task) {
   if (!task.dueDate) return null;
   const d = startOfDay(task.dueDate);
   const today = startOfDay(new Date());
-  const diff = Math.round((d - today) / 86400000);
+  const diff = Math.round((d - today) / DAY_MS);
 
   let label, cls = "";
   if (diff < 0) { label = "En retard"; cls = "overdue"; }
@@ -1072,7 +1076,7 @@ function projectCard(project) {
   const count = projectTaskCount(project.id);
   li.innerHTML = `
     <div class="proj-head">
-      <span class="proj-icon">${esc(project.icon || "📁")}</span>
+      <span class="proj-icon">${esc(project.icon || DEFAULT_PROJECT_ICON)}</span>
       <span class="proj-name">${esc(project.name)}</span>
       <button class="proj-del" type="button" aria-label="Supprimer le projet">×</button>
     </div>
@@ -1099,7 +1103,7 @@ function renderKanban() {
         <span class="kanban-count">${projects.length || ""}</span>
       </div>
       <ul class="kanban-list"></ul>
-      ${key === "pas_commence" ? `
+      ${key === "pas_commence" || key === "delegue" ? `
       <div class="col-add">
         <button class="col-add-btn" type="button"><span class="plus-sm">+</span> Projet</button>
         <input class="col-add-input" type="text" placeholder="Nom du projet…" autocomplete="off" hidden>
@@ -1161,15 +1165,15 @@ function closeEisenAdd(input) {
 }
 
 /* ---- Projets ---- */
-// Crée un projet dans la colonne (statut) donnée. Emoji par défaut, éditable plus tard.
+// Crée un projet dans la colonne (statut) donnée. Si "Délégué", on demande le contact.
 function addProject(status, name) {
-  db.addProject({
-    id: uid(),
-    name,
-    icon: "📁",
-    status,
-    createdAt: Date.now()
-  });
+  const p = { id: uid(), name, icon: DEFAULT_PROJECT_ICON, status, createdAt: Date.now() };
+  if (status === "delegue") {
+    const contactId = pickContact();
+    if (contactId === false) return;   // annulé : pas de création
+    p.assigneeId = contactId;
+  }
+  db.addProject(p);
 }
 
 // Ajoute une tâche rattachée à un projet (sans priorité Eisenhower imposée)
@@ -1238,7 +1242,7 @@ function renderProjectView() {
   const p = state.projects.find(p => p.id === state.projectId);
   if (!p) { navigate("projects"); return; }   // projet supprimé -> retour au Kanban
 
-  $("projIcon").textContent = p.icon || "📁";
+  $("projIcon").textContent = p.icon || DEFAULT_PROJECT_ICON;
   $("projName").value = p.name;
 
   // Remplit le sélecteur de statut (les 5 statuts, Terminé inclus)
@@ -1291,7 +1295,7 @@ function contactCard(contact) {
     projectsHtml = `<div class="contact-none">Aucun projet délégué</div>`;
   } else {
     projectsHtml = `<div class="contact-projects">` + projects.map(p =>
-      `<div class="contact-proj" data-proj="${p.id}"><span>${esc(p.icon || "📁")}</span> ${esc(p.name)}</div>`
+      `<div class="contact-proj" data-proj="${p.id}"><span>${esc(p.icon || DEFAULT_PROJECT_ICON)}</span> ${esc(p.name)}</div>`
     ).join("") + `</div>`;
   }
 
@@ -1699,8 +1703,8 @@ function bindEvents() {
   });
   $("projIcon").addEventListener("click", () => {
     const current = state.projects.find(p => p.id === state.projectId);
-    const icon = prompt("Emoji du projet :", current ? current.icon : "📁");
-    if (icon != null) { db.updateProject(state.projectId, { icon: icon.trim() || "📁" }); render(); }
+    const icon = prompt("Emoji du projet :", current ? current.icon : DEFAULT_PROJECT_ICON);
+    if (icon != null) { db.updateProject(state.projectId, { icon: icon.trim() || DEFAULT_PROJECT_ICON }); render(); }
   });
   $("projStatus").addEventListener("change", e => {
     if (!state.projectId) return;
