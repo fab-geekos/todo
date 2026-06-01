@@ -198,9 +198,7 @@
     padding-left: calc(14px + var(--depth, 0) * 22px);   /* indentation des sous-tâches */
   }
   .task-row:hover { background: var(--hover); }
-  /* Séparateur léger entre lignes + trait vertical d'indentation pour les sous-tâches */
-  .task-row + .task-row,
-  .task-addsub-zone + .task-row { border-top: 1px solid var(--border); }
+  /* Pas de séparateur horizontal : la hiérarchie se lit via l'indentation et les traits verticaux */
   .task-row[style*="--depth:1"], .task-row[style*="--depth:2"], .task-row[style*="--depth:3"] {
     position: relative;
   }
@@ -237,8 +235,19 @@
   .task-row.done .checkbox::after { opacity: 1; }
 
   .task-body { flex: 1; min-width: 0; }
-  .task-title { font-size: 15px; word-break: break-word; }
+  .task-titleline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .task-title { font-size: 15px; font-weight: 600; word-break: break-word; min-width: 0; }
   .task-row.done .task-title { text-decoration: line-through; color: var(--muted); }
+  /* Hiérarchie typographique : la profondeur réduit taille et graisse */
+  .task-row[style*="--depth:1"] .task-title { font-size: 14px; font-weight: 500; }
+  .task-row[style*="--depth:2"] .task-title,
+  .task-row[style*="--depth:3"] .task-title { font-size: 13px; font-weight: 400; color: var(--muted); }
+  /* Badge compact X/Y sur une sous-tâche qui a elle-même des sous-tâches */
+  .task-subcount {
+    font-size: 11px; font-weight: 600; color: var(--muted);
+    background: var(--hover); border: 1px solid var(--border);
+    border-radius: 8px; padding: 1px 7px; white-space: nowrap; flex-shrink: 0;
+  }
   .task-note { font-size: 13px; color: var(--muted); margin-top: 2px; word-break: break-word; }
   .task-meta { display: flex; align-items: center; gap: 8px; margin-top: 5px; flex-wrap: wrap; }
   .task-body .proj-progress { margin-top: 7px; max-width: 240px; }
@@ -914,7 +923,7 @@ let state = {
   projSub: "eisen",       // sous-vue du projet par défaut : "eisen" (matrice) ou "list"
   projectsTab: "active",  // onglet de la vue Projets : "active" (tableau) ou "done" (terminés)
   contactSearch: "",      // texte de recherche dans la vue Contacts
-  collapsedTasks: new Set()  // ids des tâches dont les sous-tâches sont repliées
+  expandedTasks: new Set()  // ids des tâches dépliées manuellement (tout est replié par défaut)
 };
 
 /* =========================================================
@@ -1187,11 +1196,13 @@ function taskRowHtml(task, depth) {
   const metaHtml = metaParts.length ? `<div class="task-meta">${metaParts.join("")}</div>` : "";
 
   const { done, total } = subtaskProgress(task.id);
-  const expanded = !state.collapsedTasks.has(task.id);
+  const expanded = state.expandedTasks.has(task.id);
   const chevronHtml = total > 0
     ? `<button class="task-chevron" data-action="toggle-children" aria-label="Déplier">${expanded ? "▾" : "▸"}</button>`
     : `<span class="task-chevron-spacer"></span>`;
-  const progressHtml = total > 0 ? progressBarHtml(done, total) : "";
+  // Racine : barre de progression complète. Sous-tâche : petit badge X/Y à côté du titre.
+  const progressHtml = (depth === 0 && total > 0) ? progressBarHtml(done, total) : "";
+  const subCountBadge = (depth > 0 && total > 0) ? `<span class="task-subcount">${done}/${total}</span>` : "";
   const canAddChild = taskDepth(task) < MAX_TASK_DEPTH;
   const doneCls = task.completed ? " done" : "";
 
@@ -1200,7 +1211,7 @@ function taskRowHtml(task, depth) {
       ${chevronHtml}
       <button class="checkbox" data-action="toggle" aria-label="Terminer"></button>
       <div class="task-body" data-action="edit">
-        <div class="task-title">${esc(task.title)}</div>
+        <div class="task-titleline"><span class="task-title">${esc(task.title)}</span>${subCountBadge}</div>
         ${task.note ? `<div class="task-note">${esc(task.note)}</div>` : ""}
         ${metaHtml}
         ${progressHtml}
@@ -1217,7 +1228,7 @@ function taskRowHtml(task, depth) {
 // Lignes d'une tâche et de toute sa descendance dépliée (récursif), pour une seule carte.
 function taskTreeRows(task, depth) {
   let html = taskRowHtml(task, depth);
-  if (!state.collapsedTasks.has(task.id)) {
+  if (state.expandedTasks.has(task.id)) {
     childTasks(task.id).forEach(child => { html += taskTreeRows(child, depth + 1); });
   }
   return html;
@@ -1757,15 +1768,15 @@ function toggleTask(id) {
 
 // Replie / déplie les sous-tâches d'une tâche
 function toggleChildren(id) {
-  if (state.collapsedTasks.has(id)) state.collapsedTasks.delete(id);
-  else state.collapsedTasks.add(id);
+  if (state.expandedTasks.has(id)) state.expandedTasks.delete(id);
+  else state.expandedTasks.add(id);
   render();
 }
 
 // Ouvre le champ d'ajout de sous-tâche d'une tâche (par id)
 function openSubtaskInput(taskId) {
-  const wasCollapsed = state.collapsedTasks.has(taskId);
-  state.collapsedTasks.delete(taskId);     // s'assurer que la tâche est dépliée
+  const wasCollapsed = !state.expandedTasks.has(taskId);
+  state.expandedTasks.add(taskId);          // s'assurer que la tâche est dépliée
   if (wasCollapsed) render();               // re-render si on vient de déplier
   const zone = document.querySelector(`.task-addsub-zone[data-id="${taskId}"]`);
   if (!zone) return;
