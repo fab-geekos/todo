@@ -511,6 +511,17 @@
   .editor-close:hover { background: var(--hover); }
   .editor-cols { display: flex; min-height: 0; overflow: hidden; }
   .editor-main { flex: 1; padding: 22px 24px; overflow-y: auto; min-width: 0; }
+  .editor-breadcrumb {
+    display: flex; align-items: center; flex-wrap: wrap; gap: 4px;
+    font-size: 13px; color: var(--muted); margin-bottom: 14px;
+  }
+  .editor-crumb {
+    background: none; border: none; cursor: pointer; font-family: inherit; font-size: 13px;
+    color: var(--muted); padding: 2px 6px; border-radius: 6px; transition: background .15s, color .15s;
+    max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .editor-crumb:hover { background: var(--hover); color: var(--accent); }
+  .editor-crumb-sep { color: var(--muted); }
   .editor-side {
     width: 280px; flex-shrink: 0; background: var(--bg);
     padding: 20px; overflow-y: auto; border-left: 1px solid var(--border);
@@ -802,6 +813,7 @@
     </div>
     <div class="editor-cols">
       <div class="editor-main">
+        <div class="editor-breadcrumb" id="editBreadcrumb" hidden></div>
         <div class="editor-head-row" style="display:flex;gap:10px;align-items:flex-start;">
           <button class="checkbox" id="editCheckbox" aria-label="Terminer" style="margin-top:4px;"></button>
           <div style="flex:1;min-width:0;">
@@ -1864,12 +1876,14 @@ function openEditor(id) {
   $("editImportant").classList.toggle("on", !!t.important);
 
   renderEditorProjectPicker(t);
+  renderEditorBreadcrumb(t);
   renderEditorSubtasks(t);
   autoGrowDesc();
 
   $("editAddSubInput").hidden = true;
   $("editAddSubBtn").hidden = false;
   $("overlay").classList.add("open");
+  document.body.style.overflow = "hidden";   // fige l'arrière-plan
 }
 
 // Sélecteur de projet de la tâche en cours d'édition (réutilise createPicker)
@@ -1923,6 +1937,20 @@ function renderEditorSubtasks(task) {
   $("editAddSubBtn").style.display = canAdd ? "" : "none";
 }
 
+// Fil d'ariane des tâches parentes (pour remonter depuis une sous-tâche)
+function renderEditorBreadcrumb(task) {
+  const el = $("editBreadcrumb");
+  // Remonter la chaîne des parents (de la racine vers le parent direct)
+  const chain = [];
+  let cur = task.parentTaskId ? getTask(task.parentTaskId) : null;
+  while (cur) { chain.unshift(cur); cur = cur.parentTaskId ? getTask(cur.parentTaskId) : null; }
+  if (chain.length === 0) { el.hidden = true; el.innerHTML = ""; return; }
+  el.hidden = false;
+  el.innerHTML = chain.map(p =>
+    `<button class="editor-crumb" data-id="${p.id}">${esc(p.title)}</button>`
+  ).join('<span class="editor-crumb-sep">›</span>') + '<span class="editor-crumb-sep">›</span>';
+}
+
 function dateToInput(t) {
   if (!t.dueDate) return "";
   const d = new Date(t.dueDate);
@@ -1941,6 +1969,7 @@ function autoGrowDesc() {
 function closeEditor() {
   saveEditorFields();             // sauvegarde titre/description/date avant de fermer
   $("overlay").classList.remove("open");
+  document.body.style.overflow = "";   // rétablit le scroll de l'arrière-plan
   state.editingId = null;
   render();
 }
@@ -2208,6 +2237,10 @@ function bindEvents() {
 
   // Fenêtre d'édition (sauvegarde directe)
   $("editClose").addEventListener("click", closeEditor);
+  $("editBreadcrumb").addEventListener("click", e => {
+    const crumb = e.target.closest(".editor-crumb");
+    if (crumb) openEditor(crumb.dataset.id);   // remonter à la tâche parente
+  });
   $("editDelete").addEventListener("click", () => {
     if (state.editingId) { const id = state.editingId; $("overlay").classList.remove("open"); state.editingId = null; deleteTask(id); }
   });
