@@ -198,30 +198,20 @@
     padding-left: calc(14px + var(--depth, 0) * 22px);   /* indentation des sous-tâches */
   }
   .task-row:hover { background-color: var(--hover); }
-  /* Méthode b — connecteurs en arbre : verticales d'ancêtres (fond) + élbow horizontal (::before) */
+  /* Méthode b — connecteurs en arbre. Verticales d'ancêtres : posées en fond (inline, calculées au rendu). */
   .task-row[style*="--depth:1"], .task-row[style*="--depth:2"], .task-row[style*="--depth:3"] {
     position: relative; background-repeat: no-repeat;
   }
-  /* Une ligne verticale par niveau d'ancêtre : 8px, puis +22px par niveau */
-  .task-row[style*="--depth:1"] {
-    background-image: linear-gradient(var(--border), var(--border));
-    background-position: 8px 0; background-size: 2px 100%;
+  /* Branche propre de la ligne : verticale (::before) + connecteur horizontal (::after) */
+  .task-row[style*="--depth:1"]::before, .task-row[style*="--depth:2"]::before, .task-row[style*="--depth:3"]::before {
+    content: ""; position: absolute; top: 0; bottom: 0; width: 2px; border-radius: 2px;
+    left: calc(8px + (var(--depth) - 1) * 22px); background: var(--border);
   }
-  .task-row[style*="--depth:2"] {
-    background-image: linear-gradient(var(--border), var(--border)), linear-gradient(var(--border), var(--border));
-    background-position: 8px 0, 30px 0; background-size: 2px 100%, 2px 100%;
-  }
-  .task-row[style*="--depth:3"] {
-    background-image: linear-gradient(var(--border), var(--border)), linear-gradient(var(--border), var(--border)), linear-gradient(var(--border), var(--border));
-    background-position: 8px 0, 30px 0, 52px 0; background-size: 2px 100%, 2px 100%, 2px 100%;
-  }
-  /* Connecteur horizontal vers le contenu, aligné au centre de la 1re ligne */
-  .task-row[style*="--depth:1"]::before,
-  .task-row[style*="--depth:2"]::before,
-  .task-row[style*="--depth:3"]::before {
-    content: ""; position: absolute; top: 23px; height: 2px; width: 24px;
-    left: calc(8px + (var(--depth) - 1) * 22px);
-    background: var(--border); border-radius: 2px;
+  /* Dernière sous-tâche d'un groupe : la verticale s'arrête au coude -> "└" */
+  .task-row.task-last::before { bottom: auto; height: 25px; }
+  .task-row[style*="--depth:1"]::after, .task-row[style*="--depth:2"]::after, .task-row[style*="--depth:3"]::after {
+    content: ""; position: absolute; top: 23px; height: 2px; width: 24px; border-radius: 2px;
+    left: calc(8px + (var(--depth) - 1) * 22px); background: var(--border);
   }
 
   .task-chevron, .task-chevron-spacer {
@@ -1193,7 +1183,7 @@ function sortTasks(list) {
 
 // HTML d'UNE ligne de tâche (racine ou sous-tâche), sans carte englobante.
 // depth : 0 = racine, 1+ = sous-tâche (indentation par un trait vertical).
-function taskRowHtml(task, depth) {
+function taskRowHtml(task, depth, ancestorContinues = [], isLast = false) {
   const due = formatDue(task);
 
   // Nom du projet, affiché seulement dans les vues globales (pas dans la vue projet)
@@ -1220,8 +1210,22 @@ function taskRowHtml(task, depth) {
   const canAddChild = taskDepth(task) < MAX_TASK_DEPTH;
   const doneCls = task.completed ? " done" : "";
 
+  // Guides en arbre : une verticale de fond par ancêtre dont la branche continue (calculé au rendu).
+  let guideStyle = "";
+  if (depth >= 1) {
+    const pipes = [];
+    ancestorContinues.forEach((cont, level) => { if (cont) pipes.push(8 + level * 22); });
+    if (pipes.length) {
+      const g = pipes.map(() => "linear-gradient(var(--border),var(--border))").join(",");
+      const p = pipes.map(x => `${x}px 0`).join(",");
+      const s = pipes.map(() => "2px 100%").join(",");
+      guideStyle = `background-image:${g};background-position:${p};background-size:${s};`;
+    }
+  }
+  const lastCls = (depth >= 1 && isLast) ? " task-last" : "";
+
   return `
-    <div class="task-row${doneCls}" data-id="${task.id}" style="--depth:${depth}">
+    <div class="task-row${doneCls}${lastCls}" data-id="${task.id}" style="--depth:${depth};${guideStyle}">
       ${chevronHtml}
       <button class="checkbox" data-action="toggle" aria-label="Terminer"></button>
       <div class="task-body" data-action="edit">
@@ -1240,10 +1244,13 @@ function taskRowHtml(task, depth) {
 }
 
 // Lignes d'une tâche et de toute sa descendance dépliée (récursif), pour une seule carte.
-function taskTreeRows(task, depth) {
-  let html = taskRowHtml(task, depth);
+function taskTreeRows(task, depth, ancestorContinues = [], isLast = false) {
+  let html = taskRowHtml(task, depth, ancestorContinues, isLast);
   if (state.expandedTasks.has(task.id)) {
-    childTasks(task.id).forEach(child => { html += taskTreeRows(child, depth + 1); });
+    const kids = childTasks(task.id);
+    // Lignée transmise aux enfants : on ajoute "le parent continue-t-il ?" (= il n'est pas le dernier).
+    const childAnc = depth >= 1 ? [...ancestorContinues, !isLast] : [];
+    kids.forEach((child, i) => { html += taskTreeRows(child, depth + 1, childAnc, i === kids.length - 1); });
   }
   return html;
 }
