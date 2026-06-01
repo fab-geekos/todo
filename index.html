@@ -197,17 +197,31 @@
     cursor: pointer; transition: background .15s;
     padding-left: calc(14px + var(--depth, 0) * 22px);   /* indentation des sous-tâches */
   }
-  .task-row:hover { background: var(--hover); }
-  /* Pas de séparateur horizontal : la hiérarchie se lit via l'indentation et les traits verticaux */
+  .task-row:hover { background-color: var(--hover); }
+  /* Méthode b — connecteurs en arbre : verticales d'ancêtres (fond) + élbow horizontal (::before) */
   .task-row[style*="--depth:1"], .task-row[style*="--depth:2"], .task-row[style*="--depth:3"] {
-    position: relative;
+    position: relative; background-repeat: no-repeat;
   }
+  /* Une ligne verticale par niveau d'ancêtre : 8px, puis +22px par niveau */
+  .task-row[style*="--depth:1"] {
+    background-image: linear-gradient(var(--border), var(--border));
+    background-position: 8px 0; background-size: 2px 100%;
+  }
+  .task-row[style*="--depth:2"] {
+    background-image: linear-gradient(var(--border), var(--border)), linear-gradient(var(--border), var(--border));
+    background-position: 8px 0, 30px 0; background-size: 2px 100%, 2px 100%;
+  }
+  .task-row[style*="--depth:3"] {
+    background-image: linear-gradient(var(--border), var(--border)), linear-gradient(var(--border), var(--border)), linear-gradient(var(--border), var(--border));
+    background-position: 8px 0, 30px 0, 52px 0; background-size: 2px 100%, 2px 100%, 2px 100%;
+  }
+  /* Connecteur horizontal vers le contenu, aligné au centre de la 1re ligne */
   .task-row[style*="--depth:1"]::before,
   .task-row[style*="--depth:2"]::before,
   .task-row[style*="--depth:3"]::before {
-    content: ""; position: absolute; top: 0; bottom: 0;
+    content: ""; position: absolute; top: 23px; height: 2px; width: 24px;
     left: calc(8px + (var(--depth) - 1) * 22px);
-    width: 2px; background: var(--border); border-radius: 2px;
+    background: var(--border); border-radius: 2px;
   }
 
   .task-chevron, .task-chevron-spacer {
