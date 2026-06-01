@@ -545,7 +545,14 @@
     border-bottom: 1px solid var(--border);
   }
   .editor-sub .checkbox { margin-top: 0; }
-  .editor-sub-title { flex: 1; font-size: 14px; word-break: break-word; }
+  .editor-sub-body { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+  .editor-sub-title { font-size: 14px; word-break: break-word; }
+  .editor-sub-count {
+    display: inline-flex; align-items: center; gap: 3px;
+    font-size: 11px; font-weight: 600; color: var(--muted);
+    background: var(--hover); border: 1px solid var(--border);
+    border-radius: 8px; padding: 1px 7px; white-space: nowrap;
+  }
   .editor-sub.done .editor-sub-title { text-decoration: line-through; color: var(--muted); }
   .editor-sub-del {
     opacity: 0; background: none; border: none; cursor: pointer; color: var(--muted);
