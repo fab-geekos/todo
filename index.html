@@ -1925,9 +1925,16 @@ function renderEditorSubtasks(task) {
     const li = document.createElement("li");
     li.className = "editor-sub" + (k.completed ? " done" : "");
     li.dataset.id = k.id;
+    // Compteur si cette sous-tâche a elle-même des sous-tâches
+    const sub = subtaskProgress(k.id);
+    const subCountHtml = sub.total > 0
+      ? `<span class="editor-sub-count">🔗 ${sub.done}/${sub.total}</span>` : "";
     li.innerHTML = `
       <button class="checkbox" data-action="toggle" aria-label="Terminer"></button>
-      <span class="editor-sub-title" data-action="open">${esc(k.title)}</span>
+      <div class="editor-sub-body" data-action="open">
+        <span class="editor-sub-title">${esc(k.title)}</span>
+        ${subCountHtml}
+      </div>
       <button class="editor-sub-del" data-action="delete" aria-label="Supprimer">×</button>
     `;
     if (k.completed) li.querySelector(".checkbox").classList.add("checked-preview");
