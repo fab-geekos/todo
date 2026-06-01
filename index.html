@@ -246,8 +246,9 @@
   .task-row[style*="--depth:1"] .task-title { font-size: 14px; font-weight: 500; }
   .task-row[style*="--depth:2"] .task-title,
   .task-row[style*="--depth:3"] .task-title { font-size: 13px; font-weight: 400; color: var(--muted); }
-  /* Badge compact X/Y sur une sous-tâche qui a elle-même des sous-tâches */
-  .task-subcount {
+  /* Badge compact X/Y (liste + fenêtre d'édition) */
+  .count-badge {
+    display: inline-flex; align-items: center; gap: 3px;
     font-size: 11px; font-weight: 600; color: var(--muted);
     background: var(--hover); border: 1px solid var(--border);
     border-radius: 8px; padding: 1px 7px; white-space: nowrap; flex-shrink: 0;
@@ -560,12 +561,6 @@
   .editor-sub .checkbox { margin-top: 0; }
   .editor-sub-body { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
   .editor-sub-title { font-size: 14px; word-break: break-word; }
-  .editor-sub-count {
-    display: inline-flex; align-items: center; gap: 3px;
-    font-size: 11px; font-weight: 600; color: var(--muted);
-    background: var(--hover); border: 1px solid var(--border);
-    border-radius: 8px; padding: 1px 7px; white-space: nowrap;
-  }
   .editor-sub.done .editor-sub-title { text-decoration: line-through; color: var(--muted); }
   .editor-sub-del {
     opacity: 0; background: none; border: none; cursor: pointer; color: var(--muted);
@@ -1005,6 +1000,7 @@ const $ = id => document.getElementById(id);
 const getTask = id => state.tasks.find(t => t.id === id);
 const getProject = id => state.projects.find(p => p.id === id);
 const getContact = id => state.contacts.find(c => c.id === id);
+const isRoot = t => t.parentTaskId == null;   // tâche racine = sans parent
 
 function startOfDay(d) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
 function endOfToday() { return startOfDay(new Date()).getTime() + DAY_MS - 1; }
@@ -1158,7 +1154,7 @@ function visibleTasks() {
     state.flatList = true;
   } else {
     // Todo : seulement les racines ; les sous-tâches s'affichent en dépliant
-    list = list.filter(t => t.parentTaskId == null);
+    list = list.filter(isRoot);
     state.flatList = false;
   }
   return sortTasks(list);
@@ -1206,7 +1202,7 @@ function taskRowHtml(task, depth, ancestorContinues = [], isLast = false) {
     : `<span class="task-chevron-spacer"></span>`;
   // Racine : barre de progression complète. Sous-tâche : petit badge X/Y à côté du titre.
   const progressHtml = (depth === 0 && total > 0) ? progressBarHtml(done, total) : "";
-  const subCountBadge = (depth > 0 && total > 0) ? `<span class="task-subcount">${done}/${total}</span>` : "";
+  const subCountBadge = (depth > 0 && total > 0) ? `<span class="count-badge">${done}/${total}</span>` : "";
   const canAddChild = taskDepth(task) < MAX_TASK_DEPTH;
   const doneCls = task.completed ? " done" : "";
 
@@ -1285,7 +1281,7 @@ function render() {
 
   // Compteurs : Todo compte les racines (cohérent avec l'affichage) ; Aujourd'hui compte toute échéance du jour
   const active = state.tasks.filter(t => !t.completed);
-  $("count-todo").textContent = active.filter(t => t.parentTaskId == null).length || "";
+  $("count-todo").textContent = active.filter(isRoot).length || "";
   $("count-today").textContent = active.filter(isDueToday).length || "";
 
   // Nav active (la page projet garde "Projets" en surbrillance)
@@ -1377,7 +1373,7 @@ function renderEisenhowerInto(board, tasks, opts = {}) {
   const showAdd = opts.showAdd !== false;
   board.innerHTML = "";
   // La matrice ne montre que les tâches racines (les sous-tâches vivent dans les listes)
-  const active = tasks.filter(t => !t.completed && t.parentTaskId == null);
+  const active = tasks.filter(t => !t.completed && isRoot(t));
   QUADRANT_ORDER.forEach(key => {
     const q = QUADRANTS[key];
     const cell = document.createElement("div");
@@ -1410,11 +1406,15 @@ function renderProjectsEisenhower() {
   renderEisenhowerInto($("projectsEisenGrid"), tasks, { showAdd: false });
 }
 
+// Avancement générique d'une liste de tâches : { done, total }
+function progress(list) {
+  return { done: list.filter(t => t.completed).length, total: list.length };
+}
+
 // Avancement d'un projet : { done, total }, sur les tâches RACINES du projet
 // (une racine reflète déjà l'état de ses sous-tâches via la complétion automatique).
 function projectProgress(projectId) {
-  const roots = state.tasks.filter(t => t.projectId === projectId && t.parentTaskId == null);
-  return { done: roots.filter(t => t.completed).length, total: roots.length };
+  return progress(state.tasks.filter(t => t.projectId === projectId && isRoot(t)));
 }
 
 /* ---- Hiérarchie des sous-tâches (parentTaskId, 3 niveaux max) ---- */
@@ -1434,8 +1434,7 @@ function taskDepth(task) {
 
 // Avancement d'une tâche d'après ses sous-tâches directes : { done, total }
 function subtaskProgress(taskId) {
-  const kids = childTasks(taskId);
-  return { done: kids.filter(t => t.completed).length, total: kids.length };
+  return progress(childTasks(taskId));
 }
 
 // Coche/décoche toute la descendance d'une tâche (cascade vers le bas)
@@ -1709,7 +1708,7 @@ function renderProjectView() {
   } else {
     eisenBoard.style.display = "none";
     listWrap.style.display = "block";
-    renderTasksInto($("projTaskList"), tasks.filter(t => !t.completed && t.parentTaskId == null),
+    renderTasksInto($("projTaskList"), tasks.filter(t => !t.completed && isRoot(t)),
       `<div class="big">📭</div>Aucune tâche dans ce projet.`);
   }
 }
@@ -1967,7 +1966,7 @@ function renderEditorSubtasks(task) {
     // Compteur si cette sous-tâche a elle-même des sous-tâches
     const sub = subtaskProgress(k.id);
     const subCountHtml = sub.total > 0
-      ? `<span class="editor-sub-count">🔗 ${sub.done}/${sub.total}</span>` : "";
+      ? `<span class="count-badge">🔗 ${sub.done}/${sub.total}</span>` : "";
     li.innerHTML = `
       <button class="checkbox" data-action="toggle" aria-label="Terminer"></button>
       <div class="editor-sub-body" data-action="open">
