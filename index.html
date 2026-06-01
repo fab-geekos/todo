@@ -75,6 +75,13 @@
     position: sticky;
     top: 0;
     height: 100vh;
+    overflow: hidden;
+  }
+  /* Liste des vues : occupe la hauteur restante et défile si besoin */
+  .nav-scroll {
+    flex: 1; min-height: 0; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 4px;
+    margin: 0 -14px; padding: 0 14px;
   }
 
   .main {
@@ -563,6 +570,7 @@
     <button class="add-btn" id="focusAdd">
       <span class="plus">+</span> Ajouter une tâche
     </button>
+    <nav class="nav-scroll">
     <div class="nav-sep"></div>
     <button class="nav-item" data-view="todo">
       <span class="icon">📋</span> Todo <span class="count" id="count-todo"></span>
@@ -592,6 +600,7 @@
     <button class="nav-item soon">
       <span class="icon">💉</span> Vaccins <span class="count">bientôt</span>
     </button>
+    </nav>
   </aside>
 
   <main class="main">
