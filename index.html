@@ -492,12 +492,113 @@
     display: none; place-items: center; padding: 20px; z-index: 50;
   }
   .overlay.open { display: grid; }
-  .modal {
+
+  /* ===== FENÊTRE D'ÉDITION (deux colonnes, façon Todoist) ===== */
+  .editor {
     background: var(--card); border-radius: var(--radius);
-    padding: 24px; width: 100%; max-width: 440px;
+    width: 100%; max-width: 840px; max-height: 88vh; overflow: hidden;
     box-shadow: 0 10px 40px rgba(0,0,0,.2); animation: fadeUp .2s ease;
+    display: flex; flex-direction: column;
   }
-  .modal h3 { font-size: 18px; margin-bottom: 16px; }
+  .editor-top {
+    display: flex; align-items: center; justify-content: flex-end;
+    padding: 10px 14px; border-bottom: 1px solid var(--border);
+  }
+  .editor-close {
+    background: none; border: none; cursor: pointer; color: var(--muted);
+    font-size: 22px; line-height: 1; padding: 4px 8px; border-radius: 8px; transition: background .15s;
+  }
+  .editor-close:hover { background: var(--hover); }
+  .editor-cols { display: flex; min-height: 0; overflow: hidden; }
+  .editor-main { flex: 1; padding: 22px 24px; overflow-y: auto; min-width: 0; }
+  .editor-side {
+    width: 280px; flex-shrink: 0; background: var(--bg);
+    padding: 20px; overflow-y: auto; border-left: 1px solid var(--border);
+  }
+
+  .editor-title {
+    width: 100%; font-family: inherit; font-size: 20px; font-weight: 700; color: var(--text);
+    border: none; background: none; outline: none; padding: 0; margin-bottom: 8px;
+  }
+  .editor-desc {
+    width: 100%; font-family: inherit; font-size: 14px; color: var(--text);
+    border: none; background: none; outline: none; padding: 0; resize: vertical; min-height: 24px;
+  }
+  .editor-desc::placeholder, .editor-title::placeholder { color: var(--muted); }
+
+  .editor-subtasks { margin-top: 22px; border-top: 1px solid var(--border); padding-top: 14px; }
+  .editor-subtasks-head { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 8px; }
+  .editor-sub-list { list-style: none; display: flex; flex-direction: column; }
+  .editor-sub {
+    display: flex; align-items: center; gap: 10px; padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .editor-sub .checkbox { margin-top: 0; }
+  .editor-sub-title { flex: 1; font-size: 14px; word-break: break-word; }
+  .editor-sub.done .editor-sub-title { text-decoration: line-through; color: var(--muted); }
+  .editor-sub-del {
+    opacity: 0; background: none; border: none; cursor: pointer; color: var(--muted);
+    font-size: 16px; padding: 0 4px; transition: opacity .2s, color .2s;
+  }
+  .editor-sub:hover .editor-sub-del { opacity: 1; }
+  .editor-sub-del:hover { color: var(--alert); }
+  .editor-addsub {
+    display: flex; align-items: center; gap: 8px; padding: 10px 0; cursor: pointer; color: var(--muted);
+  }
+  .editor-addsub:hover { color: var(--accent); }
+  .editor-addsub-input {
+    width: 100%; font-family: inherit; font-size: 14px; color: var(--text); margin-top: 8px;
+    border: 1px solid var(--accent); border-radius: 8px; padding: 8px 10px; background: var(--card); outline: none;
+  }
+
+  /* Sections du panneau de droite */
+  .side-section { margin-bottom: 18px; }
+  .side-section.muted-soon { opacity: .5; pointer-events: none; }
+  .side-label { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 6px; display: flex; justify-content: space-between; }
+  .side-label .soon-tag { font-size: 11px; font-weight: 400; color: var(--muted); font-style: italic; }
+  .side-date-input {
+    width: 100%; font-family: inherit; font-size: 14px; color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--card); outline: none;
+  }
+  .side-date-input:focus { border-color: var(--accent); }
+  .editor .flags { gap: 8px; }
+  .editor-delete {
+    margin-top: 8px; background: none; border: none; cursor: pointer; color: var(--alert);
+    font-size: 14px; font-family: inherit; padding: 6px 0; display: inline-flex; align-items: center; gap: 6px;
+  }
+  .editor-delete:hover { text-decoration: underline; }
+
+  /* ===== COMPOSANT DÉROULANT AVEC RECHERCHE (générique) ===== */
+  .picker { position: relative; }
+  .picker-trigger {
+    width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    font-family: inherit; font-size: 14px; color: var(--text); cursor: pointer;
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--card);
+    transition: border-color .15s;
+  }
+  .picker-trigger:hover { border-color: var(--accent); }
+  .picker-trigger .picker-caret { color: var(--muted); font-size: 11px; flex-shrink: 0; }
+  .picker-value { display: inline-flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .picker-panel {
+    position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 5;
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 8px; max-height: 260px; overflow-y: auto;
+  }
+  .picker-search {
+    width: 100%; font-family: inherit; font-size: 14px; color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--card);
+    outline: none; margin-bottom: 6px;
+  }
+  .picker-search:focus { border-color: var(--accent); }
+  .picker-option {
+    display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px;
+    cursor: pointer; font-size: 14px; color: var(--text); transition: background .12s;
+  }
+  .picker-option:hover { background: var(--hover); }
+  .picker-option.selected { background: var(--hover); }
+  .picker-option .check { margin-left: auto; color: var(--success); }
+  .picker-empty { padding: 10px; color: var(--muted); font-size: 13px; text-align: center; }
+
   .field { margin-bottom: 14px; }
   .field label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 5px; }
   .field input, .field textarea {
@@ -507,7 +608,6 @@
   }
   .field input:focus, .field textarea:focus { border-color: var(--accent); }
   .field textarea { resize: vertical; min-height: 60px; }
-  .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
   .btn {
     font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer;
     border-radius: var(--radius); padding: 10px 18px; border: none; transition: opacity .2s;
@@ -552,6 +652,9 @@
     .eisen-grid { grid-template-columns: 1fr; }
     .kanban-board { flex-direction: column; }
     .kanban-col { width: 100%; min-width: 0; }
+    /* Fenêtre d'édition : une seule colonne, le panneau passe dessous */
+    .editor-cols { flex-direction: column; }
+    .editor-side { width: auto; border-left: none; border-top: 1px solid var(--border); }
   }
 
   /* ===== MODE EMBED (Notion) : pas de sidebar ni burger ===== */
@@ -693,30 +796,48 @@
 
 <!-- Modal édition -->
 <div class="overlay" id="overlay">
-  <div class="modal">
-    <h3>Modifier la tâche</h3>
-    <div class="field">
-      <label>Titre</label>
-      <input type="text" id="editTitle">
+  <div class="editor">
+    <div class="editor-top">
+      <button class="editor-close" id="editClose" aria-label="Fermer">×</button>
     </div>
-    <div class="field">
-      <label>Date (langage naturel : demain, lundi, 15/03, 18h…)</label>
-      <input type="text" id="editDate" placeholder="Aucune date">
-    </div>
-    <div class="field">
-      <label>Note</label>
-      <textarea id="editNote" placeholder="Détails, lien…"></textarea>
-    </div>
-    <div class="field">
-      <div class="flags">
-        <button class="flag" id="editImportant" data-flag="important"><span class="star">★</span> Important</button>
-        <button class="flag" id="editUrgent" data-flag="urgent">⚡ Urgent</button>
+    <div class="editor-cols">
+      <div class="editor-main">
+        <div class="editor-head-row" style="display:flex;gap:10px;align-items:flex-start;">
+          <button class="checkbox" id="editCheckbox" aria-label="Terminer" style="margin-top:4px;"></button>
+          <div style="flex:1;min-width:0;">
+            <input class="editor-title" id="editTitle" placeholder="Nom de la tâche">
+            <textarea class="editor-desc" id="editNote" placeholder="Description" rows="1"></textarea>
+          </div>
+        </div>
+        <div class="editor-subtasks" id="editSubtasks">
+          <div class="editor-subtasks-head" id="editSubHead">Sous-tâches</div>
+          <ul class="editor-sub-list" id="editSubList"></ul>
+          <div class="editor-addsub" id="editAddSubBtn"><span class="plus-sm" style="font-size:16px;">+</span> Ajouter une sous-tâche</div>
+          <input class="editor-addsub-input" id="editAddSubInput" type="text" placeholder="Nouvelle sous-tâche…" hidden>
+        </div>
       </div>
-    </div>
-    <div class="modal-actions">
-      <button class="btn btn-danger" id="editDelete">Supprimer</button>
-      <button class="btn btn-ghost" id="editCancel">Annuler</button>
-      <button class="btn btn-primary" id="editSave">Enregistrer</button>
+      <div class="editor-side">
+        <div class="side-section">
+          <div class="side-label">Projet</div>
+          <div id="editProjectPicker"></div>
+        </div>
+        <div class="side-section">
+          <div class="side-label">Date</div>
+          <input class="side-date-input" id="editDate" type="text" placeholder="Aucune date">
+        </div>
+        <div class="side-section">
+          <div class="side-label">Priorité</div>
+          <div class="flags">
+            <button class="flag" id="editImportant" data-flag="important"><span class="star">★</span> Important</button>
+            <button class="flag" id="editUrgent" data-flag="urgent">⚡ Urgent</button>
+          </div>
+        </div>
+        <div class="side-section muted-soon">
+          <div class="side-label">Labels <span class="soon-tag">bientôt</span></div>
+          <div class="picker-trigger"><span class="picker-value">Aucun</span><span class="picker-caret">▾</span></div>
+        </div>
+        <button class="editor-delete" id="editDelete">🗑 Supprimer la tâche</button>
+      </div>
     </div>
   </div>
 </div>
@@ -1659,17 +1780,147 @@ function deleteTask(id) {
 }
 
 /* ---- Modal d'édition ---- */
+/* =========================================================
+   COMPOSANT DÉROULANT AVEC RECHERCHE (générique, réutilisable)
+   createPicker(container, options) monte un sélecteur dans `container`.
+   options = {
+     items: [{id, label, icon?}],      // choix possibles
+     selectedId,                        // id sélectionné (ou null)
+     placeholder,                       // texte quand rien n'est sélectionné
+     searchPlaceholder,                 // texte du champ de recherche
+     onSelect(id)                       // appelé avec l'id choisi (ou null)
+   }
+   Utilisé pour le projet d'une tâche et le choix d'un contact (délégation).
+   ========================================================= */
+function createPicker(container, options) {
+  const { items, selectedId, placeholder = "Choisir…", searchPlaceholder = "Rechercher…", onSelect } = options;
+  let open = false;
+
+  const selected = items.find(it => it.id === selectedId);
+  container.className = "picker";
+  container.innerHTML = `
+    <button class="picker-trigger" type="button">
+      <span class="picker-value">${selected ? (selected.icon ? esc(selected.icon) + " " : "") + esc(selected.label) : esc(placeholder)}</span>
+      <span class="picker-caret">▾</span>
+    </button>
+  `;
+  const trigger = container.querySelector(".picker-trigger");
+
+  function close() {
+    open = false;
+    const panel = container.querySelector(".picker-panel");
+    if (panel) panel.remove();
+    document.removeEventListener("click", onDocClick, true);
+  }
+  function onDocClick(e) { if (!container.contains(e.target)) close(); }
+
+  function renderPanel(filter = "") {
+    let panel = container.querySelector(".picker-panel");
+    const q = filter.trim().toLowerCase();
+    const filtered = items.filter(it => !q || it.label.toLowerCase().includes(q));
+    const optionsHtml = filtered.length
+      ? filtered.map(it => `
+          <div class="picker-option${it.id === selectedId ? " selected" : ""}" data-id="${it.id == null ? "" : it.id}">
+            ${it.icon ? `<span>${esc(it.icon)}</span>` : ""}<span>${esc(it.label)}</span>
+            ${it.id === selectedId ? `<span class="check">✓</span>` : ""}
+          </div>`).join("")
+      : `<div class="picker-empty">Aucun résultat</div>`;
+    panel.querySelector(".picker-options").innerHTML = optionsHtml;
+  }
+
+  trigger.addEventListener("click", e => {
+    e.stopPropagation();
+    if (open) { close(); return; }
+    open = true;
+    const panel = document.createElement("div");
+    panel.className = "picker-panel";
+    panel.innerHTML = `<input class="picker-search" type="text" placeholder="${esc(searchPlaceholder)}" autocomplete="off"><div class="picker-options"></div>`;
+    container.appendChild(panel);
+    renderPanel("");
+    const search = panel.querySelector(".picker-search");
+    search.focus();
+    search.addEventListener("input", () => renderPanel(search.value));
+    panel.addEventListener("click", ev => {
+      const opt = ev.target.closest(".picker-option");
+      if (!opt) return;
+      const id = opt.dataset.id === "" ? null : opt.dataset.id;
+      close();
+      onSelect(id);
+    });
+    setTimeout(() => document.addEventListener("click", onDocClick, true), 0);
+  });
+}
+
 function openEditor(id) {
   const t = getTask(id);
   if (!t) return;
   state.editingId = id;
 
-  document.getElementById("editTitle").value = t.title;
-  document.getElementById("editNote").value = t.note || "";
-  document.getElementById("editDate").value = dateToInput(t);
-  document.getElementById("editUrgent").classList.toggle("on", !!t.urgent);
-  document.getElementById("editImportant").classList.toggle("on", !!t.important);
-  document.getElementById("overlay").classList.add("open");
+  $("editTitle").value = t.title;
+  $("editNote").value = t.note || "";
+  $("editDate").value = dateToInput(t);
+  $("editCheckbox").classList.toggle("checked-preview", !!t.completed);
+  $("editUrgent").classList.toggle("on", !!t.urgent);
+  $("editImportant").classList.toggle("on", !!t.important);
+
+  renderEditorProjectPicker(t);
+  renderEditorSubtasks(t);
+  autoGrowDesc();
+
+  $("editAddSubInput").hidden = true;
+  $("editAddSubBtn").hidden = false;
+  $("overlay").classList.add("open");
+}
+
+// Sélecteur de projet de la tâche en cours d'édition (réutilise createPicker)
+function renderEditorProjectPicker(task) {
+  const items = [{ id: null, label: "Aucun projet", icon: "📥" }]
+    .concat(state.projects.map(p => ({ id: p.id, label: p.name, icon: p.icon || DEFAULT_PROJECT_ICON })));
+  createPicker($("editProjectPicker"), {
+    items,
+    selectedId: task.projectId || null,
+    placeholder: "Aucun projet",
+    searchPlaceholder: "Inscrivez le nom du projet",
+    onSelect(projectId) { setTaskProject(task.id, projectId); }
+  });
+}
+
+// Change le projet d'une tâche ; ses sous-tâches suivent (héritent du même projet)
+function setTaskProject(taskId, projectId) {
+  const apply = id => {
+    const t = getTask(id);
+    if (t) t.projectId = projectId;
+    childTasks(id).forEach(c => apply(c.id));
+  };
+  apply(taskId);
+  db.save();
+  render();                       // rafraîchit les vues derrière
+  const t = getTask(taskId);
+  if (t) renderEditorProjectPicker(t);   // remet à jour le libellé du picker
+}
+
+// Liste des sous-tâches directes dans la fenêtre (cocher / supprimer / ajouter)
+function renderEditorSubtasks(task) {
+  const kids = childTasks(task.id);
+  const canAdd = taskDepth(task) < MAX_TASK_DEPTH;
+  const { done, total } = subtaskProgress(task.id);
+  $("editSubHead").textContent = total > 0 ? `Sous-tâches  ${done}/${total}` : "Sous-tâches";
+  const ul = $("editSubList");
+  ul.innerHTML = "";
+  kids.forEach(k => {
+    const li = document.createElement("li");
+    li.className = "editor-sub" + (k.completed ? " done" : "");
+    li.dataset.id = k.id;
+    li.innerHTML = `
+      <button class="checkbox" data-action="toggle" aria-label="Terminer"></button>
+      <span class="editor-sub-title" data-action="open">${esc(k.title)}</span>
+      <button class="editor-sub-del" data-action="delete" aria-label="Supprimer">×</button>
+    `;
+    if (k.completed) li.querySelector(".checkbox").classList.add("checked-preview");
+    ul.appendChild(li);
+  });
+  // Le bouton d'ajout n'apparaît que si on peut descendre d'un niveau
+  $("editAddSubBtn").style.display = canAdd ? "" : "none";
 }
 
 function dateToInput(t) {
@@ -1680,30 +1931,34 @@ function dateToInput(t) {
   return s;
 }
 
-function closeEditor() {
-  document.getElementById("overlay").classList.remove("open");
-  state.editingId = null;
+// Ajuste la hauteur du champ description à son contenu
+function autoGrowDesc() {
+  const el = $("editNote");
+  el.style.height = "auto";
+  el.style.height = el.scrollHeight + "px";
 }
 
-function saveEditor() {
+function closeEditor() {
+  saveEditorFields();             // sauvegarde titre/description/date avant de fermer
+  $("overlay").classList.remove("open");
+  state.editingId = null;
+  render();
+}
+
+// Sauvegarde les champs texte (titre, description, date) de la tâche en cours
+function saveEditorFields() {
   const id = state.editingId;
   if (!id) return;
-  const title = document.getElementById("editTitle").value.trim();
-  if (!title) return;
-
-  const dateRaw = document.getElementById("editDate").value.trim();
+  const t = getTask(id);
+  if (!t) return;
+  const title = $("editTitle").value.trim();
+  if (title) t.title = title;     // on n'efface pas un titre par mégarde
+  t.note = $("editNote").value.trim();
+  const dateRaw = $("editDate").value.trim();
   const parsed = dateRaw ? parseInput(dateRaw) : { dueDate: null, dueTime: null };
-
-  db.update(id, {
-    title,
-    note: document.getElementById("editNote").value.trim(),
-    dueDate: parsed.dueDate,
-    dueTime: parsed.dueTime,
-    urgent: document.getElementById("editUrgent").classList.contains("on"),
-    important: document.getElementById("editImportant").classList.contains("on")
-  });
-  closeEditor();
-  render();
+  t.dueDate = parsed.dueDate;
+  t.dueTime = parsed.dueTime;
+  db.save();
 }
 
 /* =========================================================
@@ -1951,16 +2206,71 @@ function bindEvents() {
     }
   });
 
-  // Modal
-  document.getElementById("editSave").addEventListener("click", saveEditor);
-  document.getElementById("editCancel").addEventListener("click", closeEditor);
-  document.getElementById("editDelete").addEventListener("click", () => {
-    if (state.editingId) { deleteTask(state.editingId); closeEditor(); }
+  // Fenêtre d'édition (sauvegarde directe)
+  $("editClose").addEventListener("click", closeEditor);
+  $("editDelete").addEventListener("click", () => {
+    if (state.editingId) { const id = state.editingId; $("overlay").classList.remove("open"); state.editingId = null; deleteTask(id); }
   });
-  document.getElementById("editUrgent").addEventListener("click", e => e.currentTarget.classList.toggle("on"));
-  document.getElementById("editImportant").addEventListener("click", e => e.currentTarget.classList.toggle("on"));
-  document.getElementById("overlay").addEventListener("click", e => {
-    if (e.target.id === "overlay") closeEditor();
+  $("overlay").addEventListener("click", e => { if (e.target.id === "overlay") closeEditor(); });
+
+  // Priorité : appliquée immédiatement à la tâche éditée
+  ["editUrgent","editImportant"].forEach(bid => {
+    $(bid).addEventListener("click", e => {
+      const flag = e.currentTarget;
+      flag.classList.toggle("on");
+      const t = getTask(state.editingId);
+      if (t) { t[flag.dataset.flag] = flag.classList.contains("on"); db.save(); render(); }
+    });
+  });
+
+  // Cocher la tâche elle-même depuis la fenêtre
+  $("editCheckbox").addEventListener("click", () => {
+    if (state.editingId) { toggleTask(state.editingId); const t = getTask(state.editingId); if (t) renderEditorSubtasks(t); }
+  });
+
+  // Titre / description / date : sauvegardés quand on quitte le champ
+  $("editTitle").addEventListener("blur", saveEditorFields);
+  $("editNote").addEventListener("blur", saveEditorFields);
+  $("editNote").addEventListener("input", autoGrowDesc);
+  $("editDate").addEventListener("blur", saveEditorFields);
+  $("editDate").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); saveEditorFields(); const t = getTask(state.editingId); if (t) $("editDate").value = dateToInput(t); } });
+
+  // Sous-tâches dans la fenêtre : ouvrir le champ, cocher, supprimer, ouvrir une sous-tâche
+  $("editAddSubBtn").addEventListener("click", () => {
+    $("editAddSubBtn").style.display = "none";
+    const input = $("editAddSubInput"); input.hidden = false; input.value = ""; input.focus();
+  });
+  $("editAddSubInput").addEventListener("keydown", e => {
+    if (e.key === "Enter") {
+      const raw = e.target.value.trim();
+      if (raw && state.editingId) {
+        addSubtask(state.editingId, raw);
+        const t = getTask(state.editingId);
+        renderEditorSubtasks(t);
+        const input = $("editAddSubInput"); input.value = ""; input.hidden = false;
+        $("editAddSubBtn").style.display = "none"; input.focus();   // reste ouvert pour enchaîner
+      }
+    } else if (e.key === "Escape") {
+      e.target.hidden = true; $("editAddSubBtn").style.display = "";
+    }
+  });
+  $("editAddSubInput").addEventListener("blur", e => {
+    if (!e.target.value.trim()) { e.target.hidden = true; $("editAddSubBtn").style.display = ""; }
+  });
+  $("editSubList").addEventListener("click", e => {
+    const li = e.target.closest(".editor-sub");
+    if (!li) return;
+    const subId = li.dataset.id;
+    const action = e.target.closest("[data-action]")?.dataset.action;
+    if (action === "toggle") {
+      toggleTask(subId);
+      const t = getTask(state.editingId); if (t) renderEditorSubtasks(t);
+    } else if (action === "delete") {
+      deleteTask(subId);
+      const t = getTask(state.editingId); if (t) renderEditorSubtasks(t);
+    } else if (action === "open") {
+      openEditor(subId);   // ouvrir la sous-tâche dans la fenêtre
+    }
   });
 
   // Afficher / masquer le menu latéral
