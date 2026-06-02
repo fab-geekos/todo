@@ -686,6 +686,48 @@
     to { opacity: 1; transform: translateY(0); }
   }
 
+  /* ===== VUE SEMAINE (Prochainement) ===== */
+  .week-view { display: none; }
+  .week-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; margin-bottom: 16px; flex-wrap: wrap;
+  }
+  .week-month { font-size: 18px; font-weight: 600; color: var(--text); }
+  .week-nav { display: flex; align-items: center; gap: 6px; }
+  .week-nav-btn, .week-today-btn {
+    font-family: inherit; font-size: 14px; color: var(--text);
+    border: 1px solid var(--border); background: var(--card);
+    border-radius: 10px; cursor: pointer; transition: background .15s, border-color .15s;
+  }
+  .week-nav-btn { width: 34px; height: 34px; font-size: 18px; line-height: 1; }
+  .week-today-btn { padding: 0 14px; height: 34px; font-weight: 600; }
+  .week-nav-btn:hover, .week-today-btn:hover { background: var(--hover); border-color: var(--accent); }
+
+  .week-grid { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 8px; align-items: flex-start; }
+  .week-col {
+    flex: 0 0 260px; min-width: 260px;
+    border-top: 2px solid var(--border); padding-top: 10px;
+  }
+  .week-col.today { border-top-color: var(--accent); }
+  .week-col-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; }
+  .week-col-date { font-size: 14px; font-weight: 600; color: var(--text); }
+  .week-col.today .week-col-date { color: var(--alert); }
+  .week-col-wd { font-size: 13px; color: var(--muted); }
+  .week-col-count { margin-left: auto; font-size: 12px; color: var(--muted); }
+  .week-col .task-row { background: var(--card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 8px; padding: 10px 8px; }
+  .week-col .task-row:hover { background: var(--hover); }
+  .week-empty { font-size: 13px; color: var(--muted); font-style: italic; padding: 4px 2px; }
+  .week-bday {
+    display: flex; align-items: center; gap: 8px; padding: 10px;
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    margin-bottom: 8px; font-size: 14px; color: var(--text);
+  }
+  .week-late {
+    display: inline-flex; align-items: center; font-size: 11px; font-weight: 600;
+    color: var(--alert); border: 1px solid var(--alert); border-radius: 8px;
+    padding: 0 6px; margin-left: 4px;
+  }
+
   /* ===== RESPONSIVE ===== */
   @media (max-width: 720px) {
     .sidebar {
@@ -704,6 +746,9 @@
     /* Fenêtre d'édition : une seule colonne, le panneau passe dessous */
     .editor-cols { flex-direction: column; }
     .editor-side { width: auto; border-left: none; border-top: 1px solid var(--border); }
+    /* Vue semaine : colonnes empilées en pleine largeur */
+    .week-grid { flex-direction: column; overflow-x: visible; gap: 8px; }
+    .week-col { flex: 1 1 auto; min-width: 0; width: 100%; }
   }
 
   /* ===== MODE EMBED (Notion) : pas de sidebar ni burger ===== */
@@ -730,8 +775,8 @@
     <button class="nav-item" data-view="today">
       <span class="icon">📅</span> Aujourd'hui <span class="count" id="count-today"></span>
     </button>
-    <button class="nav-item soon">
-      <span class="icon">🗓️</span> Prochainement <span class="count">bientôt</span>
+    <button class="nav-item" data-view="week">
+      <span class="icon">🗓️</span> Prochainement
     </button>
     <button class="nav-item" data-view="eisenhower">
       <span class="icon">🎯</span> Eisenhower
@@ -839,6 +884,18 @@
         <button class="quick-submit" id="contactAdd">+ Contact</button>
       </div>
       <ul class="contact-list" id="contactList"></ul>
+    </div>
+
+    <div class="week-view" id="weekView">
+      <div class="week-bar">
+        <div class="week-month" id="weekMonth"></div>
+        <div class="week-nav">
+          <button class="week-nav-btn" id="weekPrev" aria-label="Semaine précédente">‹</button>
+          <button class="week-today-btn" id="weekToday">Aujourd'hui</button>
+          <button class="week-nav-btn" id="weekNext" aria-label="Semaine suivante">›</button>
+        </div>
+      </div>
+      <div class="week-grid" id="weekGrid"></div>
     </div>
   </main>
 </div>
@@ -949,6 +1006,7 @@ let state = {
   projSub: "eisen",       // sous-vue du projet par défaut : "eisen" (matrice) ou "list"
   projectsTab: "active",  // onglet de la vue Projets : "active" (tableau) ou "done" (terminés)
   contactSearch: "",      // texte de recherche dans la vue Contacts
+  weekAnchor: null,       // début (ms) de la semaine affichée dans Prochainement (null = aujourd'hui)
   expandedTasks: new Set()  // ids des tâches dépliées manuellement (tout est replié par défaut)
 };
 
@@ -1404,7 +1462,8 @@ function render() {
     today: { t: "Aujourd'hui", s: new Date().toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" }) },
     eisenhower: { t: "Eisenhower", s: "Tes tâches classées par urgence et importance" },
     projects: { t: "Projets", s: "Tes projets, organisés par statut" },
-    contacts: { t: "Contacts", s: "Tes contacts et leurs projets délégués" }
+    contacts: { t: "Contacts", s: "Tes contacts et leurs projets délégués" },
+    week: { t: "Prochainement", s: "Tes échéances des 7 prochains jours" }
   };
   const info = titles[state.view] || { t: "", s: "" };
   document.getElementById("viewTitle").textContent = info.t;
@@ -1427,7 +1486,7 @@ function render() {
   });
 
   // Affichage : on masque tous les conteneurs de vues, puis on montre celui de la vue courante
-  ["taskList","eisenGrid","kanbanBoard","projectsTabs","projectsDone","projectsPriorities","projectView","contactsView"]
+  ["taskList","eisenGrid","kanbanBoard","projectsTabs","projectsDone","projectsPriorities","projectView","contactsView","weekView"]
     .forEach(id => { $(id).style.display = "none"; });
   const gridEl = $("eisenGrid");
   const kanbanEl = $("kanbanBoard");
@@ -1461,6 +1520,9 @@ function render() {
   } else if (state.view === "contacts") {
     $("contactsView").style.display = "block";
     renderContacts();
+  } else if (state.view === "week") {
+    $("weekView").style.display = "block";
+    renderWeek();
   } else {
     $("taskList").style.display = "flex";
     renderList();
@@ -1889,6 +1951,88 @@ function contactCard(contact) {
     ${projectsHtml}
   `;
   return li;
+}
+
+/* =========================================================
+   VUE SEMAINE (Prochainement) — 7 jours à partir d'une date d'ancrage
+   ========================================================= */
+// Prochaine occurrence (ms, à minuit) d'un anniversaire "MM-DD" à partir d'un jour donné.
+function birthdaysOnDay(dayTs) {
+  const d = new Date(dayTs);
+  const key = String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  return state.contacts.filter(c => c.birthday === key);
+}
+
+// Ligne compacte d'une tâche pour la vue semaine (réutilise .task-row + data-action pour les clics).
+function weekTaskRow(task, late) {
+  const time = task.dueTime ? `<span class="due">🕒 ${esc(task.dueTime)}</span>` : "";
+  const recur = task.recurrence ? `<span class="task-recur">🔁 ${esc(recurrenceLabel(task.recurrence))}</span>` : "";
+  const project = task.projectId ? getProject(task.projectId) : null;
+  const projHtml = project ? `<span class="task-project">${esc(project.icon || DEFAULT_PROJECT_ICON)} ${esc(project.name)}</span>` : "";
+  const lateHtml = late ? `<span class="week-late">en retard</span>` : "";
+  const metaParts = [time, recur, projHtml].filter(Boolean);
+  const meta = metaParts.length ? `<div class="task-meta">${metaParts.join("")}</div>` : "";
+  return `
+    <div class="task-row${task.completed ? " done" : ""}" data-id="${task.id}" style="--depth:0">
+      <button class="checkbox" data-action="toggle" aria-label="Terminer"></button>
+      <div class="task-body" data-action="edit">
+        <div class="task-titleline"><span class="task-title">${esc(task.title)}</span>${lateHtml}</div>
+        ${meta}
+      </div>
+      <button class="task-del" data-action="delete" aria-label="Supprimer">×</button>
+    </div>`;
+}
+
+function renderWeek() {
+  const today = startOfDay(new Date()).getTime();
+  const anchor = startOfDay(state.weekAnchor != null ? state.weekAnchor : today).getTime();
+  const days = Array.from({ length: 7 }, (_, i) => anchor + i * DAY_MS);
+
+  // Libellé de la période (mois de l'ancre)
+  const a = new Date(anchor);
+  $("weekMonth").textContent = MONTH_LABELS[a.getMonth()].replace(/^./, c => c.toUpperCase()) + " " + a.getFullYear();
+
+  // Tâches non terminées et datées (racines ET sous-tâches datées)
+  const dated = state.tasks.filter(t => !t.completed && t.dueDate != null);
+  const grid = $("weekGrid");
+  grid.innerHTML = "";
+
+  days.forEach(dayTs => {
+    const dayStart = dayTs, dayEnd = dayTs + DAY_MS - 1;
+    const isToday = dayTs === today;
+
+    // Tâches du jour
+    let items = dated.filter(t => t.dueDate >= dayStart && t.dueDate <= dayEnd);
+    // Retards : repliés dans la colonne d'aujourd'hui
+    const late = isToday ? dated.filter(t => t.dueDate < today) : [];
+    items = items.concat([]);  // copie
+    items.sort((x, y) => (x.dueTime || "99:99").localeCompare(y.dueTime || "99:99") || x.title.localeCompare(y.title, "fr"));
+    late.sort((x, y) => (x.dueTime || "99:99").localeCompare(y.dueTime || "99:99"));
+
+    const bdays = birthdaysOnDay(dayTs);
+    const count = items.length + late.length + bdays.length;
+
+    const d = new Date(dayTs);
+    const wd = isToday ? "Aujourd'hui" : WEEKDAY_LABELS[d.getDay()].replace(/^./, c => c.toUpperCase());
+    const dateLabel = d.getDate() + " " + MONTH_LABELS[d.getMonth()].replace(/^./, c => c.toUpperCase());
+
+    let body = "";
+    late.forEach(t => { body += weekTaskRow(t, true); });
+    items.forEach(t => { body += weekTaskRow(t, false); });
+    bdays.forEach(c => { body += `<div class="week-bday">🎂 ${esc(c.name)}</div>`; });
+    if (!body) body = `<div class="week-empty">Rien de prévu</div>`;
+
+    const col = document.createElement("div");
+    col.className = "week-col" + (isToday ? " today" : "");
+    col.innerHTML = `
+      <div class="week-col-head">
+        <span class="week-col-date">${dateLabel}</span>
+        <span class="week-col-wd">${wd}</span>
+        <span class="week-col-count">${count || ""}</span>
+      </div>
+      ${body}`;
+    grid.appendChild(col);
+  });
 }
 
 function renderContacts() {
@@ -2558,6 +2702,16 @@ function bindEvents() {
   document.querySelectorAll(".nav-item[data-view]").forEach(b => {
     b.addEventListener("click", () => navigate(b.dataset.view));
   });
+
+  // Navigation de la vue semaine (Prochainement)
+  const shiftWeek = days => {
+    const base = state.weekAnchor != null ? state.weekAnchor : startOfDay(new Date()).getTime();
+    state.weekAnchor = startOfDay(base + days * DAY_MS).getTime();
+    render();
+  };
+  $("weekPrev").addEventListener("click", () => shiftWeek(-7));
+  $("weekNext").addEventListener("click", () => shiftWeek(7));
+  $("weekToday").addEventListener("click", () => { state.weekAnchor = null; render(); });
   document.getElementById("focusAdd").addEventListener("click", () => {
     closeSidebar();
     document.getElementById("quickInput").focus();
