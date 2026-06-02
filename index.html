@@ -722,10 +722,12 @@
   .week-col .task-row:hover { background: var(--hover); }
   .week-empty { font-size: 13px; color: var(--muted); font-style: italic; padding: 4px 2px; }
   .week-bday {
-    display: flex; align-items: center; gap: 8px; padding: 10px;
+    display: flex; flex-direction: column; gap: 3px; padding: 10px;
     background: var(--card); border: 1px solid var(--border); border-radius: 12px;
     margin-bottom: 8px; font-size: 14px; color: var(--text);
   }
+  .week-bday-main { display: flex; align-items: center; gap: 8px; }
+  .week-bday-note { font-size: 12px; color: var(--muted); font-style: italic; }
   .week-late {
     display: inline-flex; align-items: center; font-size: 11px; font-weight: 600;
     color: var(--alert); border: 1px solid var(--alert); border-radius: 8px;
@@ -1011,7 +1013,8 @@ let state = {
   projectsTab: "active",  // onglet de la vue Projets : "active" (tableau) ou "done" (terminés)
   contactSearch: "",      // texte de recherche dans la vue Contacts
   weekAnchor: null,       // début (ms) de la semaine affichée dans Prochainement (null = aujourd'hui)
-  expandedTasks: new Set()  // ids des tâches dépliées manuellement (tout est replié par défaut)
+  expandedTasks: new Set(),  // ids dépliés dans le Todo (tout est replié par défaut)
+  expandedWeek: new Set()    // ids dépliés dans la vue Prochainement (indépendant du Todo)
 };
 
 /* =========================================================
@@ -1965,10 +1968,20 @@ function contactCard(contact) {
    VUE SEMAINE (Prochainement) — 7 jours à partir d'une date d'ancrage
    ========================================================= */
 // Prochaine occurrence (ms, à minuit) d'un anniversaire "MM-DD" à partir d'un jour donné.
+// Contacts dont l'anniversaire tombe ce jour-là. Renvoie { contact, shifted } :
+// shifted = anniversaire du 29/02 reporté au 28/02 (année non bissextile).
+function isLeapYear(y) { return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0; }
 function birthdaysOnDay(dayTs) {
   const d = new Date(dayTs);
-  const key = String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-  return state.contacts.filter(c => c.birthday === key);
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const key = mm + "-" + dd;
+  const result = state.contacts.filter(c => c.birthday === key).map(c => ({ contact: c, shifted: false }));
+  // 29 février inexistant : on l'affiche le 28 février, avec une note.
+  if (mm === "02" && dd === "28" && !isLeapYear(d.getFullYear())) {
+    state.contacts.filter(c => c.birthday === "02-29").forEach(c => result.push({ contact: c, shifted: true }));
+  }
+  return result;
 }
 
 // Sous-arbre compact d'une tâche pour la vue semaine (chevron, guides en arbre partagés, clics délégués).
@@ -1982,7 +1995,7 @@ function weekTaskTree(task, depth, ancestorContinues = [], isLast = false, late 
   const meta = metaParts.length ? `<div class="task-meta">${metaParts.join("")}</div>` : "";
 
   const { done, total } = subtaskProgress(task.id);
-  const expanded = state.expandedTasks.has(task.id);
+  const expanded = state.expandedWeek.has(task.id);
   const chevron = total > 0
     ? `<button class="task-chevron" data-action="toggle-children" aria-label="Déplier">${expanded ? "▾" : "▸"}</button>`
     : `<span class="task-chevron-spacer"></span>`;
@@ -2046,7 +2059,10 @@ function renderWeek() {
     let body = "";
     late.forEach(t => { body += `<div class="week-task">${weekTaskTree(t, 0, [], true, true)}</div>`; });
     items.forEach(t => { body += `<div class="week-task">${weekTaskTree(t, 0, [], true, false)}</div>`; });
-    bdays.forEach(c => { body += `<div class="week-bday">🎂 ${esc(c.name)}</div>`; });
+    bdays.forEach(b => {
+      const note = b.shifted ? `<div class="week-bday-note">Anniversaire le 29/02 — fêté le 28 février cette année</div>` : "";
+      body += `<div class="week-bday"><div class="week-bday-main">🎂 ${esc(b.contact.name)}</div>${note}</div>`;
+    });
     if (!body) body = `<div class="week-empty">Rien de prévu</div>`;
 
     const col = document.createElement("div");
@@ -2103,8 +2119,9 @@ function toggleTask(id) {
 
 // Replie / déplie les sous-tâches d'une tâche
 function toggleChildren(id) {
-  if (state.expandedTasks.has(id)) state.expandedTasks.delete(id);
-  else state.expandedTasks.add(id);
+  const set = state.view === "week" ? state.expandedWeek : state.expandedTasks;
+  if (set.has(id)) set.delete(id);
+  else set.add(id);
   render();
 }
 
