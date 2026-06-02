@@ -256,7 +256,7 @@
   .task-note { font-size: 13px; color: var(--muted); margin-top: 2px; word-break: break-word; }
   .task-meta { display: flex; align-items: center; gap: 8px; margin-top: 5px; flex-wrap: wrap; }
   .task-body .proj-progress { margin-top: 7px; max-width: 240px; }
-  .due, .task-project, .task-contact {
+  .due, .task-project, .task-contact, .task-recur {
     font-size: 12px; color: var(--muted);
     display: inline-flex; align-items: center; gap: 4px;
   }
@@ -587,6 +587,29 @@
     border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--card); outline: none;
   }
   .side-date-input:focus { border-color: var(--accent); }
+  .recur-select, .recur-num, .recur-unit {
+    font-family: inherit; font-size: 14px; color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+    background: var(--card); outline: none;
+  }
+  .recur-select { width: 100%; cursor: pointer; }
+  .recur-select:focus, .recur-num:focus, .recur-unit:focus { border-color: var(--accent); }
+  .recur-hint { font-size: 12px; color: var(--muted); font-style: italic; }
+  .recur-custom { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
+  .recur-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .recur-num { width: 60px; text-align: center; }
+  .recur-unit { flex: 1; min-width: 90px; cursor: pointer; }
+  .recur-days { display: flex; gap: 4px; flex-wrap: wrap; }
+  .recur-day {
+    width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--card); color: var(--muted); cursor: pointer; font-size: 13px; font-family: inherit;
+    transition: background .15s, color .15s, border-color .15s;
+  }
+  .recur-day.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .recur-mode { display: flex; flex-direction: column; gap: 6px; }
+  .recur-mode label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); cursor: pointer; }
+  .recur-nth { display: flex; gap: 6px; }
+  .recur-nth select { flex: 1; }
   .editor .flags { gap: 8px; }
   .editor-delete {
     margin-top: 8px; background: none; border: none; cursor: pointer; color: var(--alert);
@@ -853,6 +876,10 @@
           <input class="side-date-input" id="editDate" type="text" placeholder="Aucune date">
         </div>
         <div class="side-section">
+          <div class="side-label">Récurrence</div>
+          <div id="editRecur"></div>
+        </div>
+        <div class="side-section">
           <div class="side-label">Priorité</div>
           <div class="flags">
             <button class="flag" id="editImportant" data-flag="important"><span class="star">★</span> Important</button>
@@ -1005,6 +1032,114 @@ const isRoot = t => t.parentTaskId == null;   // tâche racine = sans parent
 function startOfDay(d) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
 function endOfToday() { return startOfDay(new Date()).getTime() + DAY_MS - 1; }
 function isDueToday(t) { return t.dueDate != null && t.dueDate <= endOfToday(); }
+
+/* =========================================================
+   MOTEUR DE RÉCURRENCE
+   recurrence = { freq:"day"|"week"|"month"|"year", interval, weekdays?, nthWeekday? }
+   weekdays : [0..6] (0=dimanche) — mode hebdo
+   nthWeekday : { week:1..5|-1, day:0..6 } — mode "2e mercredi" (mois/année)
+   ========================================================= */
+const WEEKDAY_LABELS = ["dimanche","lundi","mardi","mercredi","jeudi","vendredi","samedi"];
+const WEEKDAY_SHORT  = ["D","L","M","M","J","V","S"];
+const WEEKDAY_ORDER  = [1,2,3,4,5,6,0];   // lundi -> dimanche, pour l'affichage
+const ORDINAL_LABELS = { 1:"1er", 2:"2e", 3:"3e", 4:"4e", "-1":"dernier" };
+const MONTH_LABELS = ["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
+
+// Nième occurrence d'un jour de semaine dans un mois (retombe sur le dernier si le Nième n'existe pas).
+function nthWeekdayOfMonth(year, month, week, weekday) {
+  if (week === -1) {
+    const last = new Date(year, month + 1, 0);
+    const back = (last.getDay() - weekday + 7) % 7;
+    return startOfDay(new Date(year, month, last.getDate() - back));
+  }
+  const first = new Date(year, month, 1);
+  const offset = (weekday - first.getDay() + 7) % 7;
+  const day = 1 + offset + (week - 1) * 7;
+  if (day > new Date(year, month + 1, 0).getDate()) return nthWeekdayOfMonth(year, month, -1, weekday);
+  return startOfDay(new Date(year, month, day));
+}
+
+// Première occurrence STRICTEMENT après fromTs, selon la règle.
+function nextOccurrence(fromTs, rec) {
+  const from = startOfDay(fromTs);
+  const interval = Math.max(1, rec.interval || 1);
+
+  if (rec.freq === "day") {
+    const d = new Date(from); d.setDate(d.getDate() + interval);
+    return startOfDay(d).getTime();
+  }
+  if (rec.freq === "week") {
+    const set = new Set((rec.weekdays && rec.weekdays.length) ? rec.weekdays : [from.getDay()]);
+    const mondayOf = d => { const x = startOfDay(d); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
+    const anchorMon = mondayOf(from).getTime();
+    const cursor = new Date(from);
+    for (let i = 0; i < 366 * interval + 14; i++) {
+      cursor.setDate(cursor.getDate() + 1);
+      if (!set.has(cursor.getDay())) continue;
+      const weeks = Math.round((mondayOf(cursor).getTime() - anchorMon) / (7 * DAY_MS));
+      if (weeks % interval === 0) return startOfDay(cursor).getTime();
+    }
+    return null;
+  }
+  if (rec.freq === "month") {
+    if (rec.nthWeekday) {
+      let y = from.getFullYear(), m = from.getMonth(), cand;
+      do { m += interval; y += Math.floor(m / 12); m = ((m % 12) + 12) % 12;
+           cand = nthWeekdayOfMonth(y, m, rec.nthWeekday.week, rec.nthWeekday.day); }
+      while (cand.getTime() <= from.getTime());
+      return cand.getTime();
+    }
+    const day = from.getDate();
+    let y = from.getFullYear(), m = from.getMonth() + interval;
+    y += Math.floor(m / 12); m = ((m % 12) + 12) % 12;
+    const dim = new Date(y, m + 1, 0).getDate();
+    return startOfDay(new Date(y, m, Math.min(day, dim))).getTime();
+  }
+  if (rec.freq === "year") {
+    if (rec.nthWeekday) {
+      return nthWeekdayOfMonth(from.getFullYear() + interval, from.getMonth(), rec.nthWeekday.week, rec.nthWeekday.day).getTime();
+    }
+    const y = from.getFullYear() + interval, m = from.getMonth(), day = from.getDate();
+    const dim = new Date(y, m + 1, 0).getDate();
+    return startOfDay(new Date(y, m, Math.min(day, dim))).getTime();
+  }
+  return null;
+}
+
+// Avance une tâche récurrente jusqu'à son prochain créneau strictement futur.
+function advanceRecurrence(task) {
+  const today = startOfDay(new Date()).getTime();
+  let next = nextOccurrence(task.dueDate, task.recurrence);
+  let guard = 0;
+  while (next != null && next <= today && guard++ < 5000) next = nextOccurrence(next, task.recurrence);
+  if (next != null) task.dueDate = next;
+}
+
+// Libellé court d'une récurrence (indicateur + résumé éditeur).
+function recurrenceLabel(rec) {
+  if (!rec) return "";
+  const n = rec.interval || 1;
+  if (rec.freq === "day")  return n === 1 ? "tous les jours" : `tous les ${n} jours`;
+  if (rec.freq === "week") {
+    if (rec.weekdays && rec.weekdays.length) {
+      const days = WEEKDAY_ORDER.filter(d => rec.weekdays.includes(d)).map(d => WEEKDAY_LABELS[d]);
+      const list = days.length > 2 ? days.map(d => d.slice(0,3)).join(", ") : days.join(" et ");
+      return (n === 1 ? "chaque " : `1 sem./${n}, `) + list;
+    }
+    return n === 1 ? "toutes les semaines" : `toutes les ${n} semaines`;
+  }
+  if (rec.freq === "month") {
+    const base = n === 1 ? "tous les mois" : `tous les ${n} mois`;
+    if (rec.nthWeekday) return `${base}, le ${ORDINAL_LABELS[rec.nthWeekday.week]} ${WEEKDAY_LABELS[rec.nthWeekday.day]}`;
+    return base;
+  }
+  if (rec.freq === "year") {
+    const base = n === 1 ? "tous les ans" : `tous les ${n} ans`;
+    if (rec.nthWeekday) return `${base}, le ${ORDINAL_LABELS[rec.nthWeekday.week]} ${WEEKDAY_LABELS[rec.nthWeekday.day]}`;
+    return base;
+  }
+  return "";
+}
 
 /* =========================================================
    PARSER DE DATES (français, maison)
@@ -1186,6 +1321,7 @@ function taskRowHtml(task, depth, ancestorContinues = [], isLast = false) {
   const project = (task.projectId && state.view !== "project") ? getProject(task.projectId) : null;
   const metaParts = [];
   if (due) metaParts.push(`<span class="due ${due.cls}">📅 ${esc(due.label)}</span>`);
+  if (task.recurrence) metaParts.push(`<span class="task-recur">🔁 ${esc(recurrenceLabel(task.recurrence))}</span>`);
   if (project) {
     metaParts.push(`<span class="task-project">${esc(project.icon || DEFAULT_PROJECT_ICON)} ${esc(project.name)}</span>`);
     if (project.status === "delegue" && project.assigneeId) {
@@ -1550,7 +1686,8 @@ function makeTask(raw, flags, projectId = null, parentTaskId = null) {
     completed: false,
     createdAt: Date.now(),
     projectId,
-    parentTaskId
+    parentTaskId,
+    recurrence: null
   };
 }
 
@@ -1777,6 +1914,13 @@ function renderContacts() {
 function toggleTask(id) {
   const t = getTask(id);
   if (!t) return;
+  // Tâche récurrente (racine, sans sous-tâche) : cocher = passer à la prochaine occurrence.
+  if (!t.completed && t.recurrence && t.dueDate != null && childTasks(t.id).length === 0) {
+    advanceRecurrence(t);
+    db.save();
+    render();
+    return;
+  }
   const done = !t.completed;
   t.completed = done;
   t.completedAt = done ? Date.now() : null;
@@ -1812,6 +1956,7 @@ function addSubtask(parentId, raw) {
   if (!parent || taskDepth(parent) >= MAX_TASK_DEPTH) return;
   const task = makeTask(raw, { urgent: false, important: false }, parent.projectId, parentId);
   state.tasks.push(task);
+  if (parent.recurrence) parent.recurrence = null;   // une tâche à sous-tâches n'est plus récurrente
   refreshCompletionUpwards(parentId);   // le parent n'est plus "fait" s'il l'était
   db.save();
 }
@@ -1914,6 +2059,7 @@ function openEditor(id) {
   $("editImportant").classList.toggle("on", !!t.important);
 
   renderEditorProjectPicker(t);
+  renderEditorRecurrence(t);
   renderEditorBreadcrumb(t);
   renderEditorSubtasks(t);
   autoGrowDesc();
@@ -1949,6 +2095,172 @@ function setTaskProject(taskId, projectId) {
   render();                       // rafraîchit les vues derrière
   const t = getTask(taskId);
   if (t) renderEditorProjectPicker(t);   // remet à jour le libellé du picker
+}
+
+/* ---- Sélecteur de récurrence (fenêtre d'édition) ---- */
+// Règle "simple" par défaut pour une fréquence donnée, ancrée sur la date de la tâche.
+function defaultRecurrence(freq) {
+  return { freq, interval: 1 };
+}
+
+// Une tâche peut-elle être récurrente ? (racine, avec date, sans sous-tâche)
+function canRecur(task) {
+  return isRoot(task) && task.dueDate != null && childTasks(task.id).length === 0;
+}
+
+function setRecurrence(taskId, rec) {
+  const t = getTask(taskId);
+  if (!t) return;
+  t.recurrence = rec;
+  db.save();
+  render();
+  renderEditorRecurrence(t);
+}
+
+function renderEditorRecurrence(task) {
+  const box = $("editRecur");
+  box.innerHTML = "";
+
+  if (!canRecur(task)) {
+    const hint = document.createElement("div");
+    hint.className = "recur-hint";
+    hint.textContent = task.dueDate == null
+      ? "Ajoute une date pour activer la récurrence."
+      : "La récurrence n'est possible que sur une tâche racine sans sous-tâche.";
+    box.appendChild(hint);
+    return;
+  }
+
+  const rec = task.recurrence;
+  // Le <select> de presets. "custom" = on garde la règle telle quelle et on montre les réglages fins.
+  const select = document.createElement("select");
+  select.className = "recur-select";
+  const presets = [
+    ["none",   "Jamais"],
+    ["day",    "Tous les jours"],
+    ["week",   "Toutes les semaines"],
+    ["month",  "Tous les mois"],
+    ["year",   "Tous les ans"],
+    ["custom", "Personnalisé…"]
+  ];
+  // Quel preset reflète la règle actuelle ?
+  let current = "none";
+  if (rec) {
+    const simple = (rec.interval || 1) === 1 && !rec.nthWeekday &&
+                   !(rec.freq === "week" && rec.weekdays && rec.weekdays.length);
+    current = simple ? rec.freq : "custom";
+  }
+  presets.forEach(([v, label]) => {
+    const o = document.createElement("option");
+    o.value = v; o.textContent = label;
+    if (v === current) o.selected = true;
+    select.appendChild(o);
+  });
+  select.addEventListener("change", () => {
+    const v = select.value;
+    if (v === "none") setRecurrence(task.id, null);
+    else if (v === "custom") setRecurrence(task.id, rec || defaultRecurrence("week"));
+    else setRecurrence(task.id, defaultRecurrence(v));
+  });
+  box.appendChild(select);
+
+  if (current !== "custom" || !rec) return;
+
+  // --- Réglages fins (mode personnalisé) ---
+  const custom = document.createElement("div");
+  custom.className = "recur-custom";
+
+  // Ligne : tous les [N] [unité]
+  const row = document.createElement("div");
+  row.className = "recur-row";
+  row.appendChild(Object.assign(document.createElement("span"), { textContent: "Tous les" }));
+  const num = document.createElement("input");
+  num.type = "number"; num.min = "1"; num.className = "recur-num"; num.value = rec.interval || 1;
+  row.appendChild(num);
+  const unit = document.createElement("select");
+  unit.className = "recur-unit";
+  [["day","jours"],["week","semaines"],["month","mois"],["year","ans"]].forEach(([v,l]) => {
+    const o = document.createElement("option"); o.value = v; o.textContent = l;
+    if (v === rec.freq) o.selected = true; unit.appendChild(o);
+  });
+  row.appendChild(unit);
+  custom.appendChild(row);
+
+  const commit = patch => setRecurrence(task.id, { ...rec, ...patch });
+  num.addEventListener("change", () => commit({ interval: Math.max(1, parseInt(num.value, 10) || 1) }));
+  unit.addEventListener("change", () => {
+    // Changer d'unité réinitialise les options spécifiques (jours/nthWeekday)
+    setRecurrence(task.id, { freq: unit.value, interval: Math.max(1, parseInt(num.value, 10) || 1) });
+  });
+
+  // Hebdo : choix des jours
+  if (rec.freq === "week") {
+    const days = document.createElement("div");
+    days.className = "recur-days";
+    const sel = new Set(rec.weekdays && rec.weekdays.length ? rec.weekdays : [new Date(task.dueDate).getDay()]);
+    WEEKDAY_ORDER.forEach(d => {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "recur-day" + (sel.has(d) ? " on" : "");
+      b.textContent = WEEKDAY_SHORT[d];
+      b.addEventListener("click", () => {
+        if (sel.has(d)) sel.delete(d); else sel.add(d);
+        if (sel.size === 0) sel.add(d);                 // au moins un jour
+        commit({ weekdays: [...sel].sort((a,b) => a-b) });
+      });
+      days.appendChild(b);
+    });
+    custom.appendChild(days);
+  }
+
+  // Mensuel / annuel : "le <jour du mois>" OU "le <Nième> <jour de semaine>"
+  if (rec.freq === "month" || rec.freq === "year") {
+    const d = new Date(task.dueDate);
+    const mode = document.createElement("div");
+    mode.className = "recur-mode";
+    const byNth = !!rec.nthWeekday;
+
+    // Option 1 : par date
+    const l1 = document.createElement("label");
+    const r1 = document.createElement("input"); r1.type = "radio"; r1.name = "recurMode_" + task.id; r1.checked = !byNth;
+    const t1 = rec.freq === "month" ? `le ${d.getDate()} du mois` : `le ${d.getDate()} ${MONTH_LABELS[d.getMonth()]}`;
+    l1.append(r1, document.createTextNode(t1));
+    r1.addEventListener("change", () => { const c = { ...rec }; delete c.nthWeekday; setRecurrence(task.id, c); });
+    mode.appendChild(l1);
+
+    // Option 2 : Nième jour de semaine
+    const l2 = document.createElement("label");
+    const r2 = document.createElement("input"); r2.type = "radio"; r2.name = "recurMode_" + task.id; r2.checked = byNth;
+    l2.append(r2, document.createTextNode("le "));
+    const nth = rec.nthWeekday || { week: defaultNthWeek(d), day: d.getDay() };
+    const selWeek = document.createElement("select");
+    [["1","1er"],["2","2e"],["3","3e"],["4","4e"],["-1","dernier"]].forEach(([v,l]) => {
+      const o = document.createElement("option"); o.value = v; o.textContent = l;
+      if (parseInt(v,10) === nth.week) o.selected = true; selWeek.appendChild(o);
+    });
+    const selDay = document.createElement("select");
+    WEEKDAY_ORDER.forEach(wd => {
+      const o = document.createElement("option"); o.value = String(wd); o.textContent = WEEKDAY_LABELS[wd];
+      if (wd === nth.day) o.selected = true; selDay.appendChild(o);
+    });
+    const nthWrap = document.createElement("span"); nthWrap.className = "recur-nth";
+    nthWrap.append(selWeek, selDay);
+    l2.appendChild(nthWrap);
+    const applyNth = () => setRecurrence(task.id, { ...rec, nthWeekday: { week: parseInt(selWeek.value,10), day: parseInt(selDay.value,10) } });
+    r2.addEventListener("change", applyNth);
+    selWeek.addEventListener("change", applyNth);
+    selDay.addEventListener("change", applyNth);
+    mode.appendChild(l2);
+
+    custom.appendChild(mode);
+  }
+
+  box.appendChild(custom);
+}
+
+// Quel ordinal (1er..4e / dernier) correspond à la date d'ancrage, pour préremplir le mode "Nième".
+function defaultNthWeek(d) {
+  const week = Math.ceil(d.getDate() / 7);
+  return week >= 5 ? -1 : week;
 }
 
 // Liste des sous-tâches directes dans la fenêtre (cocher / supprimer / ajouter)
@@ -2032,7 +2344,9 @@ function saveEditorFields() {
   const parsed = dateRaw ? parseInput(dateRaw) : { dueDate: null, dueTime: null };
   t.dueDate = parsed.dueDate;
   t.dueTime = parsed.dueTime;
+  if (t.dueDate == null) t.recurrence = null;   // une récurrence sans date n'a pas de sens
   db.save();
+  renderEditorRecurrence(t);                      // la date conditionne la récurrence
 }
 
 /* =========================================================
@@ -2303,7 +2617,16 @@ function bindEvents() {
 
   // Cocher la tâche elle-même depuis la fenêtre
   $("editCheckbox").addEventListener("click", () => {
-    if (state.editingId) { toggleTask(state.editingId); const t = getTask(state.editingId); if (t) renderEditorSubtasks(t); }
+    if (state.editingId) {
+      toggleTask(state.editingId);
+      const t = getTask(state.editingId);
+      if (t) {
+        renderEditorSubtasks(t);
+        $("editDate").value = dateToInput(t);          // la date a pu avancer (récurrence)
+        $("editCheckbox").classList.toggle("checked-preview", !!t.completed);
+        renderEditorRecurrence(t);
+      }
+    }
   });
 
   // Titre / description / date : sauvegardés quand on quitte le champ
