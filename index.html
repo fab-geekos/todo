@@ -714,7 +714,11 @@
   .week-col.today .week-col-date { color: var(--alert); }
   .week-col-wd { font-size: 13px; color: var(--muted); }
   .week-col-count { margin-left: auto; font-size: 12px; color: var(--muted); }
-  .week-col .task-row { background: var(--card); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 8px; padding: 10px 8px; }
+  .week-task {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    margin-bottom: 8px; overflow: hidden;
+  }
+  .week-col .task-row { padding-top: 10px; padding-bottom: 10px; }
   .week-col .task-row:hover { background: var(--hover); }
   .week-empty { font-size: 13px; color: var(--muted); font-style: italic; padding: 4px 2px; }
   .week-bday {
@@ -1372,6 +1376,20 @@ function sortTasks(list) {
 
 // HTML d'UNE ligne de tâche (racine ou sous-tâche), sans carte englobante.
 // depth : 0 = racine, 1+ = sous-tâche (indentation par un trait vertical).
+
+// Style de fond des guides en arbre : une verticale par ancêtre dont la branche continue.
+// Partagé entre la vue Todo et la vue Prochainement pour éviter toute divergence.
+function treeGuideStyle(depth, ancestorContinues) {
+  if (depth < 1) return "";
+  const pipes = [];
+  ancestorContinues.forEach((cont, level) => { if (cont) pipes.push(8 + level * 22); });
+  if (!pipes.length) return "";
+  const g = pipes.map(() => "linear-gradient(var(--border),var(--border))").join(",");
+  const p = pipes.map(x => `${x}px 0`).join(",");
+  const s = pipes.map(() => "2px 100%").join(",");
+  return `background-image:${g};background-position:${p};background-size:${s};`;
+}
+
 function taskRowHtml(task, depth, ancestorContinues = [], isLast = false) {
   const due = formatDue(task);
 
@@ -1401,17 +1419,7 @@ function taskRowHtml(task, depth, ancestorContinues = [], isLast = false) {
   const doneCls = task.completed ? " done" : "";
 
   // Guides en arbre : une verticale de fond par ancêtre dont la branche continue (calculé au rendu).
-  let guideStyle = "";
-  if (depth >= 1) {
-    const pipes = [];
-    ancestorContinues.forEach((cont, level) => { if (cont) pipes.push(8 + level * 22); });
-    if (pipes.length) {
-      const g = pipes.map(() => "linear-gradient(var(--border),var(--border))").join(",");
-      const p = pipes.map(x => `${x}px 0`).join(",");
-      const s = pipes.map(() => "2px 100%").join(",");
-      guideStyle = `background-image:${g};background-position:${p};background-size:${s};`;
-    }
-  }
+  const guideStyle = treeGuideStyle(depth, ancestorContinues);
   const lastCls = (depth >= 1 && isLast) ? " task-last" : "";
 
   return `
@@ -1963,24 +1971,43 @@ function birthdaysOnDay(dayTs) {
   return state.contacts.filter(c => c.birthday === key);
 }
 
-// Ligne compacte d'une tâche pour la vue semaine (réutilise .task-row + data-action pour les clics).
-function weekTaskRow(task, late) {
+// Sous-arbre compact d'une tâche pour la vue semaine (chevron, guides en arbre partagés, clics délégués).
+// late : badge "en retard" (uniquement sur la racine repliée dans Aujourd'hui).
+function weekTaskTree(task, depth, ancestorContinues = [], isLast = false, late = false) {
   const time = task.dueTime ? `<span class="due">🕒 ${esc(task.dueTime)}</span>` : "";
   const recur = task.recurrence ? `<span class="task-recur">🔁 ${esc(recurrenceLabel(task.recurrence))}</span>` : "";
   const project = task.projectId ? getProject(task.projectId) : null;
   const projHtml = project ? `<span class="task-project">${esc(project.icon || DEFAULT_PROJECT_ICON)} ${esc(project.name)}</span>` : "";
-  const lateHtml = late ? `<span class="week-late">en retard</span>` : "";
   const metaParts = [time, recur, projHtml].filter(Boolean);
   const meta = metaParts.length ? `<div class="task-meta">${metaParts.join("")}</div>` : "";
-  return `
-    <div class="task-row${task.completed ? " done" : ""}" data-id="${task.id}" style="--depth:0">
+
+  const { done, total } = subtaskProgress(task.id);
+  const expanded = state.expandedTasks.has(task.id);
+  const chevron = total > 0
+    ? `<button class="task-chevron" data-action="toggle-children" aria-label="Déplier">${expanded ? "▾" : "▸"}</button>`
+    : `<span class="task-chevron-spacer"></span>`;
+  const subCount = total > 0 ? `<span class="count-badge">${done}/${total}</span>` : "";
+  const lateHtml = late ? `<span class="week-late">en retard</span>` : "";
+  const guideStyle = treeGuideStyle(depth, ancestorContinues);
+  const lastCls = (depth >= 1 && isLast) ? " task-last" : "";
+
+  let html = `
+    <div class="task-row${task.completed ? " done" : ""}${lastCls}" data-id="${task.id}" style="--depth:${depth};${guideStyle}">
+      ${chevron}
       <button class="checkbox" data-action="toggle" aria-label="Terminer"></button>
       <div class="task-body" data-action="edit">
-        <div class="task-titleline"><span class="task-title">${esc(task.title)}</span>${lateHtml}</div>
+        <div class="task-titleline"><span class="task-title">${esc(task.title)}</span>${lateHtml}${subCount}</div>
         ${meta}
       </div>
       <button class="task-del" data-action="delete" aria-label="Supprimer">×</button>
     </div>`;
+
+  if (expanded) {
+    const kids = childTasks(task.id);
+    const childAnc = depth >= 1 ? [...ancestorContinues, !isLast] : [];
+    kids.forEach((child, i) => { html += weekTaskTree(child, depth + 1, childAnc, i === kids.length - 1, false); });
+  }
+  return html;
 }
 
 function renderWeek() {
@@ -2017,8 +2044,8 @@ function renderWeek() {
     const dateLabel = d.getDate() + " " + MONTH_LABELS[d.getMonth()].replace(/^./, c => c.toUpperCase());
 
     let body = "";
-    late.forEach(t => { body += weekTaskRow(t, true); });
-    items.forEach(t => { body += weekTaskRow(t, false); });
+    late.forEach(t => { body += `<div class="week-task">${weekTaskTree(t, 0, [], true, true)}</div>`; });
+    items.forEach(t => { body += `<div class="week-task">${weekTaskTree(t, 0, [], true, false)}</div>`; });
     bdays.forEach(c => { body += `<div class="week-bday">🎂 ${esc(c.name)}</div>`; });
     if (!body) body = `<div class="week-empty">Rien de prévu</div>`;
 
