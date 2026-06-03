@@ -1349,9 +1349,9 @@ function esc(s) {
 function visibleTasks() {
   let list = state.tasks.filter(t => !t.completed);
   if (state.view === "today") {
-    // Vue échéance : toute tâche due aujourd'hui, racine ou sous-tâche, à plat
+    // Vue échéance : toute tâche due aujourd'hui, racine ou sous-tâche, dépliable en arbre
     list = list.filter(isDueToday);
-    state.flatList = true;
+    state.flatList = false;
   } else {
     // Todo : seulement les racines ; les sous-tâches s'affichent en dépliant
     list = list.filter(isRoot);
@@ -1397,7 +1397,7 @@ function taskRowHtml(task, depth, ancestorContinues = [], isLast = false) {
   const due = formatDue(task);
 
   // Nom du projet, affiché seulement dans les vues globales (pas dans la vue projet)
-  const project = (task.projectId && state.view !== "project") ? getProject(task.projectId) : null;
+  const project = (task.projectId && state.view !== "project" && depth === 0) ? getProject(task.projectId) : null;
   const metaParts = [];
   if (due) metaParts.push(`<span class="due ${due.cls}">📅 ${esc(due.label)}</span>`);
   if (task.recurrence) metaParts.push(`<span class="task-recur">🔁 ${esc(recurrenceLabel(task.recurrence))}</span>`);
@@ -1989,7 +1989,7 @@ function birthdaysOnDay(dayTs) {
 function weekTaskTree(task, depth, ancestorContinues = [], isLast = false, late = false) {
   const time = task.dueTime ? `<span class="due">🕒 ${esc(task.dueTime)}</span>` : "";
   const recur = task.recurrence ? `<span class="task-recur">🔁 ${esc(recurrenceLabel(task.recurrence))}</span>` : "";
-  const project = task.projectId ? getProject(task.projectId) : null;
+  const project = (task.projectId && depth === 0) ? getProject(task.projectId) : null;
   const projHtml = project ? `<span class="task-project">${esc(project.icon || DEFAULT_PROJECT_ICON)} ${esc(project.name)}</span>` : "";
   const metaParts = [time, recur, projHtml].filter(Boolean);
   const meta = metaParts.length ? `<div class="task-meta">${metaParts.join("")}</div>` : "";
@@ -1999,7 +1999,9 @@ function weekTaskTree(task, depth, ancestorContinues = [], isLast = false, late 
   const chevron = total > 0
     ? `<button class="task-chevron" data-action="toggle-children" aria-label="Déplier">${expanded ? "▾" : "▸"}</button>`
     : `<span class="task-chevron-spacer"></span>`;
-  const subCount = total > 0 ? `<span class="count-badge">${done}/${total}</span>` : "";
+  // Racine : barre de progression complète. Sous-tâche : petit badge X/Y (comme dans le Todo).
+  const progressHtml = (depth === 0 && total > 0) ? progressBarHtml(done, total) : "";
+  const subCount = (depth > 0 && total > 0) ? `<span class="count-badge">${done}/${total}</span>` : "";
   const lateHtml = late ? `<span class="week-late">en retard</span>` : "";
   const guideStyle = treeGuideStyle(depth, ancestorContinues);
   const lastCls = (depth >= 1 && isLast) ? " task-last" : "";
@@ -2011,6 +2013,7 @@ function weekTaskTree(task, depth, ancestorContinues = [], isLast = false, late 
       <div class="task-body" data-action="edit">
         <div class="task-titleline"><span class="task-title">${esc(task.title)}</span>${lateHtml}${subCount}</div>
         ${meta}
+        ${progressHtml}
       </div>
       <button class="task-del" data-action="delete" aria-label="Supprimer">×</button>
     </div>`;
