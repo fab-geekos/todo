@@ -729,14 +729,48 @@
     display: inline-flex; align-items: center; gap: 6px; border-radius: 8px;
   }
   .week-add-btn:hover { color: var(--accent); }
-  .week-add-form { display: flex; flex-direction: column; gap: 8px; padding: 2px 0; }
-  .week-add-input {
-    font-family: inherit; font-size: 14px; color: var(--text);
-    border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px;
-    background: var(--card); outline: none;
+  .week-add-btn .plus-sm { color: var(--accent); font-size: 16px; font-weight: 600; }
+
+  /* Pop-up d'ajout de tâche (Prochainement) */
+  .week-modal-scrim {
+    position: fixed; inset: 0; z-index: 60;
+    background: rgba(0,0,0,.32);
+    display: flex; align-items: flex-start; justify-content: center;
+    padding: 14vh 16px 16px;
   }
-  .week-add-input:focus { border-color: var(--accent); }
-  .week-add-form .flags { display: flex; gap: 6px; flex-wrap: wrap; }
+  .week-modal {
+    width: 100%; max-width: 440px;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: 0 12px 40px rgba(0,0,0,.18);
+    padding: 16px; display: flex; flex-direction: column; gap: 12px;
+    animation: fadeUp .18s ease;
+  }
+  .week-modal-input {
+    font-family: inherit; font-size: 16px; font-weight: 600; color: var(--text);
+    border: none; outline: none; background: none; padding: 2px 0;
+  }
+  .week-modal-input::placeholder { color: var(--muted); font-weight: 500; }
+  .week-modal-day {
+    display: inline-flex; align-items: center; gap: 6px; align-self: flex-start;
+    font-size: 13px; color: var(--success); font-weight: 500;
+    border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px;
+  }
+  .week-modal .flags { display: flex; gap: 8px; flex-wrap: wrap; }
+  .week-modal-foot {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    border-top: 1px solid var(--border); padding-top: 12px; flex-wrap: wrap;
+  }
+  .week-modal-inbox { font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+  .week-modal-actions { display: flex; gap: 8px; }
+  .week-modal-cancel, .week-modal-add {
+    font-family: inherit; font-size: 14px; cursor: pointer;
+    border-radius: 10px; padding: 8px 16px; border: 1px solid var(--border);
+    transition: background .15s, border-color .15s, opacity .15s;
+  }
+  .week-modal-cancel { background: var(--card); color: var(--muted); }
+  .week-modal-cancel:hover { background: var(--hover); }
+  .week-modal-add { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+  .week-modal-add:hover { opacity: .9; }
   .week-bday {
     display: flex; flex-direction: column; gap: 3px; padding: 10px;
     background: var(--card); border: 1px solid var(--border); border-radius: 12px;
@@ -918,6 +952,24 @@
         </div>
       </div>
       <div class="week-grid" id="weekGrid"></div>
+    </div>
+
+    <div class="week-modal-scrim" id="weekAddModal" hidden>
+      <div class="week-modal" role="dialog" aria-label="Ajouter une tâche">
+        <input class="week-modal-input" id="weekAddInput" type="text" placeholder="Nom de la tâche…" autocomplete="off">
+        <div class="week-modal-day" id="weekAddDayLabel"></div>
+        <div class="flags" id="weekAddFlags">
+          <button class="flag" data-flag="important"><span class="star">★</span> Important</button>
+          <button class="flag" data-flag="urgent">⚡ Urgent</button>
+        </div>
+        <div class="week-modal-foot">
+          <span class="week-modal-inbox">📥 Boîte de réception</span>
+          <div class="week-modal-actions">
+            <button class="week-modal-cancel" id="weekAddCancel" type="button">Annuler</button>
+            <button class="week-modal-add" id="weekAddSubmit" type="button">Ajouter</button>
+          </div>
+        </div>
+      </div>
     </div>
   </main>
 </div>
@@ -2120,39 +2172,46 @@ function renderWeek() {
       ${body}
       <div class="week-add" data-day="${dayTs}">
         <button class="week-add-btn" type="button"><span class="plus-sm">+</span> Ajouter une tâche</button>
-        <div class="week-add-form" hidden>
-          <input class="week-add-input" type="text" placeholder="Nouvelle tâche…" autocomplete="off">
-          ${flagsHtml()}
-        </div>
       </div>`;
     grid.appendChild(col);
   });
-
-  // Après un ajout : rouvrir et refocaliser le formulaire de la colonne concernée (saisie en rafale).
-  if (weekFocusDay != null) {
-    const zone = grid.querySelector(`.week-add[data-day="${weekFocusDay}"]`);
-    if (zone) {
-      zone.querySelector(".week-add-btn").hidden = true;
-      const form = zone.querySelector(".week-add-form");
-      form.hidden = false;
-      form.querySelector(".week-add-input").focus();
-    }
-    weekFocusDay = null;
-  }
 }
 
-// Mémorise la colonne où rouvrir le formulaire d'ajout après un render (consommé une fois).
-let weekFocusDay = null;
+let weekAddDay = null;   // jour cible du pop-up d'ajout (null = fermé)
 
-// Ajout d'une tâche depuis une colonne de Prochainement : date de la colonne imposée, pas de projet (boîte de réception).
+// Ajout d'une tâche depuis le pop-up de Prochainement : date de la colonne imposée, pas de projet (boîte de réception).
 function addTaskOnDay(dayTs, raw, flags) {
   const task = makeTask(raw);                          // titre + priorité éventuelle du texte
   task.urgent = task.urgent || flags.urgent;           // + boutons cliqués
   task.important = task.important || flags.important;
   task.dueDate = startOfDay(dayTs).getTime();          // la date de la colonne prime
   db.add(task);
-  weekFocusDay = dayTs;                                 // garder le formulaire ouvert pour enchaîner
   render();
+}
+
+function openWeekAdd(dayTs) {
+  weekAddDay = dayTs;
+  const d = new Date(dayTs);
+  const isToday = startOfDay(new Date()).getTime() === dayTs;
+  const cap = s => s.replace(/^./, c => c.toUpperCase());
+  const label = (isToday ? "Aujourd'hui · " : cap(WEEKDAY_LABELS[d.getDay()]) + " ")
+              + d.getDate() + " " + MONTH_LABELS[d.getMonth()];
+  $("weekAddDayLabel").textContent = "📅 " + label;
+  const modal = $("weekAddModal");
+  $("weekAddInput").value = "";
+  modal.querySelectorAll(".flag.on").forEach(f => f.classList.remove("on"));
+  modal.hidden = false;
+  $("weekAddInput").focus();
+}
+function closeWeekAdd() { $("weekAddModal").hidden = true; weekAddDay = null; }
+function submitWeekAdd() {
+  const raw = $("weekAddInput").value.trim();
+  if (!raw || weekAddDay == null) return;
+  addTaskOnDay(weekAddDay, raw, readFlags($("weekAddModal")));
+  // pop-up gardé ouvert pour enchaîner plusieurs tâches sur le même jour
+  $("weekAddInput").value = "";
+  $("weekAddModal").querySelectorAll(".flag.on").forEach(f => f.classList.remove("on"));
+  $("weekAddInput").focus();
 }
 
 function renderContacts() {
@@ -2834,33 +2893,24 @@ function bindEvents() {
   $("weekNext").addEventListener("click", () => shiftWeek(7));
   $("weekToday").addEventListener("click", () => { state.weekAnchor = null; render(); });
 
-  // Ajout de tâche par colonne (révéler le formulaire, toggle priorité)
+  // Le "+" d'une colonne ouvre le pop-up d'ajout
   $("weekGrid").addEventListener("click", e => {
     const addBtn = e.target.closest(".week-add-btn");
-    if (addBtn) {
-      const zone = addBtn.closest(".week-add");
-      addBtn.hidden = true;
-      const form = zone.querySelector(".week-add-form");
-      form.hidden = false;
-      form.querySelector(".week-add-input").focus();
-      return;
-    }
-    const flag = e.target.closest(".week-add .flag");
+    if (addBtn) openWeekAdd(Number(addBtn.closest(".week-add").dataset.day));
+  });
+
+  // Pop-up d'ajout : ouverture / fermeture / validation / priorité
+  const modal = $("weekAddModal");
+  modal.addEventListener("click", e => {
+    if (e.target === modal) return closeWeekAdd();           // clic sur le fond
+    const flag = e.target.closest(".flag");
     if (flag) flag.classList.toggle("on");
   });
-  // Valider (Entrée) ou annuler (Échap) la saisie d'une colonne
-  $("weekGrid").addEventListener("keydown", e => {
-    const input = e.target.closest(".week-add-input");
-    if (!input) return;
-    const zone = input.closest(".week-add");
-    if (e.key === "Enter") {
-      e.preventDefault();
-      const raw = input.value.trim();
-      if (raw) addTaskOnDay(Number(zone.dataset.day), raw, readFlags(zone));
-    } else if (e.key === "Escape") {
-      zone.querySelector(".week-add-form").hidden = true;
-      zone.querySelector(".week-add-btn").hidden = false;
-    }
+  $("weekAddCancel").addEventListener("click", closeWeekAdd);
+  $("weekAddSubmit").addEventListener("click", submitWeekAdd);
+  $("weekAddInput").addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); submitWeekAdd(); }
+    else if (e.key === "Escape") closeWeekAdd();
   });
   document.getElementById("focusAdd").addEventListener("click", () => {
     closeSidebar();
