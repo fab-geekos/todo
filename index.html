@@ -729,7 +729,7 @@
     display: inline-flex; align-items: center; gap: 6px; border-radius: 8px;
   }
   .week-add-btn:hover { color: var(--accent); }
-  .week-add-btn .plus-sm { color: var(--accent); font-size: 16px; font-weight: 600; }
+  .week-add-btn .plus-sm { font-size: 16px; font-weight: 600; }
 
   /* Pop-up d'ajout de tâche (Prochainement) */
   .week-modal-scrim {
@@ -1429,18 +1429,11 @@ function esc(s) {
 function visibleTasks() {
   let list = state.tasks.filter(t => !t.completed);
   if (state.view === "today") {
-    // Vue échéance : toute tâche due aujourd'hui, racine ou sous-tâche, dépliable en arbre.
-    // Tri par PRIORITÉ (quadrant Eisenhower), la date ne servant qu'à départager.
+    // Vue échéance : toute tâche due aujourd'hui (retards inclus), racine ou sous-tâche.
+    // Tri agenda : heure croissante en haut, puis priorité, puis ordre manuel.
     list = list.filter(isDueToday);
     state.flatList = false;
-    return list.sort((a, b) => {
-      const d = QUADRANT_ORDER.indexOf(quadrantOf(a)) - QUADRANT_ORDER.indexOf(quadrantOf(b));
-      if (d !== 0) return d;
-      if (a.dueDate == null && b.dueDate == null) return 0;
-      if (a.dueDate == null) return 1;
-      if (b.dueDate == null) return -1;
-      return a.dueDate - b.dueDate;
-    });
+    return agendaSort(list);
   } else {
     // Todo : seulement les racines ; les sous-tâches s'affichent en dépliant
     list = list.filter(isRoot);
@@ -1464,6 +1457,24 @@ function sortTasks(list) {
     });
   }
   return copy;
+}
+
+// Tri des vues agenda (Aujourd'hui, Prochainement) :
+//  1. tâches AVEC heure en haut, par heure croissante (ordre fixe) ;
+//  2. puis tâches SANS heure, par priorité (quadrant Eisenhower) ;
+//  3. à priorité égale et sans heure : ordre manuel = ordre dans state.tasks
+//     (c'est ce niveau qui sera réordonnable par glisser-déposer).
+function agendaSort(list) {
+  const idx = new Map(state.tasks.map((t, i) => [t.id, i]));
+  return [...list].sort((a, b) => {
+    const ta = a.dueTime || "", tb = b.dueTime || "";
+    if (ta && tb) { if (ta !== tb) return ta.localeCompare(tb); }
+    else if (ta) return -1;          // a a une heure, b non -> a au-dessus
+    else if (tb) return 1;
+    const q = QUADRANT_ORDER.indexOf(quadrantOf(a)) - QUADRANT_ORDER.indexOf(quadrantOf(b));
+    if (q !== 0) return q;
+    return (idx.get(a.id) ?? 0) - (idx.get(b.id) ?? 0);
+  });
 }
 
 // HTML d'UNE ligne de tâche (racine ou sous-tâche), sans carte englobante.
@@ -2138,24 +2149,23 @@ function renderWeek() {
     const dayStart = dayTs, dayEnd = dayTs + DAY_MS - 1;
     const isToday = dayTs === today;
 
-    // Tâches du jour
+    // Tâches du jour (+ retards repliés dans la colonne d'aujourd'hui)
     let items = dated.filter(t => t.dueDate >= dayStart && t.dueDate <= dayEnd);
-    // Retards : repliés dans la colonne d'aujourd'hui
-    const late = isToday ? dated.filter(t => t.dueDate < today) : [];
-    items = items.concat([]);  // copie
-    items.sort((x, y) => (x.dueTime || "99:99").localeCompare(y.dueTime || "99:99") || x.title.localeCompare(y.title, "fr"));
-    late.sort((x, y) => (x.dueTime || "99:99").localeCompare(y.dueTime || "99:99"));
+    if (isToday) items = items.concat(dated.filter(t => t.dueDate < today));
+    items = agendaSort(items);   // heure croissante -> priorité -> ordre manuel
 
     const bdays = birthdaysOnDay(dayTs);
-    const count = items.length + late.length + bdays.length;
+    const count = items.length + bdays.length;
 
     const d = new Date(dayTs);
     const wd = isToday ? "Aujourd'hui" : WEEKDAY_LABELS[d.getDay()].replace(/^./, c => c.toUpperCase());
     const dateLabel = d.getDate() + " " + MONTH_LABELS[d.getMonth()].replace(/^./, c => c.toUpperCase());
 
     let body = "";
-    late.forEach(t => { body += `<div class="week-task">${weekTaskTree(t, 0, [], true, true)}</div>`; });
-    items.forEach(t => { body += `<div class="week-task">${weekTaskTree(t, 0, [], true, false)}</div>`; });
+    items.forEach(t => {
+      const late = t.dueDate < today;   // badge "en retard" si échéance passée
+      body += `<div class="week-task">${weekTaskTree(t, 0, [], true, late)}</div>`;
+    });
     bdays.forEach(b => {
       const note = b.shifted ? `<div class="week-bday-note">Anniversaire le 29/02 — fêté le 28 février cette année</div>` : "";
       body += `<div class="week-bday"><div class="week-bday-main">🎂 ${esc(b.contact.name)}</div>${note}</div>`;
@@ -2209,10 +2219,7 @@ function submitWeekAdd() {
   const raw = $("weekAddInput").value.trim();
   if (!raw || weekAddDay == null) return;
   addTaskOnDay(weekAddDay, raw, readFlags($("weekAddModal")));
-  // pop-up gardé ouvert pour enchaîner plusieurs tâches sur le même jour
-  $("weekAddInput").value = "";
-  $("weekAddModal").querySelectorAll(".flag.on").forEach(f => f.classList.remove("on"));
-  $("weekAddInput").focus();
+  closeWeekAdd();   // la fenêtre disparaît une fois la tâche créée
 }
 
 function renderContacts() {
