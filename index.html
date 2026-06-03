@@ -738,6 +738,7 @@
     display: flex; align-items: flex-start; justify-content: center;
     padding: 14vh 16px 16px;
   }
+  .week-modal-scrim[hidden] { display: none; }   /* l'attribut hidden doit l'emporter sur display:flex */
   .week-modal {
     width: 100%; max-width: 440px;
     background: var(--card); border: 1px solid var(--border);
