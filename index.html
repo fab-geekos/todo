@@ -722,6 +722,21 @@
   .week-col .task-row { padding-top: 10px; padding-bottom: 10px; }
   .week-col .task-row:hover { background: var(--hover); }
   .week-empty { font-size: 13px; color: var(--muted); font-style: italic; padding: 4px 2px; }
+  .week-add { margin-top: 2px; }
+  .week-add-btn {
+    font-family: inherit; font-size: 13px; color: var(--muted);
+    background: none; border: none; cursor: pointer; padding: 6px 4px;
+    display: inline-flex; align-items: center; gap: 6px; border-radius: 8px;
+  }
+  .week-add-btn:hover { color: var(--accent); }
+  .week-add-form { display: flex; flex-direction: column; gap: 8px; padding: 2px 0; }
+  .week-add-input {
+    font-family: inherit; font-size: 14px; color: var(--text);
+    border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px;
+    background: var(--card); outline: none;
+  }
+  .week-add-input:focus { border-color: var(--accent); }
+  .week-add-form .flags { display: flex; gap: 6px; flex-wrap: wrap; }
   .week-bday {
     display: flex; flex-direction: column; gap: 3px; padding: 10px;
     background: var(--card); border: 1px solid var(--border); border-radius: 12px;
@@ -1361,9 +1376,18 @@ function esc(s) {
 function visibleTasks() {
   let list = state.tasks.filter(t => !t.completed);
   if (state.view === "today") {
-    // Vue échéance : toute tâche due aujourd'hui, racine ou sous-tâche, dépliable en arbre
+    // Vue échéance : toute tâche due aujourd'hui, racine ou sous-tâche, dépliable en arbre.
+    // Tri par PRIORITÉ (quadrant Eisenhower), la date ne servant qu'à départager.
     list = list.filter(isDueToday);
     state.flatList = false;
+    return list.sort((a, b) => {
+      const d = QUADRANT_ORDER.indexOf(quadrantOf(a)) - QUADRANT_ORDER.indexOf(quadrantOf(b));
+      if (d !== 0) return d;
+      if (a.dueDate == null && b.dueDate == null) return 0;
+      if (a.dueDate == null) return 1;
+      if (b.dueDate == null) return -1;
+      return a.dueDate - b.dueDate;
+    });
   } else {
     // Todo : seulement les racines ; les sous-tâches s'affichent en dépliant
     list = list.filter(isRoot);
@@ -2093,9 +2117,42 @@ function renderWeek() {
         <span class="week-col-wd">${wd}</span>
         <span class="week-col-count">${count || ""}</span>
       </div>
-      ${body}`;
+      ${body}
+      <div class="week-add" data-day="${dayTs}">
+        <button class="week-add-btn" type="button"><span class="plus-sm">+</span> Ajouter une tâche</button>
+        <div class="week-add-form" hidden>
+          <input class="week-add-input" type="text" placeholder="Nouvelle tâche…" autocomplete="off">
+          ${flagsHtml()}
+        </div>
+      </div>`;
     grid.appendChild(col);
   });
+
+  // Après un ajout : rouvrir et refocaliser le formulaire de la colonne concernée (saisie en rafale).
+  if (weekFocusDay != null) {
+    const zone = grid.querySelector(`.week-add[data-day="${weekFocusDay}"]`);
+    if (zone) {
+      zone.querySelector(".week-add-btn").hidden = true;
+      const form = zone.querySelector(".week-add-form");
+      form.hidden = false;
+      form.querySelector(".week-add-input").focus();
+    }
+    weekFocusDay = null;
+  }
+}
+
+// Mémorise la colonne où rouvrir le formulaire d'ajout après un render (consommé une fois).
+let weekFocusDay = null;
+
+// Ajout d'une tâche depuis une colonne de Prochainement : date de la colonne imposée, pas de projet (boîte de réception).
+function addTaskOnDay(dayTs, raw, flags) {
+  const task = makeTask(raw);                          // titre + priorité éventuelle du texte
+  task.urgent = task.urgent || flags.urgent;           // + boutons cliqués
+  task.important = task.important || flags.important;
+  task.dueDate = startOfDay(dayTs).getTime();          // la date de la colonne prime
+  db.add(task);
+  weekFocusDay = dayTs;                                 // garder le formulaire ouvert pour enchaîner
+  render();
 }
 
 function renderContacts() {
@@ -2776,6 +2833,35 @@ function bindEvents() {
   $("weekPrev").addEventListener("click", () => shiftWeek(-7));
   $("weekNext").addEventListener("click", () => shiftWeek(7));
   $("weekToday").addEventListener("click", () => { state.weekAnchor = null; render(); });
+
+  // Ajout de tâche par colonne (révéler le formulaire, toggle priorité)
+  $("weekGrid").addEventListener("click", e => {
+    const addBtn = e.target.closest(".week-add-btn");
+    if (addBtn) {
+      const zone = addBtn.closest(".week-add");
+      addBtn.hidden = true;
+      const form = zone.querySelector(".week-add-form");
+      form.hidden = false;
+      form.querySelector(".week-add-input").focus();
+      return;
+    }
+    const flag = e.target.closest(".week-add .flag");
+    if (flag) flag.classList.toggle("on");
+  });
+  // Valider (Entrée) ou annuler (Échap) la saisie d'une colonne
+  $("weekGrid").addEventListener("keydown", e => {
+    const input = e.target.closest(".week-add-input");
+    if (!input) return;
+    const zone = input.closest(".week-add");
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const raw = input.value.trim();
+      if (raw) addTaskOnDay(Number(zone.dataset.day), raw, readFlags(zone));
+    } else if (e.key === "Escape") {
+      zone.querySelector(".week-add-form").hidden = true;
+      zone.querySelector(".week-add-btn").hidden = false;
+    }
+  });
   document.getElementById("focusAdd").addEventListener("click", () => {
     closeSidebar();
     document.getElementById("quickInput").focus();
