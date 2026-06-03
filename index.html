@@ -262,6 +262,7 @@
   }
   .due.today { color: var(--success); font-weight: 500; }
   .due.overdue { color: var(--alert); font-weight: 500; }
+  .due.inherited { color: var(--muted); font-style: italic; opacity: .8; }
 
   .task-addsub {
     opacity: 0; background: none; border: none; cursor: pointer;
@@ -1317,9 +1318,9 @@ function parseInput(raw) {
 const DAY_NAMES = ["Dim","Lun","Mar","Mer","Jeu","Ven","Sam"];
 const MONTH_NAMES = ["jan","fév","mars","avr","mai","juin","juil","août","sept","oct","nov","déc"];
 
-function formatDue(task) {
-  if (!task.dueDate) return null;
-  const d = startOfDay(task.dueDate);
+function formatDueTs(ts, dueTime) {
+  if (ts == null) return null;
+  const d = startOfDay(ts);
   const today = startOfDay(new Date());
   const diff = Math.round((d - today) / DAY_MS);
 
@@ -1330,8 +1331,19 @@ function formatDue(task) {
   else if (diff < 7) label = DAY_NAMES[d.getDay()];
   else label = d.getDate() + " " + MONTH_NAMES[d.getMonth()];
 
-  if (task.dueTime) label += " " + task.dueTime;
+  if (dueTime) label += " " + dueTime;
   return { label, cls };
+}
+function formatDue(task) { return formatDueTs(task.dueDate, task.dueTime); }
+
+// Date héritée : remonte la chaîne des parents et renvoie la 1re date d'ancêtre trouvée (sinon null).
+function nearestAncestorDue(task) {
+  let cur = task.parentTaskId ? getTask(task.parentTaskId) : null;
+  while (cur) {
+    if (cur.dueDate != null) return cur.dueDate;
+    cur = cur.parentTaskId ? getTask(cur.parentTaskId) : null;
+  }
+  return null;
 }
 
 /* =========================================================
@@ -1394,12 +1406,17 @@ function treeGuideStyle(depth, ancestorContinues) {
 }
 
 function taskRowHtml(task, depth, ancestorContinues = [], isLast = false) {
-  const due = formatDue(task);
+  // Date effective : la sienne si elle en a une, sinon héritée de l'ancêtre daté le plus proche
+  // (calculée à l'affichage, jamais stockée). L'héritée s'affiche en style atténué/italique.
+  const ownDue = task.dueDate != null;
+  const effTs = ownDue ? task.dueDate : nearestAncestorDue(task);
+  const inherited = !ownDue && effTs != null;
+  const due = effTs != null ? formatDueTs(effTs, ownDue ? task.dueTime : null) : null;
 
-  // Nom du projet, affiché seulement dans les vues globales (pas dans la vue projet)
+  // Nom du projet, affiché seulement sur la racine (pas les sous-tâches), hors vue projet
   const project = (task.projectId && state.view !== "project" && depth === 0) ? getProject(task.projectId) : null;
   const metaParts = [];
-  if (due) metaParts.push(`<span class="due ${due.cls}">📅 ${esc(due.label)}</span>`);
+  if (due) metaParts.push(`<span class="due ${inherited ? "inherited" : due.cls}">📅 ${esc(due.label)}</span>`);
   if (task.recurrence) metaParts.push(`<span class="task-recur">🔁 ${esc(recurrenceLabel(task.recurrence))}</span>`);
   if (project) {
     metaParts.push(`<span class="task-project">${esc(project.icon || DEFAULT_PROJECT_ICON)} ${esc(project.name)}</span>`);
