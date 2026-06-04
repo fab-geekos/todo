@@ -693,7 +693,14 @@
     display: flex; align-items: center; justify-content: space-between;
     gap: 12px; margin-bottom: 16px; flex-wrap: wrap;
   }
-  .week-month { font-size: 18px; font-weight: 600; color: var(--text); }
+  .week-month {
+    font-size: 18px; font-weight: 600; color: var(--text);
+    font-family: inherit; background: none; border: none; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 8px; border-radius: 8px; transition: background .15s;
+  }
+  .week-month:hover { background: var(--hover); }
+  .week-month::after { content: "▾"; font-size: 12px; color: var(--muted); }
   .week-nav { display: flex; align-items: center; gap: 6px; }
   .week-nav-btn, .week-today-btn {
     font-family: inherit; font-size: 14px; color: var(--text);
@@ -1030,7 +1037,7 @@
 
     <div class="week-view" id="weekView">
       <div class="week-bar">
-        <div class="week-month" id="weekMonth"></div>
+        <button class="week-month" id="weekMonth" type="button" aria-label="Choisir une semaine"></button>
         <div class="week-nav">
           <button class="week-nav-btn" id="weekPrev" aria-label="Semaine précédente">‹</button>
           <button class="week-today-btn" id="weekToday">Aujourd'hui</button>
@@ -3165,6 +3172,17 @@ function bindEvents() {
   $("weekPrev").addEventListener("click", () => shiftWeek(-7));
   $("weekNext").addEventListener("click", () => shiftWeek(7));
   $("weekToday").addEventListener("click", () => { state.weekAnchor = null; render(); });
+  // 2c — Cliquer le mois ouvre un calendrier de navigation : la date choisie devient le début de la semaine.
+  $("weekMonth").addEventListener("click", () => {
+    const base = state.weekAnchor != null ? state.weekAnchor : startOfDay(new Date()).getTime();
+    openCalendar({
+      dueDate: base, showTime: false,        // navigation : on choisit un jour, pas d'heure
+      onPick(date) {
+        state.weekAnchor = date != null ? startOfDay(date).getTime() : null;  // "Aucune date" -> retour à aujourd'hui
+        render();
+      }
+    });
+  });
 
   // Le "+" d'une colonne ouvre le pop-up d'ajout
   $("weekGrid").addEventListener("click", e => {
