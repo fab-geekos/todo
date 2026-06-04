@@ -787,6 +787,67 @@
   .week-modal-cancel:hover { background: var(--hover); }
   .week-modal-add { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
   .week-modal-add:hover { opacity: .9; }
+
+  /* Pastille de date (éditeur) */
+  .side-date-btn {
+    font-family: inherit; font-size: 14px; text-align: left; width: 100%;
+    padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px;
+    background: var(--card); color: var(--text); cursor: pointer; transition: border-color .15s;
+  }
+  .side-date-btn:hover { border-color: var(--accent); }
+  .side-date-btn.empty { color: var(--muted); }
+
+  /* Calendrier réutilisable (sélecteur de date + heure) */
+  .cal-scrim {
+    position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,.32);
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+  }
+  .cal-scrim[hidden] { display: none; }
+  .cal {
+    width: 100%; max-width: 320px; background: var(--card); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: 0 12px 40px rgba(0,0,0,.18);
+    padding: 14px; display: flex; flex-direction: column; gap: 10px; animation: fadeUp .18s ease;
+  }
+  .cal-shortcuts { display: flex; flex-wrap: wrap; gap: 6px; }
+  .cal-shortcuts button {
+    font-family: inherit; font-size: 12px; cursor: pointer; background: var(--card);
+    color: var(--text); border: 1px solid var(--border); border-radius: 20px; padding: 5px 10px; transition: all .15s;
+  }
+  .cal-shortcuts button:hover { border-color: var(--accent); color: var(--accent); }
+  .cal-shortcuts .cal-sc-none { color: var(--muted); margin-left: auto; }
+  .cal-head { display: flex; align-items: center; justify-content: space-between; }
+  .cal-title { font-size: 14px; font-weight: 600; }
+  .cal-nav {
+    font-family: inherit; font-size: 13px; cursor: pointer; color: var(--muted);
+    background: none; border: none; padding: 4px 8px; border-radius: 8px;
+  }
+  .cal-nav:hover { color: var(--accent); background: var(--hover); }
+  .cal-weekdays, .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+  .cal-weekdays span { text-align: center; font-size: 11px; color: var(--muted); padding: 4px 0; }
+  .cal-day {
+    font-family: inherit; font-size: 13px; cursor: pointer; aspect-ratio: 1;
+    border: none; background: none; color: var(--text); border-radius: 8px; transition: background .12s;
+  }
+  .cal-day:hover { background: var(--hover); }
+  .cal-day.today { color: var(--accent); font-weight: 700; }
+  .cal-day.selected { background: var(--accent); color: #fff; }
+  .cal-empty { aspect-ratio: 1; }
+  .cal-time-row { display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--border); padding-top: 10px; }
+  .cal-time-row[hidden] { display: none; }
+  .cal-time-label { font-size: 13px; color: var(--muted); }
+  .cal-time {
+    font-family: inherit; font-size: 14px; margin-left: auto; padding: 6px 8px;
+    border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text);
+  }
+  .cal-foot { display: flex; justify-content: space-between; gap: 8px; }
+  .cal-clear, .cal-ok {
+    font-family: inherit; font-size: 14px; cursor: pointer; border-radius: 10px;
+    padding: 8px 16px; border: 1px solid var(--border); transition: all .15s;
+  }
+  .cal-clear { background: var(--card); color: var(--muted); }
+  .cal-clear:hover { background: var(--hover); }
+  .cal-ok { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 600; }
+  .cal-ok:hover { opacity: .9; }
   .week-bday {
     display: flex; flex-direction: column; gap: 3px; padding: 10px;
     background: var(--card); border: 1px solid var(--border); border-radius: 12px;
@@ -989,6 +1050,33 @@
         </div>
       </div>
     </div>
+
+    <div class="cal-scrim" id="calPopover" hidden>
+      <div class="cal" role="dialog" aria-label="Choisir une date">
+        <div class="cal-shortcuts" id="calShortcuts">
+          <button type="button" data-sc="today">Aujourd'hui</button>
+          <button type="button" data-sc="tomorrow">Demain</button>
+          <button type="button" data-sc="weekend">Ce week-end</button>
+          <button type="button" data-sc="nextweek">Semaine prochaine</button>
+          <button type="button" data-sc="none" class="cal-sc-none">Aucune date</button>
+        </div>
+        <div class="cal-head">
+          <button class="cal-nav" id="calPrev" type="button" aria-label="Mois précédent">◀</button>
+          <span class="cal-title" id="calTitle"></span>
+          <button class="cal-nav" id="calNext" type="button" aria-label="Mois suivant">▶</button>
+        </div>
+        <div class="cal-weekdays" id="calWeekdays"></div>
+        <div class="cal-grid" id="calGrid"></div>
+        <div class="cal-time-row" id="calTimeRow">
+          <span class="cal-time-label">Heure</span>
+          <select class="cal-time" id="calTime"></select>
+        </div>
+        <div class="cal-foot">
+          <button class="cal-clear" id="calClear" type="button">Effacer</button>
+          <button class="cal-ok" id="calOk" type="button">OK</button>
+        </div>
+      </div>
+    </div>
   </main>
 </div>
 
@@ -1022,7 +1110,7 @@
         </div>
         <div class="side-section">
           <div class="side-label">Date</div>
-          <input class="side-date-input" id="editDate" type="text" placeholder="Aucune date">
+          <button class="side-date-btn" id="editDateBtn" type="button">Aucune date</button>
         </div>
         <div class="side-section">
           <div class="side-label">Récurrence</div>
@@ -2426,6 +2514,95 @@ function createPicker(container, options) {
   });
 }
 
+/* =========================================================
+   CALENDRIER RÉUTILISABLE (sélecteur de date + heure)
+   openCalendar({dueDate, dueTime, showTime, onPick}) ; onPick(date|null, time|null)
+   ========================================================= */
+let cal = null;   // { date, time, month(Date), showTime, onPick } ; null = fermé
+
+function startOfMonth(ts) { const d = new Date(ts); d.setDate(1); d.setHours(0,0,0,0); return d; }
+
+function openCalendar(opts) {
+  cal = {
+    date: opts.dueDate ?? null,
+    time: opts.dueTime ?? null,
+    month: startOfMonth(opts.dueDate || Date.now()),
+    showTime: opts.showTime !== false,
+    onPick: opts.onPick
+  };
+  $("calTimeRow").hidden = !cal.showTime;
+  renderCal();
+  $("calPopover").hidden = false;
+}
+function closeCalendar() { $("calPopover").hidden = true; cal = null; }
+function applyCalendar() {
+  if (!cal) return;
+  const onPick = cal.onPick, date = cal.date, time = cal.date ? cal.time : null;
+  closeCalendar();
+  onPick(date, time);
+}
+
+function renderCal() {
+  if (!cal) return;
+  $("calTitle").textContent =
+    MONTH_LABELS[cal.month.getMonth()].replace(/^./, c => c.toUpperCase()) + " " + cal.month.getFullYear();
+  $("calWeekdays").innerHTML = WEEKDAY_ORDER.map(wd => `<span>${WEEKDAY_SHORT[wd]}</span>`).join("");
+
+  const first = cal.month;
+  const lead = (first.getDay() + 6) % 7;   // décalage avant le 1er (lundi = 0)
+  const daysInMonth = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+  const todayTs = startOfDay(new Date()).getTime();
+  const selTs = cal.date != null ? startOfDay(cal.date).getTime() : null;
+
+  let cells = "";
+  for (let i = 0; i < lead; i++) cells += `<span class="cal-empty"></span>`;
+  for (let day = 1; day <= daysInMonth; day++) {
+    const ts = new Date(first.getFullYear(), first.getMonth(), day).getTime();
+    const cls = ["cal-day"];
+    if (ts === todayTs) cls.push("today");
+    if (ts === selTs) cls.push("selected");
+    cells += `<button type="button" class="${cls.join(" ")}" data-ts="${ts}">${day}</button>`;
+  }
+  $("calGrid").innerHTML = cells;
+
+  // Heure : créneaux de 30 min + "Aucune heure" (+ l'heure actuelle si hors créneaux)
+  const cur = cal.time;
+  const times = [];
+  for (let h = 0; h < 24; h++) for (const m of [0, 30]) times.push(String(h).padStart(2,"0") + ":" + String(m).padStart(2,"0"));
+  if (cur && !times.includes(cur)) { times.push(cur); times.sort(); }
+  let opts = `<option value="">Aucune heure</option>`;
+  times.forEach(tm => { opts += `<option value="${tm}">${tm}</option>`; });
+  $("calTime").innerHTML = opts;
+  $("calTime").value = cur || "";
+}
+
+function calShortcut(sc) {
+  if (sc === "none") { cal.date = null; cal.time = null; applyCalendar(); return; }
+  const t0 = startOfDay(new Date()).getTime();
+  let ts = t0;
+  if (sc === "tomorrow") ts = t0 + DAY_MS;
+  else if (sc === "weekend") { const wd = new Date(t0).getDay(); ts = t0 + ((6 - wd + 7) % 7) * DAY_MS; }     // prochain samedi
+  else if (sc === "nextweek") { const wd = new Date(t0).getDay(); ts = t0 + (((1 - wd + 7) % 7) || 7) * DAY_MS; } // lundi prochain
+  cal.date = ts;
+  cal.month = startOfMonth(ts);
+  renderCal();
+}
+
+// Applique une date à une tâche en respectant les invariants (pas d'heure sans date ; récurrence effacée si plus de date)
+function setTaskDate(t, date, time) {
+  t.dueDate = date;
+  t.dueTime = date ? time : null;
+  if (date == null) t.recurrence = null;
+  db.save();
+}
+
+// Pastille de date de l'éditeur
+function renderEditorDate(t) {
+  const btn = $("editDateBtn");
+  if (t.dueDate == null) { btn.textContent = "Aucune date"; btn.classList.add("empty"); }
+  else { btn.textContent = "📅 " + formatDueTs(t.dueDate, t.dueTime).label; btn.classList.remove("empty"); }
+}
+
 function openEditor(id) {
   const t = getTask(id);
   if (!t) return;
@@ -2433,7 +2610,7 @@ function openEditor(id) {
 
   $("editTitle").value = t.title;
   $("editNote").value = t.note || "";
-  $("editDate").value = dateToInput(t);
+  renderEditorDate(t);
   $("editCheckbox").classList.toggle("checked-preview", !!t.completed);
   $("editUrgent").classList.toggle("on", !!t.urgent);
   $("editImportant").classList.toggle("on", !!t.important);
@@ -2688,14 +2865,6 @@ function renderEditorBreadcrumb(task) {
   ).join('<span class="editor-crumb-sep">›</span>') + '<span class="editor-crumb-sep">›</span>';
 }
 
-function dateToInput(t) {
-  if (!t.dueDate) return "";
-  const d = new Date(t.dueDate);
-  let s = d.getDate() + "/" + (d.getMonth()+1) + "/" + d.getFullYear();
-  if (t.dueTime) s += " " + t.dueTime;
-  return s;
-}
-
 // Ajuste la hauteur du champ description à son contenu
 function autoGrowDesc() {
   const el = $("editNote");
@@ -2720,13 +2889,7 @@ function saveEditorFields() {
   const title = $("editTitle").value.trim();
   if (title) t.title = title;     // on n'efface pas un titre par mégarde
   t.note = $("editNote").value.trim();
-  const dateRaw = $("editDate").value.trim();
-  const parsed = dateRaw ? parseInput(dateRaw) : { dueDate: null, dueTime: null };
-  t.dueDate = parsed.dueDate;
-  t.dueTime = parsed.dueTime;
-  if (t.dueDate == null) t.recurrence = null;   // une récurrence sans date n'a pas de sens
   db.save();
-  renderEditorRecurrence(t);                      // la date conditionne la récurrence
 }
 
 /* =========================================================
@@ -3032,19 +3195,44 @@ function bindEvents() {
       const t = getTask(state.editingId);
       if (t) {
         renderEditorSubtasks(t);
-        $("editDate").value = dateToInput(t);          // la date a pu avancer (récurrence)
+        renderEditorDate(t);                           // la date a pu avancer (récurrence)
         $("editCheckbox").classList.toggle("checked-preview", !!t.completed);
         renderEditorRecurrence(t);
       }
     }
   });
 
-  // Titre / description / date : sauvegardés quand on quitte le champ
+  // Titre / description : sauvegardés quand on quitte le champ
   $("editTitle").addEventListener("blur", saveEditorFields);
   $("editNote").addEventListener("blur", saveEditorFields);
   $("editNote").addEventListener("input", autoGrowDesc);
-  $("editDate").addEventListener("blur", saveEditorFields);
-  $("editDate").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); saveEditorFields(); const t = getTask(state.editingId); if (t) $("editDate").value = dateToInput(t); } });
+
+  // Date de l'éditeur : la pastille ouvre le calendrier
+  $("editDateBtn").addEventListener("click", () => {
+    const t = getTask(state.editingId);
+    if (!t) return;
+    openCalendar({
+      dueDate: t.dueDate, dueTime: t.dueTime, showTime: true,
+      onPick(date, time) {
+        const tt = getTask(state.editingId);
+        if (!tt) return;
+        setTaskDate(tt, date, time);
+        renderEditorDate(tt);
+        renderEditorRecurrence(tt);   // la date conditionne la récurrence
+        render();
+      }
+    });
+  });
+
+  // Contrôles du calendrier réutilisable
+  $("calPrev").addEventListener("click", () => { cal.month.setMonth(cal.month.getMonth() - 1); renderCal(); });
+  $("calNext").addEventListener("click", () => { cal.month.setMonth(cal.month.getMonth() + 1); renderCal(); });
+  $("calGrid").addEventListener("click", e => { const b = e.target.closest(".cal-day"); if (b) { cal.date = Number(b.dataset.ts); renderCal(); } });
+  $("calShortcuts").addEventListener("click", e => { const b = e.target.closest("button[data-sc]"); if (b) calShortcut(b.dataset.sc); });
+  $("calTime").addEventListener("change", e => { cal.time = e.target.value || null; });
+  $("calClear").addEventListener("click", () => { cal.date = null; cal.time = null; applyCalendar(); });
+  $("calOk").addEventListener("click", applyCalendar);
+  $("calPopover").addEventListener("click", e => { if (e.target === $("calPopover")) applyCalendar(); }); // clic en dehors = appliquer
 
   // Sous-tâches dans la fenêtre : ouvrir le champ, cocher, supprimer, ouvrir une sous-tâche
   $("editAddSubBtn").addEventListener("click", () => {
