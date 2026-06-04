@@ -3243,7 +3243,14 @@ function bindEvents() {
   $("calNext").addEventListener("click", () => { cal.month.setMonth(cal.month.getMonth() + 1); renderCal(); });
   $("calGrid").addEventListener("click", e => { const b = e.target.closest(".cal-day"); if (b) { cal.date = Number(b.dataset.ts); renderCal(); } });
   $("calShortcuts").addEventListener("click", e => { const b = e.target.closest("button[data-sc]"); if (b) calShortcut(b.dataset.sc); });
-  $("calTime").addEventListener("change", e => { cal.time = e.target.value || null; renderCalTimeField(); });
+  $("calTime").addEventListener("change", e => {
+    cal.time = e.target.value || null;
+    // On synchronise le champ texte SANS reconstruire le menu : reconstruire les <option>
+    // pendant l'événement "change" du menu peut annuler la sélection sur certains navigateurs.
+    const txt = $("calTimeText");
+    txt.value = cal.time || "";
+    txt.dataset.len = (cal.time || "").replace(/\D/g, "").length;
+  });
   // Saisie manuelle de l'heure : auto-insertion du ":" après HH, validation HH:MM
   $("calTimeText").addEventListener("input", e => {
     const el = e.target;
