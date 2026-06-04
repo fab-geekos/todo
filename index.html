@@ -716,9 +716,17 @@
   .week-col-wd { font-size: 13px; color: var(--muted); }
   .week-col-count { margin-left: auto; font-size: 12px; color: var(--muted); }
   .week-task {
-    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
-    margin-bottom: 8px; overflow: hidden;
+    background: var(--card); border: 1px solid var(--border); border-left-width: 3px;
+    border-radius: 12px; margin-bottom: 8px; overflow: hidden;
   }
+  .week-task.q-faire { border-left-color: var(--q-faire); }
+  .week-task.q-planifier { border-left-color: var(--q-planifier); }
+  .week-task.q-deleguer { border-left-color: var(--q-deleguer); }
+  .week-task.q-eliminer { border-left-color: var(--q-eliminer); }
+  /* Pastilles de priorité sur la carte */
+  .task-flag { font-size: 13px; line-height: 1; }
+  .task-flag.important { color: var(--star); }
+  .task-flag.urgent { color: var(--alert); }
   /* Glisser-déposer dans les vues agenda (Aujourd'hui & Prochainement) */
   .agenda-drag { cursor: grab; }
   body.is-dragging .agenda-drag { cursor: grabbing; }
@@ -1544,7 +1552,7 @@ function taskRowHtml(task, depth, ancestorContinues = [], isLast = false) {
       ${chevronHtml}
       <button class="checkbox" data-action="toggle" aria-label="Terminer"></button>
       <div class="task-body" data-action="edit">
-        <div class="task-titleline"><span class="task-title">${esc(task.title)}</span>${subCountBadge}</div>
+        <div class="task-titleline"><span class="task-title">${esc(task.title)}</span>${flagBadges(task)}${subCountBadge}</div>
         ${task.note ? `<div class="task-note">${esc(task.note)}</div>` : ""}
         ${metaHtml}
         ${progressHtml}
@@ -1899,6 +1907,14 @@ function flagsHtml(flags) {
   </div>`;
 }
 
+// Pastilles de priorité affichées sur la carte (★ Important, ⚡ Urgent)
+function flagBadges(task) {
+  let h = "";
+  if (task.important) h += `<span class="task-flag important" title="Important">★</span>`;
+  if (task.urgent) h += `<span class="task-flag urgent" title="Urgent">⚡</span>`;
+  return h;
+}
+
 // Lit l'état des boutons de priorité dans un conteneur -> { urgent, important }
 function readFlags(container) {
   const on = sel => !!(container && container.querySelector(`.flag.on[data-flag="${sel}"]`));
@@ -2132,7 +2148,7 @@ function weekTaskTree(task, depth, ancestorContinues = [], isLast = false, late 
       ${chevron}
       <button class="checkbox" data-action="toggle" aria-label="Terminer"></button>
       <div class="task-body" data-action="edit">
-        <div class="task-titleline"><span class="task-title">${esc(task.title)}</span>${lateHtml}${subCount}</div>
+        <div class="task-titleline"><span class="task-title">${esc(task.title)}</span>${flagBadges(task)}${lateHtml}${subCount}</div>
         ${meta}
         ${progressHtml}
       </div>
@@ -2179,9 +2195,10 @@ function renderWeek() {
 
     let listBody = "";
     items.forEach(t => {
-      const late = t.dueDate < today;             // badge "en retard" si échéance passée
-      const drag = t.dueTime ? "" : " agenda-drag"; // sans heure = réordonnable
-      listBody += `<div class="week-task${drag}" data-id="${t.id}">${weekTaskTree(t, 0, [], true, late)}</div>`;
+      const late = t.dueDate < today;   // badge "en retard" si échéance passée
+      // Toutes les tâches sont saisissables pour pouvoir les replanifier d'un jour à l'autre.
+      // (Le tri agendaSort empêche de réordonner les tâches AVEC heure à l'intérieur d'un jour.)
+      listBody += `<div class="week-task agenda-drag q-${quadrantOf(t)}" data-id="${t.id}">${weekTaskTree(t, 0, [], true, late)}</div>`;
     });
     let bdayBody = "";
     bdays.forEach(b => {
@@ -2193,6 +2210,7 @@ function renderWeek() {
 
     const col = document.createElement("div");
     col.className = "week-col" + (isToday ? " today" : "");
+    col.dataset.day = dayTs;
     col.innerHTML = `
       <div class="week-col-head">
         <span class="week-col-date">${dateLabel}</span>
@@ -2217,6 +2235,17 @@ function addTaskOnDay(dayTs, raw, flags) {
   task.dueDate = startOfDay(dayTs).getTime();          // la date de la colonne prime
   db.add(task);
   render();
+}
+
+// Glisser-déposer en vue Prochainement : déposer une tâche dans un AUTRE jour change sa date
+// (l'heure éventuelle est conservée). Déposer dans son jour actuel ne fait que la réordonner.
+function rescheduleByDrop(itemEl, colEl) {
+  const t = getTask(itemEl.dataset.id);
+  if (!t || colEl.dataset.day == null) return;
+  const targetDay = Number(colEl.dataset.day);
+  const todayTs = startOfDay(new Date()).getTime();
+  const homeDay = (t.dueDate < todayTs) ? todayTs : startOfDay(t.dueDate).getTime(); // retards = colonne d'aujourd'hui
+  if (targetDay !== homeDay) t.dueDate = targetDay;
 }
 
 function openWeekAdd(dayTs) {
@@ -3094,7 +3123,7 @@ function bindEvents() {
   });
   makeDraggable($("weekGrid"), {
     item: ".agenda-drag", column: ".week-col", list: ".week-list",
-    onDrop() {},
+    onDrop: rescheduleByDrop,
     persist() { state.tasks = reorderFromDOM(state.tasks, "#weekGrid .agenda-drag"); db.save(); }
   });
 
