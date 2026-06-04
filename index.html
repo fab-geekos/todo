@@ -995,8 +995,8 @@
         <select class="proj-status-select" id="projStatus" aria-label="Statut du projet"></select>
       </div>
       <div class="proj-subviews">
-        <button class="subview-btn" data-sub="list">Liste</button>
         <button class="subview-btn" data-sub="eisen">Eisenhower</button>
+        <button class="subview-btn" data-sub="list">Liste</button>
       </div>
       <div id="projListWrap">
         <div class="quick-add">
@@ -1416,18 +1416,41 @@ function parseInput(raw) {
   };
 
   // --- Heure : "18h", "18h30", "à 9h", "9:30" ---
-  consume(/\b(?:à\s*)?(\d{1,2})\s*h\s*(\d{2})?\b/i, m => {
+  consume(/(?:à\s*)?\b(\d{1,2})\s*h\s*(\d{2})?\b/i, m => {
     const h = m[1].padStart(2, "0");
     const min = (m[2] || "00").padStart(2, "0");
     time = h + ":" + min;
   });
   if (!time) {
-    consume(/\b(\d{1,2}):(\d{2})\b/, m => {
+    consume(/(?:à\s*)?\b(\d{1,2}):(\d{2})\b/, m => {
       time = m[1].padStart(2,"0") + ":" + m[2];
     });
   }
 
   const today = startOfDay(new Date());
+
+  // --- Récurrence : "tous les samedis", "chaque lundi", "toutes les semaines", "tous les 2 mois", "tous les jours"... ---
+  let recurrence = null;
+  // (a) jour de semaine répété -> hebdomadaire ce jour-là (+ date = prochaine occurrence)
+  consume(/\b(?:tous\s+les|chaque)\s+(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)s?\b/i, m => {
+    const wd = WEEKDAYS[m[1].toLowerCase()];
+    recurrence = { freq: "week", interval: 1, weekdays: [wd] };
+    if (!date) {
+      date = new Date(today);
+      date.setDate(date.getDate() + ((wd - today.getDay() + 7) % 7));   // aujourd'hui si ça tombe, sinon prochain
+    }
+  });
+  // (b) "tous les [N] jours/semaines/mois/ans", "toutes les semaines", "chaque mois"...
+  if (!recurrence) consume(/\b(?:tous\s+les|toutes\s+les|chaque)\s+(\d{1,3})?\s*(jours?|journ[ée]es?|semaines?|mois|ans?|ann[ée]es?)\b/i, m => {
+    const n = m[1] ? parseInt(m[1], 10) : 1;
+    const unit = m[2].toLowerCase();
+    let freq = "day";
+    if (/semaine/.test(unit)) freq = "week";
+    else if (/mois/.test(unit)) freq = "month";
+    else if (/an/.test(unit)) freq = "year";
+    recurrence = { freq, interval: Math.max(1, n) };
+    if (!date) date = new Date(today);
+  });
 
   // --- Mots-clés relatifs ---
   if (!date && consume(/\baujourd'?hui\b/i, () => {})) date = new Date(today);
@@ -1487,7 +1510,8 @@ function parseInput(raw) {
     dueDate: date ? date.getTime() : null,
     dueTime: time,
     urgent,
-    important
+    important,
+    recurrence
   };
 }
 
@@ -1977,13 +2001,14 @@ function makeTask(raw, flags, projectId = null, parentTaskId = null) {
     note: "",
     dueDate: parsed.dueDate,
     dueTime: parsed.dueTime,
-    urgent: flags ? flags.urgent : parsed.urgent,
-    important: flags ? flags.important : parsed.important,
+    // les mots tapés ("urgent"/"important") se COMBINENT avec le contexte (cadran, boutons)
+    urgent: !!((flags && flags.urgent) || parsed.urgent),
+    important: !!((flags && flags.important) || parsed.important),
     completed: false,
     createdAt: Date.now(),
     projectId,
     parentTaskId,
-    recurrence: null
+    recurrence: parsed.dueDate ? (parsed.recurrence || null) : null   // pas de récurrence sans date
   };
 }
 
