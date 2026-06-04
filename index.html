@@ -719,6 +719,13 @@
     background: var(--card); border: 1px solid var(--border); border-radius: 12px;
     margin-bottom: 8px; overflow: hidden;
   }
+  /* Glisser-déposer dans les vues agenda (Aujourd'hui & Prochainement) */
+  .agenda-drag { cursor: grab; }
+  body.is-dragging .agenda-drag { cursor: grabbing; }
+  .week-task.dragging { opacity: .35; pointer-events: none; }
+  .week-task.drag-ghost { margin: 0; }
+  .week-col.drop-target { background: var(--hover); border-radius: 12px; }
+  .week-list { min-height: 8px; }
   .week-col .task-row { padding-top: 10px; padding-bottom: 10px; }
   .week-col .task-row:hover { background: var(--hover); }
   .week-empty { font-size: 13px; color: var(--muted); font-style: italic; padding: 4px 2px; }
@@ -888,7 +895,9 @@
       </select>
     </div>
 
-    <ul class="task-list" id="taskList"></ul>
+    <div class="agenda-col" id="todayBoard">
+      <ul class="task-list" id="taskList"></ul>
+    </div>
 
     <div class="eisen-grid" id="eisenGrid"></div>
 
@@ -1664,6 +1673,13 @@ function renderList() {
     ? `<div class="big">🎉</div>Rien de prévu aujourd'hui.`
     : `<div class="big">📭</div>Aucune tâche. Ajoute-en une ci-dessus.`;
   renderTasksInto($("taskList"), visibleTasks(), emptyHtml, state.flatList);
+  // Aujourd'hui : seules les tâches SANS heure sont réordonnables par glisser-déposer
+  if (state.view === "today") {
+    [...$("taskList").children].forEach(li => {
+      const t = li.dataset.id ? getTask(li.dataset.id) : null;
+      if (t && !t.dueTime) li.classList.add("agenda-drag");
+    });
+  }
 }
 
 // Remplit une <ul> avec des cartes, ou un message si la liste est vide.
@@ -2161,16 +2177,19 @@ function renderWeek() {
     const wd = isToday ? "Aujourd'hui" : WEEKDAY_LABELS[d.getDay()].replace(/^./, c => c.toUpperCase());
     const dateLabel = d.getDate() + " " + MONTH_LABELS[d.getMonth()].replace(/^./, c => c.toUpperCase());
 
-    let body = "";
+    let listBody = "";
     items.forEach(t => {
-      const late = t.dueDate < today;   // badge "en retard" si échéance passée
-      body += `<div class="week-task">${weekTaskTree(t, 0, [], true, late)}</div>`;
+      const late = t.dueDate < today;             // badge "en retard" si échéance passée
+      const drag = t.dueTime ? "" : " agenda-drag"; // sans heure = réordonnable
+      listBody += `<div class="week-task${drag}" data-id="${t.id}">${weekTaskTree(t, 0, [], true, late)}</div>`;
     });
+    let bdayBody = "";
     bdays.forEach(b => {
       const note = b.shifted ? `<div class="week-bday-note">Anniversaire le 29/02 — fêté le 28 février cette année</div>` : "";
-      body += `<div class="week-bday"><div class="week-bday-main">🎂 ${esc(b.contact.name)}</div>${note}</div>`;
+      bdayBody += `<div class="week-bday"><div class="week-bday-main">🎂 ${esc(b.contact.name)}</div>${note}</div>`;
     });
-    if (!body) body = `<div class="week-empty">Rien de prévu</div>`;
+    const emptyMark = (items.length === 0 && bdays.length === 0) ? `<div class="week-empty">Rien de prévu</div>` : "";
+    const body = `<div class="week-list">${listBody}</div>${bdayBody}${emptyMark}`;
 
     const col = document.createElement("div");
     col.className = "week-col" + (isToday ? " today" : "");
@@ -3062,6 +3081,21 @@ function bindEvents() {
       }
     },
     persist() { state.projects = reorderFromDOM(state.projects, "#kanbanBoard .proj-card"); db.save(); }
+  });
+
+  // Réordonner les tâches de MÊME priorité SANS heure (vues Aujourd'hui & Prochainement).
+  // Le tri (agendaSort) re-cale ensuite heure/priorité : un drag ne peut donc changer que
+  // l'ordre manuel à l'intérieur d'un groupe même-priorité-sans-heure. Persistance limitée
+  // au board actif (l'autre board garde des .agenda-drag obsolètes car simplement masqué).
+  makeDraggable($("todayBoard"), {
+    item: ".agenda-drag", column: ".agenda-col", list: ".task-list",
+    onDrop() {},
+    persist() { state.tasks = reorderFromDOM(state.tasks, "#todayBoard .agenda-drag"); db.save(); }
+  });
+  makeDraggable($("weekGrid"), {
+    item: ".agenda-drag", column: ".week-col", list: ".week-list",
+    onDrop() {},
+    persist() { state.tasks = reorderFromDOM(state.tasks, "#weekGrid .agenda-drag"); db.save(); }
   });
 
   // Clics et saisies sur les cartes projet : mêmes handlers pour le Kanban et la liste des terminés
