@@ -2353,10 +2353,11 @@ let weekAddDay = null;   // jour cible du pop-up d'ajout (null = fermé)
 
 // Ajout d'une tâche depuis le pop-up de Prochainement : date de la colonne imposée, pas de projet (boîte de réception).
 function addTaskOnDay(dayTs, raw, flags) {
-  const task = makeTask(raw);                          // titre + priorité éventuelle du texte
+  const task = makeTask(raw);                          // titre + date/heure/priorité éventuelles du texte
   task.urgent = task.urgent || flags.urgent;           // + boutons cliqués
   task.important = task.important || flags.important;
-  task.dueDate = startOfDay(dayTs).getTime();          // la date de la colonne prime
+  // Une date écrite dans le texte prime ; sinon, on retombe sur la colonne cliquée.
+  if (task.dueDate == null) task.dueDate = startOfDay(dayTs).getTime();
   db.add(task);
   render();
 }
@@ -3309,6 +3310,23 @@ function bindEvents() {
   $("calOk").addEventListener("click", applyCalendar);
   $("calPopover").addEventListener("click", e => { if (e.target === $("calPopover")) applyCalendar(); }); // clic en dehors = appliquer
 
+  // Touche Entrée : valide et ferme la "page" ouverte, niveau par niveau.
+  //  1) calendrier (date/heure) ouvert -> on applique et on revient à l'éditeur ;
+  //  2) sinon éditeur de tâche ouvert -> on enregistre (titre/description) et on ferme (retour à la vue).
+  document.addEventListener("keydown", e => {
+    if (e.key !== "Enter" || e.shiftKey) return;       // Maj+Entrée = retour à la ligne (description)
+    if (!$("calPopover").hidden) { e.preventDefault(); applyCalendar(); return; }
+    if (!$("weekAddModal").hidden) return;             // le pop-up "Prochainement" gère sa propre validation
+    if ($("overlay").classList.contains("open")) {
+      const ae = document.activeElement;
+      if (ae === $("editAddSubInput")) return;          // saisie d'une sous-tâche : Entrée = ajouter (reste ouvert)
+      if (ae && ae.closest && ae.closest(".picker-panel")) return;  // recherche dans un menu déroulant (projet)
+      if (ae && ae.tagName === "SELECT") return;        // listes déroulantes (récurrence…)
+      e.preventDefault();
+      closeEditor();
+    }
+  });
+
   // Sous-tâches dans la fenêtre : ouvrir le champ, cocher, supprimer, ouvrir une sous-tâche
   $("editAddSubBtn").addEventListener("click", () => {
     $("editAddSubBtn").style.display = "none";
@@ -3615,21 +3633,3 @@ function setTheme(dark) {
 function initTheme() {
   setTheme(localStorage.getItem(THEME_KEY) === "dark");
 }
-function toggleTheme() {
-  setTheme(!document.body.classList.contains("dark"));
-}
-
-/* =========================================================
-   INIT
-   ========================================================= */
-function init() {
-  db.load();
-  applyMode();
-  bindEvents();
-  initTheme();
-  render();
-}
-init();
-</script>
-</body>
-</html>
