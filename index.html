@@ -2577,9 +2577,12 @@ function openCalendar(opts) {
     time: opts.dueTime ?? null,
     month: startOfMonth(opts.dueDate || Date.now()),
     showTime: opts.showTime !== false,
+    showShortcuts: opts.showShortcuts !== false,   // raccourcis (Aujourd'hui, Demain…) visibles par défaut
+    applyOnPick: opts.applyOnPick === true,         // true = cliquer un jour valide directement (sans OK/Entrée)
     onPick: opts.onPick
   };
   $("calTimeRow").hidden = !cal.showTime;
+  $("calShortcuts").style.display = cal.showShortcuts ? "" : "none";
   renderCal();
   $("calPopover").hidden = false;
 }
@@ -3176,7 +3179,8 @@ function bindEvents() {
   $("weekMonth").addEventListener("click", () => {
     const base = state.weekAnchor != null ? state.weekAnchor : startOfDay(new Date()).getTime();
     openCalendar({
-      dueDate: base, showTime: false,        // navigation : on choisit un jour, pas d'heure
+      // navigation : pas d'heure, pas de raccourcis, et un clic sur un jour valide directement
+      dueDate: base, showTime: false, showShortcuts: false, applyOnPick: true,
       onPick(date) {
         state.weekAnchor = date != null ? startOfDay(date).getTime() : null;  // "Aucune date" -> retour à aujourd'hui
         render();
@@ -3307,7 +3311,13 @@ function bindEvents() {
   // Contrôles du calendrier réutilisable
   $("calPrev").addEventListener("click", () => { cal.month.setMonth(cal.month.getMonth() - 1); renderCal(); });
   $("calNext").addEventListener("click", () => { cal.month.setMonth(cal.month.getMonth() + 1); renderCal(); });
-  $("calGrid").addEventListener("click", e => { const b = e.target.closest(".cal-day"); if (b) { cal.date = Number(b.dataset.ts); renderCal(); } });
+  $("calGrid").addEventListener("click", e => {
+    const b = e.target.closest(".cal-day");
+    if (!b) return;
+    cal.date = Number(b.dataset.ts);
+    if (cal.applyOnPick) applyCalendar();   // navigation (mois) : valider direct au clic
+    else renderCal();                       // tâche : on attend OK/Entrée
+  });
   $("calShortcuts").addEventListener("click", e => { const b = e.target.closest("button[data-sc]"); if (b) calShortcut(b.dataset.sc); });
   $("calTime").addEventListener("change", e => {
     cal.time = e.target.value || null;
