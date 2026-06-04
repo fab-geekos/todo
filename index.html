@@ -768,9 +768,11 @@
   .week-modal-input::placeholder { color: var(--muted); font-weight: 500; }
   .week-modal-day {
     display: inline-flex; align-items: center; gap: 6px; align-self: flex-start;
-    font-size: 13px; color: var(--success); font-weight: 500;
+    font-family: inherit; font-size: 13px; color: var(--success); font-weight: 500;
     border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px;
+    background: var(--card); cursor: pointer; transition: border-color .15s;
   }
+  .week-modal-day:hover { border-color: var(--accent); }
   .week-modal .flags { display: flex; gap: 8px; flex-wrap: wrap; }
   .week-modal-foot {
     display: flex; align-items: center; justify-content: space-between; gap: 10px;
@@ -1041,7 +1043,7 @@
     <div class="week-modal-scrim" id="weekAddModal" hidden>
       <div class="week-modal" role="dialog" aria-label="Ajouter une tâche">
         <input class="week-modal-input" id="weekAddInput" type="text" placeholder="Nom de la tâche…" autocomplete="off">
-        <div class="week-modal-day" id="weekAddDayLabel"></div>
+        <button class="week-modal-day" id="weekAddDayLabel" type="button"></button>
         <div class="flags" id="weekAddFlags">
           <button class="flag" data-flag="important"><span class="star">★</span> Important</button>
           <button class="flag" data-flag="urgent">⚡ Urgent</button>
@@ -2356,8 +2358,9 @@ function addTaskOnDay(dayTs, raw, flags) {
   const task = makeTask(raw);                          // titre + date/heure/priorité éventuelles du texte
   task.urgent = task.urgent || flags.urgent;           // + boutons cliqués
   task.important = task.important || flags.important;
-  // Une date écrite dans le texte prime ; sinon, on retombe sur la colonne cliquée.
-  if (task.dueDate == null) task.dueDate = startOfDay(dayTs).getTime();
+  // Une date écrite dans le texte prime ; sinon on retombe sur le jour choisi (colonne ou calendrier).
+  // dayTs peut être null (option « Aucune date » du calendrier) -> tâche sans date (boîte de réception).
+  if (task.dueDate == null && dayTs != null) task.dueDate = startOfDay(dayTs).getTime();
   db.add(task);
   render();
 }
@@ -2373,14 +2376,20 @@ function rescheduleByDrop(itemEl, colEl) {
   if (targetDay !== homeDay) t.dueDate = targetDay;
 }
 
-function openWeekAdd(dayTs) {
-  weekAddDay = dayTs;
-  const d = new Date(dayTs);
-  const isToday = startOfDay(new Date()).getTime() === dayTs;
+// Met à jour la pastille de jour du pop-up d'ajout selon weekAddDay (null = sans date).
+function setWeekAddDayLabel() {
+  const el = $("weekAddDayLabel");
+  if (weekAddDay == null) { el.textContent = "📥 Sans date"; return; }
+  const d = new Date(weekAddDay);
+  const isToday = startOfDay(new Date()).getTime() === weekAddDay;
   const cap = s => s.replace(/^./, c => c.toUpperCase());
   const label = (isToday ? "Aujourd'hui · " : cap(WEEKDAY_LABELS[d.getDay()]) + " ")
               + d.getDate() + " " + MONTH_LABELS[d.getMonth()];
-  $("weekAddDayLabel").textContent = "📅 " + label;
+  el.textContent = "📅 " + label;
+}
+function openWeekAdd(dayTs) {
+  weekAddDay = dayTs;
+  setWeekAddDayLabel();
   const modal = $("weekAddModal");
   $("weekAddInput").value = "";
   modal.querySelectorAll(".flag.on").forEach(f => f.classList.remove("on"));
@@ -2390,7 +2399,7 @@ function openWeekAdd(dayTs) {
 function closeWeekAdd() { $("weekAddModal").hidden = true; weekAddDay = null; }
 function submitWeekAdd() {
   const raw = $("weekAddInput").value.trim();
-  if (!raw || weekAddDay == null) return;
+  if (!raw) return;                       // weekAddDay peut être null -> tâche sans date
   addTaskOnDay(weekAddDay, raw, readFlags($("weekAddModal")));
   closeWeekAdd();   // la fenêtre disparaît une fois la tâche créée
 }
@@ -3178,8 +3187,16 @@ function bindEvents() {
   $("weekAddCancel").addEventListener("click", closeWeekAdd);
   $("weekAddSubmit").addEventListener("click", submitWeekAdd);
   $("weekAddInput").addEventListener("keydown", e => {
+    if (!$("calPopover").hidden) return;   // calendrier ouvert : Entrée gérée par le calendrier
     if (e.key === "Enter") { e.preventDefault(); submitWeekAdd(); }
     else if (e.key === "Escape") closeWeekAdd();
+  });
+  // 2b — La pastille de jour ouvre le même calendrier pour changer le jour à la création.
+  $("weekAddDayLabel").addEventListener("click", () => {
+    openCalendar({
+      dueDate: weekAddDay, showTime: false,        // ici on ne choisit que le jour
+      onPick(date) { weekAddDay = date; setWeekAddDayLabel(); }   // date peut être null (Aucune date)
+    });
   });
   document.getElementById("focusAdd").addEventListener("click", () => {
     closeSidebar();
