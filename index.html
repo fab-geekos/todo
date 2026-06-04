@@ -835,8 +835,13 @@
   .cal-time-row { display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--border); padding-top: 10px; }
   .cal-time-row[hidden] { display: none; }
   .cal-time-label { font-size: 13px; color: var(--muted); }
+  .cal-time-text {
+    font-family: inherit; font-size: 14px; width: 64px; text-align: center; margin-left: auto;
+    padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text);
+  }
+  .cal-time-text:focus { outline: none; border-color: var(--accent); }
   .cal-time {
-    font-family: inherit; font-size: 14px; margin-left: auto; padding: 6px 8px;
+    font-family: inherit; font-size: 14px; padding: 6px 8px;
     border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text);
   }
   .cal-foot { display: flex; justify-content: space-between; gap: 8px; }
@@ -1069,6 +1074,7 @@
         <div class="cal-grid" id="calGrid"></div>
         <div class="cal-time-row" id="calTimeRow">
           <span class="cal-time-label">Heure</span>
+          <input class="cal-time-text" id="calTimeText" type="text" inputmode="numeric" placeholder="HH:MM" maxlength="5">
           <select class="cal-time" id="calTime"></select>
         </div>
         <div class="cal-foot">
@@ -2564,16 +2570,22 @@ function renderCal() {
     cells += `<button type="button" class="${cls.join(" ")}" data-ts="${ts}">${day}</button>`;
   }
   $("calGrid").innerHTML = cells;
+  renderCalTimeField();
+}
 
-  // Heure : créneaux de 30 min + "Aucune heure" (+ l'heure actuelle si hors créneaux)
+// Construit le menu d'heures (créneaux 30 min + heure hors créneaux éventuelle) et synchronise les deux champs.
+function renderCalTimeField() {
+  if (!cal) return;
   const cur = cal.time;
   const times = [];
   for (let h = 0; h < 24; h++) for (const m of [0, 30]) times.push(String(h).padStart(2,"0") + ":" + String(m).padStart(2,"0"));
   if (cur && !times.includes(cur)) { times.push(cur); times.sort(); }
-  let opts = `<option value="">Aucune heure</option>`;
-  times.forEach(tm => { opts += `<option value="${tm}">${tm}</option>`; });
-  $("calTime").innerHTML = opts;
+  $("calTime").innerHTML = `<option value="">Aucune heure</option>` +
+    times.map(tm => `<option value="${tm}">${tm}</option>`).join("");
   $("calTime").value = cur || "";
+  const txt = $("calTimeText");
+  txt.value = cur || "";
+  txt.dataset.len = (cur || "").replace(/\D/g, "").length;
 }
 
 function calShortcut(sc) {
@@ -2607,6 +2619,7 @@ function openEditor(id) {
   const t = getTask(id);
   if (!t) return;
   state.editingId = id;
+  recurCustom = false;   // le mode perso sera redéduit de la règle de la tâche
 
   $("editTitle").value = t.title;
   $("editNote").value = t.note || "";
@@ -2674,6 +2687,9 @@ function setRecurrence(taskId, rec) {
   renderEditorRecurrence(t);
 }
 
+// Mode "personnalisé" explicite : sans lui, une règle hebdo simple serait reclassée en preset "Toutes les semaines".
+let recurCustom = false;
+
 function renderEditorRecurrence(task) {
   const box = $("editRecur");
   box.innerHTML = "";
@@ -2701,12 +2717,10 @@ function renderEditorRecurrence(task) {
     ["custom", "Personnalisé…"]
   ];
   // Quel preset reflète la règle actuelle ?
-  let current = "none";
-  if (rec) {
-    const simple = (rec.interval || 1) === 1 && !rec.nthWeekday &&
-                   !(rec.freq === "week" && rec.weekdays && rec.weekdays.length);
-    current = simple ? rec.freq : "custom";
-  }
+  const simple = !rec || ((rec.interval || 1) === 1 && !rec.nthWeekday &&
+                 !(rec.freq === "week" && rec.weekdays && rec.weekdays.length));
+  const isCustom = recurCustom || (rec && !simple);   // perso choisi explicitement OU règle complexe
+  const current = isCustom ? "custom" : (rec ? rec.freq : "none");
   presets.forEach(([v, label]) => {
     const o = document.createElement("option");
     o.value = v; o.textContent = label;
@@ -2715,13 +2729,13 @@ function renderEditorRecurrence(task) {
   });
   select.addEventListener("change", () => {
     const v = select.value;
-    if (v === "none") setRecurrence(task.id, null);
-    else if (v === "custom") setRecurrence(task.id, rec || defaultRecurrence("week"));
-    else setRecurrence(task.id, defaultRecurrence(v));
+    if (v === "none") { recurCustom = false; setRecurrence(task.id, null); }
+    else if (v === "custom") { recurCustom = true; setRecurrence(task.id, rec || defaultRecurrence("week")); }
+    else { recurCustom = false; setRecurrence(task.id, defaultRecurrence(v)); }
   });
   box.appendChild(select);
 
-  if (current !== "custom" || !rec) return;
+  if (!isCustom || !rec) return;
 
   // --- Réglages fins (mode personnalisé) ---
   const custom = document.createElement("div");
@@ -3229,7 +3243,23 @@ function bindEvents() {
   $("calNext").addEventListener("click", () => { cal.month.setMonth(cal.month.getMonth() + 1); renderCal(); });
   $("calGrid").addEventListener("click", e => { const b = e.target.closest(".cal-day"); if (b) { cal.date = Number(b.dataset.ts); renderCal(); } });
   $("calShortcuts").addEventListener("click", e => { const b = e.target.closest("button[data-sc]"); if (b) calShortcut(b.dataset.sc); });
-  $("calTime").addEventListener("change", e => { cal.time = e.target.value || null; });
+  $("calTime").addEventListener("change", e => { cal.time = e.target.value || null; renderCalTimeField(); });
+  // Saisie manuelle de l'heure : auto-insertion du ":" après HH, validation HH:MM
+  $("calTimeText").addEventListener("input", e => {
+    const el = e.target;
+    const d = el.value.replace(/\D/g, "").slice(0, 4);   // 4 chiffres max
+    const prev = +(el.dataset.len || 0);
+    let v = d;
+    // ":" automatique après HH quand on avance (pas en effaçant, pour ne pas bloquer le backspace)
+    if (d.length > 2 || (d.length === 2 && d.length > prev)) v = d.slice(0, 2) + ":" + d.slice(2);
+    el.value = v;
+    el.dataset.len = d.length;
+    const m = v.match(/^(\d{2}):(\d{2})$/);
+    if (m && +m[1] <= 23 && +m[2] <= 59) cal.time = v;
+    else if (d.length === 0) cal.time = null;
+  });
+  // À la sortie du champ : on normalise (menu + champ alignés sur cal.time)
+  $("calTimeText").addEventListener("blur", () => { if (cal) renderCalTimeField(); });
   $("calClear").addEventListener("click", () => { cal.date = null; cal.time = null; applyCalendar(); });
   $("calOk").addEventListener("click", applyCalendar);
   $("calPopover").addEventListener("click", e => { if (e.target === $("calPopover")) applyCalendar(); }); // clic en dehors = appliquer
