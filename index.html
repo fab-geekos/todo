@@ -1119,6 +1119,10 @@
           <button class="side-date-btn" id="editDateBtn" type="button">Aucune date</button>
         </div>
         <div class="side-section">
+          <div class="side-label">Heure</div>
+          <button class="side-date-btn" id="editTimeBtn" type="button">Aucune heure</button>
+        </div>
+        <div class="side-section">
           <div class="side-label">Récurrence</div>
           <div id="editRecur"></div>
         </div>
@@ -2634,11 +2638,16 @@ function setTaskDate(t, date, time) {
   db.save();
 }
 
-// Pastille de date de l'éditeur
+// Pastilles de date et d'heure de l'éditeur
 function renderEditorDate(t) {
-  const btn = $("editDateBtn");
-  if (t.dueDate == null) { btn.textContent = "Aucune date"; btn.classList.add("empty"); }
-  else { btn.textContent = "📅 " + formatDueTs(t.dueDate, t.dueTime).label; btn.classList.remove("empty"); }
+  const dateBtn = $("editDateBtn");
+  // Date seule (sans l'heure) : l'heure a sa propre pastille juste en dessous.
+  if (t.dueDate == null) { dateBtn.textContent = "Aucune date"; dateBtn.classList.add("empty"); }
+  else { dateBtn.textContent = "📅 " + formatDueTs(t.dueDate, null).label; dateBtn.classList.remove("empty"); }
+
+  const timeBtn = $("editTimeBtn");
+  if (t.dueTime) { timeBtn.textContent = "🕐 " + t.dueTime; timeBtn.classList.remove("empty"); }
+  else { timeBtn.textContent = "Aucune heure"; timeBtn.classList.add("empty"); }
 }
 
 function openEditor(id) {
@@ -3247,12 +3256,13 @@ function bindEvents() {
   $("editNote").addEventListener("blur", saveEditorFields);
   $("editNote").addEventListener("input", autoGrowDesc);
 
-  // Date de l'éditeur : la pastille ouvre le calendrier
-  $("editDateBtn").addEventListener("click", () => {
+  // Date / Heure de l'éditeur : les deux pastilles ouvrent le même calendrier.
+  const openEditorCalendar = (defaultDate) => {
     const t = getTask(state.editingId);
     if (!t) return;
     openCalendar({
-      dueDate: t.dueDate, dueTime: t.dueTime, showTime: true,
+      // Pour fixer une heure sans date encore choisie, on présélectionne defaultDate (aujourd'hui).
+      dueDate: t.dueDate ?? defaultDate, dueTime: t.dueTime, showTime: true,
       onPick(date, time) {
         const tt = getTask(state.editingId);
         if (!tt) return;
@@ -3262,7 +3272,9 @@ function bindEvents() {
         render();
       }
     });
-  });
+  };
+  $("editDateBtn").addEventListener("click", () => openEditorCalendar(null));
+  $("editTimeBtn").addEventListener("click", () => openEditorCalendar(startOfDay(new Date()).getTime()));
 
   // Contrôles du calendrier réutilisable
   $("calPrev").addEventListener("click", () => { cal.month.setMonth(cal.month.getMonth() - 1); renderCal(); });
