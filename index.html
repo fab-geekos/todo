@@ -1415,14 +1415,15 @@ function parseInput(raw) {
     return false;
   };
 
-  // --- Heure : "18h", "18h30", "à 9h", "9:30" ---
-  consume(/(?:à\s*)?\b(\d{1,2})\s*h\s*(\d{2})?\b/i, m => {
+  // --- Heure : "18h", "18h30", "à 9h", "a 9h", "9:30" ---
+  // Le "à" (ou "a" sans accent, en mot isolé) qui précède l'heure est retiré du titre.
+  consume(/(?:à\s*|\ba\s+)?\b(\d{1,2})\s*h\s*(\d{2})?\b/i, m => {
     const h = m[1].padStart(2, "0");
     const min = (m[2] || "00").padStart(2, "0");
     time = h + ":" + min;
   });
   if (!time) {
-    consume(/(?:à\s*)?\b(\d{1,2}):(\d{2})\b/, m => {
+    consume(/(?:à\s*|\ba\s+)?\b(\d{1,2}):(\d{2})\b/i, m => {
       time = m[1].padStart(2,"0") + ":" + m[2];
     });
   }
