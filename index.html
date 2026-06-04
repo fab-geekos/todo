@@ -3633,3 +3633,21 @@ function setTheme(dark) {
 function initTheme() {
   setTheme(localStorage.getItem(THEME_KEY) === "dark");
 }
+function toggleTheme() {
+  setTheme(!document.body.classList.contains("dark"));
+}
+
+/* =========================================================
+   INIT
+   ========================================================= */
+function init() {
+  db.load();
+  applyMode();
+  bindEvents();
+  initTheme();
+  render();
+}
+init();
+</script>
+</body>
+</html>
