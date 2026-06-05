@@ -561,23 +561,38 @@
   .vac-ms-date { font-size: 13px; color: var(--muted); flex: 1; }
   .vac-ms-tag { font-size: 11px; font-weight: 600; color: var(--accent); background: rgba(74,111,165,.1); border-radius: 8px; padding: 1px 7px; flex-shrink: 0; }
 
-  /* ===== LABELS ===== */
-  .label-chip { display: inline-flex; align-items: center; font-size: 11px; font-weight: 600; border-radius: 8px; padding: 1px 8px; white-space: nowrap; line-height: 1.5; }
-  .label-dot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
-  /* Picker labels de la fiche */
-  .label-chips-trigger { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+  /* ===== ÉTIQUETTES (labels) ===== */
+  /* Pastille sobre : petit point coloré + nom en texte discret */
+  .label-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); white-space: nowrap; line-height: 1.5; }
+  .label-chip-lg { font-size: 15px; font-weight: 600; color: var(--text); gap: 7px; }
+  .label-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+  .label-chip-lg .label-dot { width: 12px; height: 12px; }
+  /* Étiquettes sur la carte : ligne dédiée, entre la tâche et la date/projet */
+  .task-labels { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 5px; }
+  /* Picker (fiche + quick-add) */
+  .label-chips-trigger { display: inline-flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+  .picker-up .picker-panel { top: auto; bottom: calc(100% + 4px); }    /* s'ouvre vers le haut */
+  .picker-option-name { flex: 1; }
+  .label-dot-btn { border: none; padding: 0; cursor: pointer; width: 13px; height: 13px; transition: transform .12s; }
+  .label-dot-btn:hover { transform: scale(1.25); }
   .picker-option.picker-create { color: var(--accent); font-weight: 500; }
-  /* Vue Labels */
-  .labels-view { display: none; max-width: 620px; }
-  .label-add { display: flex; gap: 8px; margin-bottom: 18px; }
+  /* Bouton étiquettes du quick-add (compact, à côté d'Important/Urgent) */
+  .quick-labels { width: auto; }
+  .quick-labels .picker-trigger { width: auto; border-radius: 20px; padding: 5px 12px; font-size: 13px; gap: 6px; }
+  /* Palette de couleur flottante (recoloration + choix à la création) */
+  .color-palette { position: fixed; z-index: 300; background: var(--card); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 8px; display: flex; flex-wrap: wrap; gap: 6px; width: 184px; }
+  /* Vue Étiquettes (pleine largeur) */
+  .labels-view { display: none; }
+  .label-add { display: flex; gap: 8px; align-items: center; margin-bottom: 18px; max-width: 560px; }
+  .label-add-color { width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--border); cursor: pointer; flex-shrink: 0; }
   .label-list { display: flex; flex-direction: column; gap: 2px; }
   .label-row { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-radius: 10px; cursor: pointer; transition: background .15s; }
   .label-row:hover { background: var(--hover); }
+  .label-row .label-dot { width: 12px; height: 12px; }
   .label-row-name { flex: 1; font-weight: 500; word-break: break-word; }
   .label-row-count { color: var(--muted); font-size: 13px; }
   .label-empty { color: var(--muted); font-style: italic; padding: 20px 0; }
   .label-detail-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-  .label-detail-head .label-chip { font-size: 14px; padding: 4px 12px; }
   .label-edit { display: flex; flex-direction: column; gap: 14px; align-items: flex-start; margin-bottom: 22px; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
   .label-name-input { font-family: inherit; font-size: 18px; font-weight: 600; color: var(--text); border: none; border-bottom: 2px solid var(--border); background: none; outline: none; padding: 4px 0; min-width: 220px; }
   .label-name-input:focus { border-bottom-color: var(--accent); }
@@ -1039,7 +1054,7 @@
       <span class="icon">🧑</span> Contacts
     </button>
     <button class="nav-item" data-view="labels">
-      <span class="icon">🏷️</span> Labels
+      <span class="icon">🏷️</span> Étiquettes
     </button>
     <button class="nav-item" data-view="courses">
       <span class="icon">🛒</span> Liste de courses
@@ -1070,6 +1085,7 @@
       <div class="flags">
         <button class="flag" data-flag="important"><span class="star">★</span> Important</button>
         <button class="flag" data-flag="urgent">⚡ Urgent</button>
+        <div id="quickLabels" class="picker quick-labels"></div>
       </div>
     </div>
 
@@ -1253,7 +1269,7 @@
           </div>
         </div>
         <div class="side-section" id="editLabelsSection">
-          <div class="side-label">Labels</div>
+          <div class="side-label">Étiquettes</div>
           <div id="editLabels" class="picker"></div>
         </div>
         <button class="editor-delete" id="editDelete">🗑 Supprimer la tâche</button>
@@ -1343,7 +1359,8 @@ let state = {
   birthDate: null,        // "AAAA-MM-JJ" : date de naissance (pour calculer les rappels vaccins)
   vaccineDone: null,      // [âges des rappels faits] ; null = pas encore initialisé
   labels: [],             // étiquettes : [{ id, name, color }]
-  labelFilter: null,      // label sélectionné dans la vue Labels (null = liste des labels)
+  labelFilter: null,      // étiquette sélectionnée dans la vue Étiquettes (null = liste)
+  quickAddLabels: [],     // étiquettes pré-sélectionnées pour la prochaine tâche du quick-add
   projectId: null,        // projet actuellement ouvert (vue détaillée)
   projSub: "eisen",       // sous-vue du projet par défaut : "eisen" (matrice) ou "list"
   projectsTab: "active",  // onglet de la vue Projets : "active" (tableau) ou "done" (terminés)
@@ -1850,8 +1867,9 @@ function taskRowHtml(task, depth, ancestorContinues = [], isLast = false) {
       ${chevronHtml}
       ${isShoppingRoot(task) ? "" : `<button class="checkbox" data-action="toggle" aria-label="Terminer"></button>`}
       <div class="task-body"${canOpen ? ' data-action="edit"' : ''}>
-        <div class="task-titleline"><span class="task-title">${esc(task.title)}</span>${flagBadges(task)}${subCountBadge}${depth === 0 ? labelChipsHtml(task) : ""}</div>
+        <div class="task-titleline"><span class="task-title">${esc(task.title)}</span>${flagBadges(task)}${subCountBadge}</div>
         ${task.note ? `<div class="task-note">${esc(task.note)}</div>` : ""}
+        ${depth === 0 && (task.labels || []).length ? `<div class="task-labels">${labelChipsHtml(task)}</div>` : ""}
         ${metaHtml}
         ${progressHtml}
       </div>
@@ -1898,7 +1916,7 @@ function render() {
     week: { t: "Prochainement", s: "Tes échéances des 7 prochains jours" },
     courses: { t: "Liste de courses", s: "Tes rayons et les produits à acheter" },
     vaccins: { t: "Vaccins", s: "Tes rappels de vaccins (calendrier français)" },
-    labels: { t: "Labels", s: "Tes étiquettes — clique un label pour voir ses tâches" }
+    labels: { t: "Étiquettes", s: "" }
   };
   const info = titles[state.view] || { t: "", s: "" };
   document.getElementById("viewTitle").textContent = info.t;
@@ -2357,11 +2375,14 @@ function addTask() {
     const task = makeTask(raw);
     task.urgent = task.urgent || flags.urgent;
     task.important = task.important || flags.important;
+    task.labels = [...state.quickAddLabels];        // étiquettes pré-sélectionnées
     db.add(task);
   }
 
   input.value = "";
   document.querySelectorAll(".quick-add .flag").forEach(f => f.classList.remove("on"));
+  state.quickAddLabels = [];
+  setupQuickLabels();                               // réinitialise le picker labels
   input.focus();
   render();
 }
@@ -2598,7 +2619,8 @@ function weekTaskTree(task, depth, ancestorContinues = [], isLast = false, late 
       ${chevron}
       <button class="checkbox" data-action="toggle" aria-label="Terminer"></button>
       <div class="task-body" data-action="edit">
-        <div class="task-titleline"><span class="task-title">${esc(task.title)}</span>${flagBadges(task)}${lateHtml}${subCount}${depth === 0 ? labelChipsHtml(task) : ""}</div>
+        <div class="task-titleline"><span class="task-title">${esc(task.title)}</span>${flagBadges(task)}${lateHtml}${subCount}</div>
+        ${depth === 0 && (task.labels || []).length ? `<div class="task-labels">${labelChipsHtml(task)}</div>` : ""}
         ${meta}
         ${progressHtml}
       </div>
@@ -2911,14 +2933,11 @@ const LABEL_COLORS = ["#E0524A","#E8924A","#F2B705","#7CB518","#2D936C","#17A2B8
 
 const getLabel = id => state.labels.find(l => l.id === id);
 function taskLabels(task) { return (task.labels || []).map(getLabel).filter(Boolean); }   // objets, ids supprimés ignorés
-// Couleur de texte lisible (sombre/blanc) selon la luminance du fond
-function labelTextColor(hex) {
-  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
-  return (0.299*r + 0.587*g + 0.114*b) > 150 ? "#1f2937" : "#fff";
-}
-function addLabel(name) {                         // crée un label (couleur auto : 1re libre de la palette)
-  const used = state.labels.map(l => l.color);
-  const color = LABEL_COLORS.find(c => !used.includes(c)) || LABEL_COLORS[state.labels.length % LABEL_COLORS.length];
+function addLabel(name, color) {                  // crée un label (couleur fournie, sinon 1re libre de la palette)
+  if (!color) {
+    const used = state.labels.map(l => l.color);
+    color = LABEL_COLORS.find(c => !used.includes(c)) || LABEL_COLORS[state.labels.length % LABEL_COLORS.length];
+  }
   const label = { id: uid(), name: name.trim(), color };
   state.labels.push(label);
   db.save();
@@ -2938,40 +2957,62 @@ function toggleTaskLabel(taskId, labelId) {
   if (i >= 0) t.labels.splice(i, 1); else t.labels.push(labelId);
   db.save();
 }
-// Pastilles (couleur + nom) d'une tâche, pour les cartes
+// Pastilles d'une tâche (sobres : point coloré + nom), pour les cartes
 function labelChipsHtml(task) {
   return taskLabels(task).map(l =>
-    `<span class="label-chip" style="background:${l.color};color:${labelTextColor(l.color)}">${esc(l.name)}</span>`).join("");
+    `<span class="label-chip"><span class="label-dot" style="background:${l.color}"></span>${esc(l.name)}</span>`).join("");
 }
 
-// Sélecteur de labels dans la fiche : multi-sélection + recherche + création à la volée.
-function renderEditorLabels(task) {
-  const container = $("editLabels");
-  container.className = "picker";
-  const chipsHtml = () => {
-    const labels = taskLabels(task);
+/* ---- Palette de couleur flottante (réutilisable : recoloration + choix à la création) ---- */
+function closeColorPalette() {
+  const p = document.querySelector(".color-palette");
+  if (p) { if (p._onDoc) document.removeEventListener("click", p._onDoc, true); p.remove(); }
+}
+function showColorPalette(anchorEl, current, onPick) {
+  closeColorPalette();
+  const pal = document.createElement("div");
+  pal.className = "color-palette";
+  pal.innerHTML = LABEL_COLORS.map(c =>
+    `<button class="label-swatch${c === current ? " sel" : ""}" data-color="${c}" style="background:${c}" type="button"></button>`).join("");
+  document.body.appendChild(pal);
+  const r = anchorEl.getBoundingClientRect();
+  pal.style.left = Math.max(8, Math.min(r.left, window.innerWidth - pal.offsetWidth - 8)) + "px";
+  pal.style.top = (r.bottom + 6) + "px";
+  pal.addEventListener("click", e => { const sw = e.target.closest(".label-swatch"); if (sw) { onPick(sw.dataset.color); closeColorPalette(); } });
+  function onDoc(e) { if (!pal.contains(e.target) && !anchorEl.contains(e.target) && e.target !== anchorEl) closeColorPalette(); }
+  pal._onDoc = onDoc;
+  setTimeout(() => document.addEventListener("click", onDoc, true), 0);
+}
+
+/* ---- Sélecteur de labels réutilisable : multi + recherche + création + recoloration ----
+   opts = { selected():ids[], toggle(id), onChange(), up?:bool } */
+function attachLabelPicker(container, opts) {
+  container.className = "picker" + (opts.up ? " picker-up" : "");
+  const chips = () => {
+    const labels = opts.selected().map(getLabel).filter(Boolean);
     return labels.length
-      ? labels.map(l => `<span class="label-chip" style="background:${l.color};color:${labelTextColor(l.color)}">${esc(l.name)}</span>`).join("")
-      : `<span class="picker-value">Ajouter un label…</span>`;
+      ? labels.map(l => `<span class="label-chip"><span class="label-dot" style="background:${l.color}"></span>${esc(l.name)}</span>`).join("")
+      : `<span class="picker-value">${esc(opts.placeholder || "Ajouter une étiquette…")}</span>`;
   };
-  container.innerHTML = `<button class="picker-trigger" type="button"><span class="label-chips-trigger">${chipsHtml()}</span><span class="picker-caret">▾</span></button>`;
+  container.innerHTML = `<button class="picker-trigger" type="button"><span class="label-chips-trigger">${chips()}</span><span class="picker-caret">▾</span></button>`;
 
   let open = false;
-  const refreshChips = () => { const c = container.querySelector(".label-chips-trigger"); if (c) c.innerHTML = chipsHtml(); };
-  function close() { open = false; const p = container.querySelector(".picker-panel"); if (p) p.remove(); document.removeEventListener("click", onDoc, true); }
-  function onDoc(e) { if (!container.contains(e.target)) close(); }
+  const refreshChips = () => { const c = container.querySelector(".label-chips-trigger"); if (c) c.innerHTML = chips(); };
+  function close() { open = false; const p = container.querySelector(".picker-panel"); if (p) p.remove(); document.removeEventListener("click", onDoc, true); closeColorPalette(); }
+  function onDoc(e) { if (!container.contains(e.target) && !e.target.closest(".color-palette")) close(); }
   function renderOptions(panel, filter = "") {
     const q = filter.trim().toLowerCase();
-    const sel = task.labels || [];
+    const sel = opts.selected();
     let html = state.labels.filter(l => !q || l.name.toLowerCase().includes(q)).map(l => `
       <div class="picker-option${sel.includes(l.id) ? " selected" : ""}" data-label="${l.id}">
-        <span class="label-dot" style="background:${l.color}"></span><span>${esc(l.name)}</span>
+        <button class="label-dot label-dot-btn" style="background:${l.color}" data-recolor="${l.id}" type="button" aria-label="Couleur"></button>
+        <span class="picker-option-name">${esc(l.name)}</span>
         ${sel.includes(l.id) ? `<span class="check">✓</span>` : ""}
       </div>`).join("");
     if (q && !state.labels.some(l => l.name.toLowerCase() === q)) {
       html += `<div class="picker-option picker-create" data-create="1">+ Créer « ${esc(filter.trim())} »</div>`;
     }
-    if (!html) html = `<div class="picker-empty">Tape un nom pour créer un label</div>`;
+    if (!html) html = `<div class="picker-empty">Tape un nom pour créer une étiquette</div>`;
     panel.querySelector(".picker-options").innerHTML = html;
   }
   container.querySelector(".picker-trigger").addEventListener("click", e => {
@@ -2985,28 +3026,57 @@ function renderEditorLabels(task) {
     renderOptions(panel, "");
     const search = panel.querySelector(".picker-search");
     search.focus();
-    const apply = () => { refreshChips(); renderOptions(panel, search.value); render(); };
+    const apply = () => { refreshChips(); renderOptions(panel, search.value); opts.onChange(); };
     search.addEventListener("input", () => renderOptions(panel, search.value));
     search.addEventListener("keydown", ev => {
       if (ev.key === "Enter") {
         ev.preventDefault();
         const qn = search.value.trim(); if (!qn) return;
         const l = state.labels.find(x => x.name.toLowerCase() === qn.toLowerCase()) || addLabel(qn);
-        toggleTaskLabel(task.id, l.id); search.value = ""; apply();
+        if (!opts.selected().includes(l.id)) opts.toggle(l.id);
+        search.value = ""; apply();
       } else if (ev.key === "Escape") { close(); }
     });
     panel.addEventListener("click", ev => {
+      const recolor = ev.target.closest("[data-recolor]");
+      if (recolor) {
+        ev.stopPropagation();
+        const lbl = getLabel(recolor.dataset.recolor);
+        showColorPalette(recolor, lbl ? lbl.color : null, color => {
+          if (lbl) { lbl.color = color; db.save(); refreshChips(); renderOptions(panel, search.value); render(); }
+        });
+        return;
+      }
       const opt = ev.target.closest(".picker-option");
       if (!opt) return;
-      if (opt.dataset.create) { const l = addLabel(search.value.trim()); toggleTaskLabel(task.id, l.id); search.value = ""; }
-      else if (opt.dataset.label) { toggleTaskLabel(task.id, opt.dataset.label); }
+      if (opt.dataset.create) { const l = addLabel(search.value.trim()); opts.toggle(l.id); search.value = ""; }
+      else if (opt.dataset.label) { opts.toggle(opt.dataset.label); }
       apply();
     });
     setTimeout(() => document.addEventListener("click", onDoc, true), 0);
   });
 }
 
-// Vue Labels : liste de labels (clic -> tâches du label) ; détail = renommer / recolorer / supprimer + tâches.
+// Picker labels de la fiche (tâche racine) — s'ouvre vers le haut pour rester visible
+function renderEditorLabels(task) {
+  attachLabelPicker($("editLabels"), {
+    selected: () => task.labels || [],
+    toggle: id => toggleTaskLabel(task.id, id),
+    onChange: () => render(),
+    up: true
+  });
+}
+// Picker labels du quick-add (Todo) : la sélection s'applique à la prochaine tâche créée
+function setupQuickLabels() {
+  attachLabelPicker($("quickLabels"), {
+    selected: () => state.quickAddLabels,
+    toggle: id => { const i = state.quickAddLabels.indexOf(id); if (i >= 0) state.quickAddLabels.splice(i, 1); else state.quickAddLabels.push(id); },
+    onChange: () => {},
+    placeholder: "🏷️ Étiquettes"
+  });
+}
+
+// Vue Étiquettes : liste (clic -> tâches de l'étiquette) ; détail = renommer / recolorer / supprimer + tâches.
 function renderLabels() {
   const el = $("labelsView");
   if (state.labelFilter) {
@@ -3014,21 +3084,21 @@ function renderLabels() {
     if (!label) { state.labelFilter = null; renderLabels(); return; }
     const tasks = state.tasks.filter(t => !t.completed && isRoot(t) && (t.labels || []).includes(label.id));
     const swatches = LABEL_COLORS.map(c =>
-      `<button class="label-swatch${c === label.color ? " sel" : ""}" data-color="${c}" style="background:${c}" aria-label="Couleur"></button>`).join("");
+      `<button class="label-swatch${c === label.color ? " sel" : ""}" data-color="${c}" style="background:${c}" type="button" aria-label="Couleur"></button>`).join("");
     el.innerHTML = `
       <div class="label-detail-head">
-        <button class="icon-btn" id="labelBack" aria-label="Retour aux labels">←</button>
-        <span class="label-chip" style="background:${label.color};color:${labelTextColor(label.color)}">${esc(label.name)}</span>
+        <button class="icon-btn" id="labelBack" aria-label="Retour aux étiquettes">←</button>
+        <span class="label-chip label-chip-lg"><span class="label-dot" style="background:${label.color}"></span>${esc(label.name)}</span>
       </div>
       <div class="label-edit">
-        <input class="label-name-input" id="labelRename" type="text" value="${esc(label.name)}" placeholder="Nom du label">
+        <input class="label-name-input" id="labelRename" type="text" value="${esc(label.name)}" placeholder="Nom de l'étiquette">
         <div class="label-swatches">${swatches}</div>
-        <button class="editor-delete" id="labelDelete">🗑 Supprimer le label</button>
+        <button class="editor-delete" id="labelDelete">🗑 Supprimer l'étiquette</button>
       </div>
       <ul class="task-list" id="labelTaskList"></ul>`;
     const ul = $("labelTaskList");
     if (tasks.length) tasks.forEach(t => ul.appendChild(taskCard(t, true)));
-    else ul.innerHTML = `<div class="empty"><div class="big">🏷️</div>Aucune tâche avec ce label.</div>`;
+    else ul.innerHTML = `<div class="empty"><div class="big">🏷️</div>Aucune tâche avec cette étiquette.</div>`;
     return;
   }
   const rows = state.labels.length
@@ -3040,10 +3110,14 @@ function renderLabels() {
           <span class="label-row-count">${count}</span>
         </div>`;
       }).join("")
-    : `<div class="label-empty">Aucun label. Crée-en un ci-dessus.</div>`;
+    : `<div class="label-empty">Aucune étiquette. Crée-en une ci-dessus.</div>`;
+  // Couleur proposée pour la prochaine étiquette (1re libre de la palette)
+  const used = state.labels.map(l => l.color);
+  const nextColor = LABEL_COLORS.find(c => !used.includes(c)) || LABEL_COLORS[state.labels.length % LABEL_COLORS.length];
   el.innerHTML = `
     <div class="label-add">
-      <input class="quick-input" id="labelAddInput" type="text" placeholder="Nouveau label…" autocomplete="off">
+      <input class="quick-input" id="labelAddInput" type="text" placeholder="Nouvelle étiquette…" autocomplete="off">
+      <button class="label-add-color" id="labelAddColor" type="button" data-color="${nextColor}" style="background:${nextColor}" aria-label="Couleur"></button>
       <button class="quick-submit" id="labelAddBtn">Ajouter</button>
     </div>
     <div class="label-list">${rows}</div>`;
@@ -3804,6 +3878,7 @@ function bindEvents() {
   document.getElementById("quickSubmit").addEventListener("click", addTask);
   // Entrée n'importe où dans la zone de saisie = ajouter (jamais activer un bouton focusé)
   document.querySelector(".quick-add").addEventListener("keydown", e => {
+    if (e.target.closest(".picker-panel")) return;   // saisie dans le picker étiquettes : ne pas créer de tâche
     if (e.key === "Enter") { e.preventDefault(); addTask(); }
   });
 
@@ -4241,11 +4316,13 @@ function bindEvents() {
   });
 
   // ----- Vue Labels -----
-  const submitLabelAdd = () => { const v = $("labelAddInput").value.trim(); if (v) { addLabel(v); render(); } };
+  const submitLabelAdd = () => { const v = $("labelAddInput").value.trim(); if (v) { addLabel(v, $("labelAddColor")?.dataset.color); render(); } };
   $("labelsView").addEventListener("click", e => {
     if (e.target.closest("#labelAddBtn")) return submitLabelAdd();
+    const addColor = e.target.closest("#labelAddColor");
+    if (addColor) { showColorPalette(addColor, addColor.dataset.color, c => { addColor.dataset.color = c; addColor.style.background = c; }); return; }
     if (e.target.closest("#labelBack")) { state.labelFilter = null; render(); return; }
-    if (e.target.closest("#labelDelete")) { if (confirm("Supprimer ce label ?")) { deleteLabel(state.labelFilter); render(); } return; }
+    if (e.target.closest("#labelDelete")) { if (confirm("Supprimer cette étiquette ?")) { deleteLabel(state.labelFilter); render(); } return; }
     const sw = e.target.closest(".label-swatch");
     if (sw) { const l = getLabel(state.labelFilter); if (l) { l.color = sw.dataset.color; db.save(); render(); } return; }
     const row = e.target.closest(".label-row");
@@ -4259,6 +4336,8 @@ function bindEvents() {
   $("labelsView").addEventListener("change", e => {
     if (e.target.id === "labelRename") { const l = getLabel(state.labelFilter); const v = e.target.value.trim(); if (l && v) { l.name = v; db.save(); render(); } }
   });
+
+  setupQuickLabels();   // picker labels du quick-add
 
   // Bascule thème clair / nuit
   document.getElementById("themeToggle").addEventListener("click", toggleTheme);
