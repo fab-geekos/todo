@@ -506,6 +506,42 @@
   }
   .contact-proj:hover { background: var(--bg); }
   .contact-none { font-size: 13px; color: var(--muted); margin-top: 6px; font-style: italic; }
+  .contact-card { cursor: pointer; transition: border-color .15s; }
+  .contact-card:hover { border-color: var(--accent); }
+  .contact-bday-show { font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
+  /* Coordonnées (téléphones + e-mails) sur la carte : compactes, affichées seulement si remplies */
+  .contact-fields { margin-top: 8px; display: flex; flex-direction: column; gap: 3px; }
+  .contact-field { font-size: 13px; display: flex; align-items: baseline; gap: 6px; color: var(--text); }
+  .cf-icon { font-size: 12px; flex-shrink: 0; }
+  .cf-label { color: var(--muted); font-size: 12px; flex-shrink: 0; }
+  .cf-value { word-break: break-all; }
+
+  /* ===== FICHE CONTACT (modale) ===== */
+  .contact-editor { max-width: 520px; }
+  .contact-editor-main { padding: 4px 24px 22px; overflow-y: auto; }
+  .ce-section { margin-top: 18px; }
+  .ce-label { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 8px; }
+  .ce-rows { display: flex; flex-direction: column; gap: 8px; }
+  .ce-row { display: flex; gap: 8px; align-items: center; }
+  .ce-row-label, .ce-row-value, .ce-bday-input {
+    font-family: inherit; font-size: 14px; color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+    background: var(--card); outline: none; transition: border-color .15s;
+  }
+  .ce-row-label:focus, .ce-row-value:focus, .ce-bday-input:focus { border-color: var(--accent); }
+  .ce-row-label { width: 120px; flex-shrink: 0; }
+  .ce-row-value { flex: 1; min-width: 0; }
+  .ce-bday-input { width: 110px; text-align: center; }
+  .ce-row-del {
+    background: none; border: none; cursor: pointer; color: var(--muted);
+    font-size: 18px; line-height: 1; padding: 0 4px; flex-shrink: 0; transition: color .15s;
+  }
+  .ce-row-del:hover { color: var(--alert); }
+  .ce-add {
+    margin-top: 8px; background: none; border: none; cursor: pointer; color: var(--accent);
+    font-family: inherit; font-size: 14px; padding: 4px 0; display: inline-flex; align-items: center; gap: 4px;
+  }
+  .ce-add:hover { text-decoration: underline; }
 
   /* ===== MODAL ÉDITION ===== */
   .overlay {
@@ -1179,6 +1215,33 @@
   </div>
 </div>
 
+<!-- Fiche contact -->
+<div class="overlay" id="contactOverlay">
+  <div class="editor contact-editor">
+    <div class="editor-top">
+      <button class="editor-close" id="contactClose" aria-label="Fermer">×</button>
+    </div>
+    <div class="contact-editor-main">
+      <input class="editor-title" id="ceName" placeholder="Nom du contact">
+      <div class="ce-section">
+        <div class="ce-label">🎂 Anniversaire</div>
+        <input class="ce-bday-input" id="ceBday" type="text" inputmode="numeric" maxlength="5" placeholder="JJ/MM" autocomplete="off">
+      </div>
+      <div class="ce-section">
+        <div class="ce-label">📞 Téléphones</div>
+        <div class="ce-rows" id="cePhones"></div>
+        <button class="ce-add" id="ceAddPhone" type="button"><span>+</span> Ajouter un téléphone</button>
+      </div>
+      <div class="ce-section">
+        <div class="ce-label">✉️ E-mails</div>
+        <div class="ce-rows" id="ceEmails"></div>
+        <button class="ce-add" id="ceAddEmail" type="button"><span>+</span> Ajouter un e-mail</button>
+      </div>
+      <button class="editor-delete" id="ceDelete">🗑 Supprimer le contact</button>
+    </div>
+  </div>
+</div>
+
 <script>
 "use strict";
 
@@ -1229,6 +1292,7 @@ let state = {
   sort: "due",
   todoTab: "all",         // onglet de la vue Todo : "all" (toutes) ou "recur" (récurrentes)
   editingId: null,
+  editingContactId: null, // contact ouvert dans la fiche contact
   projectId: null,        // projet actuellement ouvert (vue détaillée)
   projSub: "eisen",       // sous-vue du projet par défaut : "eisen" (matrice) ou "list"
   projectsTab: "active",  // onglet de la vue Projets : "active" (tableau) ou "done" (terminés)
@@ -2371,23 +2435,30 @@ function contactCard(contact) {
   const projects = state.projects.filter(p => p.status === "delegue" && p.assigneeId === contact.id);
   const bday = formatBirthday(contact.birthday);
 
-  let projectsHtml;
-  if (projects.length === 0) {
-    projectsHtml = `<div class="contact-none">Aucun projet délégué</div>`;
-  } else {
-    projectsHtml = `<div class="contact-projects">` + projects.map(p =>
-      `<div class="contact-proj" data-proj="${p.id}"><span>${esc(p.icon || DEFAULT_PROJECT_ICON)}</span> ${esc(p.name)}</div>`
-    ).join("") + `</div>`;
-  }
+  // Coordonnées (téléphones + e-mails) : affichées seulement si remplies, au-dessus des projets
+  const fields = [
+    ...(contact.phones || []).map(p => ({ icon: "📞", label: p.label, value: p.value })),
+    ...(contact.emails || []).map(p => ({ icon: "✉️", label: p.label, value: p.value }))
+  ].filter(f => f.value);
+  const fieldsHtml = fields.length
+    ? `<div class="contact-fields">` + fields.map(f =>
+        `<div class="contact-field"><span class="cf-icon">${f.icon}</span>${f.label ? `<span class="cf-label">${esc(f.label)}</span>` : ""}<span class="cf-value">${esc(f.value)}</span></div>`
+      ).join("") + `</div>`
+    : "";
+
+  const projectsHtml = projects.length === 0
+    ? `<div class="contact-none">Aucun projet délégué</div>`
+    : `<div class="contact-projects">` + projects.map(p =>
+        `<div class="contact-proj" data-proj="${p.id}"><span>${esc(p.icon || DEFAULT_PROJECT_ICON)}</span> ${esc(p.name)}</div>`
+      ).join("") + `</div>`;
 
   li.innerHTML = `
     <div class="contact-head">
-      <span class="contact-name">${esc(contact.name)}</span>
-      <span class="contact-bday" data-action="bday">🎂 ${bday ? esc(bday) : "Ajouter"}</span>
-      <input class="contact-bday-input" type="text" inputmode="numeric" maxlength="5"
-             placeholder="JJ/MM" value="${contact.birthday ? esc(contact.birthday.split("-").reverse().join("/")) : ""}" hidden>
+      <span class="contact-name">${esc(contact.name || "Sans nom")}</span>
+      ${bday ? `<span class="contact-bday-show">🎂 ${esc(bday)}</span>` : ""}
       <button class="contact-del" type="button" data-action="del" aria-label="Supprimer">×</button>
     </div>
+    ${fieldsHtml}
     ${projectsHtml}
   `;
   return li;
@@ -3601,6 +3672,7 @@ function bindEvents() {
     if (e.key !== "Enter" || e.shiftKey) return;       // Maj+Entrée = retour à la ligne (description)
     if (!$("calPopover").hidden) { e.preventDefault(); applyCalendar(); return; }
     if (!$("weekAddModal").hidden) return;             // le pop-up "Prochainement" gère sa propre validation
+    if ($("contactOverlay").classList.contains("open")) { e.preventDefault(); closeContactEditor(); return; }  // fiche contact : valider + fermer
     if ($("overlay").classList.contains("open")) {
       const ae = document.activeElement;
       if (ae === $("editAddSubInput")) return;          // saisie d'une sous-tâche : Entrée = ajouter (reste ouvert)
@@ -3740,47 +3812,50 @@ function bindEvents() {
     state.contactSearch = e.target.value;
     renderContacts();   // on ne redessine que la liste (le champ garde le focus)
   });
+  // + Contact : on crée une fiche vierge et on l'ouvre directement (plus de prompt)
   $("contactAdd").addEventListener("click", () => {
-    const name = prompt("Nom du contact :");
-    if (name && name.trim()) { db.addContact({ id: uid(), name: name.trim(), birthday: null }); render(); }
+    const c = { id: uid(), name: "", birthday: null, phones: [], emails: [] };
+    db.addContact(c);
+    openContactEditor(c.id);
   });
+  // Clic sur une carte : supprimer / ouvrir un projet délégué / sinon ouvrir la fiche contact
   $("contactList").addEventListener("click", e => {
     const card = e.target.closest(".contact-card");
     if (!card) return;
     const id = card.dataset.id;
-    const action = e.target.closest("[data-action]")?.dataset.action;
+    if (e.target.closest('[data-action="del"]')) { deleteContact(id); return; }
     const projEl = e.target.closest(".contact-proj");
-    if (action === "del") {
-      deleteContact(id);
-    } else if (action === "bday") {
-      // ouvre le champ de saisie de l'anniversaire
-      const label = e.target.closest(".contact-bday");
-      const input = card.querySelector(".contact-bday-input");
-      label.hidden = true;
-      input.hidden = false;
-      input.focus();
-      input.select();
-    } else if (projEl) {
-      openProject(projEl.dataset.proj);
-    }
+    if (projEl) { openProject(projEl.dataset.proj); return; }
+    openContactEditor(id);
   });
-  // Saisie de l'anniversaire : insertion auto du "/" après le jour
-  $("contactList").addEventListener("input", e => {
-    const input = e.target.closest(".contact-bday-input");
-    if (!input) return;
-    let v = input.value.replace(/[^\d]/g, "").slice(0, 4);     // ne garder que les chiffres (JJMM)
-    if (v.length >= 3) v = v.slice(0, 2) + "/" + v.slice(2);   // JJ + / + MM
-    input.value = v;
+
+  // ----- Fiche contact (modale) -----
+  $("contactClose").addEventListener("click", closeContactEditor);
+  $("contactOverlay").addEventListener("click", e => {
+    if (e.target.id === "contactOverlay") { closeContactEditor(); return; }   // clic en dehors = enregistrer + fermer
+    const del = e.target.closest(".ce-row-del");
+    if (del) del.closest(".ce-row").remove();
   });
-  $("contactList").addEventListener("keydown", e => {
-    const input = e.target.closest(".contact-bday-input");
-    if (!input) return;
-    if (e.key === "Enter") { e.preventDefault(); input.blur(); }
-    else if (e.key === "Escape") { render(); }
+  $("ceAddPhone").addEventListener("click", () => {
+    $("cePhones").insertAdjacentHTML("beforeend", contactRowHtml(null, "Numéro"));
+    $("cePhones").lastElementChild.querySelector(".ce-row-label").focus();
   });
-  $("contactList").addEventListener("focusout", e => {
-    const input = e.target.closest(".contact-bday-input");
-    if (input) saveBirthday(input.closest(".contact-card").dataset.id, input.value);
+  $("ceAddEmail").addEventListener("click", () => {
+    $("ceEmails").insertAdjacentHTML("beforeend", contactRowHtml(null, "Adresse e-mail"));
+    $("ceEmails").lastElementChild.querySelector(".ce-row-label").focus();
+  });
+  // Anniversaire (fiche) : insertion auto du "/" après le jour
+  $("ceBday").addEventListener("input", e => {
+    let v = e.target.value.replace(/[^\d]/g, "").slice(0, 4);
+    if (v.length >= 3) v = v.slice(0, 2) + "/" + v.slice(2);
+    e.target.value = v;
+  });
+  $("ceDelete").addEventListener("click", () => {
+    const id = state.editingContactId;
+    state.editingContactId = null;
+    $("contactOverlay").classList.remove("open");
+    document.body.style.overflow = "";
+    deleteContact(id);   // confirm + suppression + render
   });
 
   // Bascule thème clair / nuit
@@ -3807,6 +3882,69 @@ function saveBirthday(id, raw) {
   if (day < 1 || day > 31 || mon < 1 || mon > 12) { render(); return; }
   const pad = n => String(n).padStart(2, "0");
   db.updateContact(id, { birthday: pad(mon) + "-" + pad(day) });
+  render();
+}
+
+/* ---- Fiche contact (modale) ---- */
+// Convertit une saisie "JJ/MM" en stockage "MM-JJ". null = effacer ; undefined = saisie invalide (ne pas toucher).
+function birthdayFromInput(raw) {
+  const t = (raw || "").trim();
+  if (t === "") return null;
+  const m = t.match(/^(\d{1,2})\/(\d{1,2})$/);
+  if (!m) return undefined;
+  const day = parseInt(m[1], 10), mon = parseInt(m[2], 10);
+  if (day < 1 || day > 31 || mon < 1 || mon > 12) return undefined;
+  const pad = n => String(n).padStart(2, "0");
+  return pad(mon) + "-" + pad(day);
+}
+// HTML d'une ligne coordonnée (libellé libre + valeur + suppression)
+function contactRowHtml(entry, valuePlaceholder) {
+  return `<div class="ce-row">
+    <input class="ce-row-label" placeholder="Libellé (Maison, Pro…)" value="${esc((entry && entry.label) || "")}">
+    <input class="ce-row-value" placeholder="${valuePlaceholder}" value="${esc((entry && entry.value) || "")}">
+    <button class="ce-row-del" type="button" aria-label="Retirer">×</button>
+  </div>`;
+}
+// Lit les lignes d'un conteneur -> [{label, value}], en ignorant les lignes sans valeur
+function readContactRows(container) {
+  return [...container.querySelectorAll(".ce-row")].map(row => ({
+    label: row.querySelector(".ce-row-label").value.trim(),
+    value: row.querySelector(".ce-row-value").value.trim()
+  })).filter(r => r.value);
+}
+function openContactEditor(id) {
+  const c = getContact(id);
+  if (!c) return;
+  state.editingContactId = id;
+  $("ceName").value = c.name || "";
+  $("ceBday").value = c.birthday ? c.birthday.split("-").reverse().join("/") : "";
+  $("cePhones").innerHTML = (c.phones || []).map(p => contactRowHtml(p, "Numéro")).join("");
+  $("ceEmails").innerHTML = (c.emails || []).map(p => contactRowHtml(p, "Adresse e-mail")).join("");
+  $("contactOverlay").classList.add("open");
+  document.body.style.overflow = "hidden";
+  $("ceName").focus();
+}
+// Enregistre les champs de la fiche dans le contact (lignes vides ignorées)
+function saveContactEditor() {
+  const c = getContact(state.editingContactId);
+  if (!c) return;
+  c.name = $("ceName").value.trim();
+  const b = birthdayFromInput($("ceBday").value);
+  if (b !== undefined) c.birthday = b;   // undefined = saisie invalide -> on garde l'existant
+  c.phones = readContactRows($("cePhones"));
+  c.emails = readContactRows($("ceEmails"));
+  db.save();
+}
+function closeContactEditor() {
+  saveContactEditor();
+  // Contact totalement vide (créé puis abandonné) -> on le retire pour ne pas polluer la liste
+  const c = getContact(state.editingContactId);
+  if (c && !c.name && !c.birthday && !(c.phones || []).length && !(c.emails || []).length) {
+    db.removeContact(c.id);
+  }
+  state.editingContactId = null;
+  $("contactOverlay").classList.remove("open");
+  document.body.style.overflow = "";
   render();
 }
 
