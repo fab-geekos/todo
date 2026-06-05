@@ -554,6 +554,14 @@
 
   .editor-subtasks { margin-top: 22px; border-top: 1px solid var(--border); padding-top: 14px; }
   .editor-subtasks-head { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 8px; }
+  .editor-sub-search {
+    width: 100%; font-family: inherit; font-size: 14px; color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+    background: var(--card); outline: none; margin-bottom: 8px;
+  }
+  .editor-sub-search:focus { border-color: var(--accent); }
+  /* Vue Liste de courses : un rayon est une catégorie, pas de barre de priorité colorée */
+  body.view-courses .task { border-left-color: transparent; }
   .editor-sub-list { list-style: none; display: flex; flex-direction: column; }
   .editor-sub {
     display: flex; align-items: center; gap: 10px; padding: 8px 0;
@@ -938,8 +946,8 @@
     <button class="nav-item soon">
       <span class="icon">🏷️</span> Labels <span class="count">bientôt</span>
     </button>
-    <button class="nav-item soon">
-      <span class="icon">🛒</span> Liste de course <span class="count">bientôt</span>
+    <button class="nav-item" data-view="courses">
+      <span class="icon">🛒</span> Liste de courses
     </button>
     <button class="nav-item soon">
       <span class="icon">💉</span> Vaccins <span class="count">bientôt</span>
@@ -1113,6 +1121,7 @@
         </div>
         <div class="editor-subtasks" id="editSubtasks">
           <div class="editor-subtasks-head" id="editSubHead">Sous-tâches</div>
+          <input class="editor-sub-search" id="editSubSearch" type="text" placeholder="🔍 Rechercher un produit…" autocomplete="off" hidden>
           <ul class="editor-sub-list" id="editSubList"></ul>
           <div class="editor-addsub" id="editAddSubBtn"><span class="plus-sm" style="font-size:16px;">+</span> Ajouter une sous-tâche</div>
           <input class="editor-addsub-input" id="editAddSubInput" type="text" placeholder="Nouvelle sous-tâche…" hidden>
@@ -1203,7 +1212,8 @@ let state = {
   contactSearch: "",      // texte de recherche dans la vue Contacts
   weekAnchor: null,       // début (ms) de la semaine affichée dans Prochainement (null = aujourd'hui)
   expandedTasks: new Set(),  // ids dépliés dans le Todo (tout est replié par défaut)
-  expandedWeek: new Set()    // ids dépliés dans la vue Prochainement (indépendant du Todo)
+  expandedWeek: new Set(),   // ids dépliés dans la vue Prochainement (indépendant du Todo)
+  editSubFilter: ""          // texte de recherche des produits dans l'éditeur (liste de courses)
 };
 
 /* =========================================================
@@ -1282,6 +1292,13 @@ const getTask = id => state.tasks.find(t => t.id === id);
 const getProject = id => state.projects.find(p => p.id === id);
 const getContact = id => state.contacts.find(c => c.id === id);
 const isRoot = t => t.parentTaskId == null;   // tâche racine = sans parent
+// Liste de courses : un rayon = tâche racine marquée list "courses". Un produit = sous-tâche d'un rayon.
+const isShoppingRoot = t => t.parentTaskId == null && t.list === "courses";
+function isShoppingTask(t) {           // true si la racine de t est un rayon
+  let cur = t;
+  while (cur && cur.parentTaskId) cur = getTask(cur.parentTaskId);
+  return !!(cur && cur.list === "courses");
+}
 
 function startOfDay(d) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
 function endOfToday() { return startOfDay(new Date()).getTime() + DAY_MS - 1; }
@@ -1580,8 +1597,8 @@ function visibleTasks() {
     state.flatList = false;
     return agendaSort(list);
   } else {
-    // Todo : seulement les racines ; les sous-tâches s'affichent en dépliant
-    list = list.filter(isRoot);
+    // Todo : seulement les racines (hors rayons de la liste de courses) ; les sous-tâches s'affichent en dépliant
+    list = list.filter(t => isRoot(t) && !isShoppingRoot(t));
     state.flatList = false;
   }
   return sortTasks(list);
@@ -1724,20 +1741,28 @@ function render() {
     eisenhower: { t: "Eisenhower", s: "Tes tâches classées par urgence et importance" },
     projects: { t: "Projets", s: "Tes projets, organisés par statut" },
     contacts: { t: "Contacts", s: "Tes contacts et leurs projets délégués" },
-    week: { t: "Prochainement", s: "Tes échéances des 7 prochains jours" }
+    week: { t: "Prochainement", s: "Tes échéances des 7 prochains jours" },
+    courses: { t: "Liste de courses", s: "Tes rayons et les produits à acheter" }
   };
   const info = titles[state.view] || { t: "", s: "" };
   document.getElementById("viewTitle").textContent = info.t;
   document.getElementById("viewSub").textContent = info.s;
 
-  // La saisie rapide et le tri ne concernent que les vues de tâches simples
-  const tasksView = state.view === "todo" || state.view === "today";
+  // La saisie rapide et le tri ne concernent que les vues de tâches simples (+ liste de courses)
+  const courses = state.view === "courses";
+  const tasksView = state.view === "todo" || state.view === "today" || courses;
   $("toolbar").style.display = state.view === "todo" ? "flex" : "none";
   document.querySelector(".quick-add").style.display = tasksView ? "block" : "none";
+  // En liste de courses : la saisie rapide crée un RAYON (placeholder dédié, pas de priorité)
+  document.body.classList.toggle("view-courses", courses);
+  $("quickInput").placeholder = courses
+    ? "Ajouter un rayon (ex : Fruits et légumes)"
+    : "Ex : Acheter du pain demain 18h";
+  document.querySelector(".quick-add .flags").style.display = courses ? "none" : "";
 
   // Compteurs : Todo compte les racines (cohérent avec l'affichage) ; Aujourd'hui compte toute échéance du jour
   const active = state.tasks.filter(t => !t.completed);
-  $("count-todo").textContent = active.filter(isRoot).length || "";
+  $("count-todo").textContent = active.filter(t => isRoot(t) && !isShoppingRoot(t)).length || "";
   $("count-today").textContent = active.filter(isDueToday).length || "";
 
   // Nav active (la page projet garde "Projets" en surbrillance)
@@ -1784,6 +1809,9 @@ function render() {
   } else if (state.view === "week") {
     $("weekView").style.display = "block";
     renderWeek();
+  } else if (state.view === "courses") {
+    $("taskList").style.display = "flex";
+    renderCourses();
   } else {
     $("taskList").style.display = "flex";
     renderList();
@@ -1816,6 +1844,14 @@ function renderList() {
       if (t && !t.dueTime) li.classList.add("agenda-drag");
     });
   }
+}
+
+// Liste de courses : chaque rayon (racine list:"courses") est une carte qui englobe ses produits.
+// Réutilise le rendu en arbre ; les rayons restent affichés même quand tous les produits sont cochés.
+function renderCourses() {
+  const rayons = state.tasks.filter(isShoppingRoot);
+  const emptyHtml = `<div class="big">🛒</div>Aucun rayon. Ajoute-en un ci-dessus (ex : Fruits et légumes).`;
+  renderTasksInto($("taskList"), rayons, emptyHtml);
 }
 
 // Remplit une <ul> avec des cartes, ou un message si la liste est vide.
@@ -1860,7 +1896,7 @@ function renderEisenhowerInto(board, tasks, opts = {}) {
 }
 
 function renderEisenhower() {
-  renderEisenhowerInto($("eisenGrid"), state.tasks);
+  renderEisenhowerInto($("eisenGrid"), state.tasks.filter(t => !isShoppingRoot(t)));
 }
 
 // Synthèse : tâches des projets En cours et Délégué, classées par priorité.
@@ -1918,7 +1954,8 @@ function refreshCompletionUpwards(taskId) {
   const task = getTask(taskId);
   if (!task) return;
   const kids = childTasks(taskId);
-  if (kids.length > 0) {
+  // Les rayons de la liste de courses ne se cochent jamais automatiquement (ils restent visibles).
+  if (kids.length > 0 && !isShoppingRoot(task)) {
     const allDone = kids.every(k => k.completed);
     task.completed = allDone;
     task.completedAt = allDone ? Date.now() : null;
@@ -2050,17 +2087,32 @@ function readFlags(container) {
   return { urgent: on("urgent"), important: on("important") };
 }
 
+// Crée un rayon de la liste de courses : tâche racine marquée list:"courses", sans date ni priorité
+// (pas de parsing du texte : un nom de rayon est pris tel quel).
+function addShoppingRayon(title) {
+  db.add({
+    id: uid(), title: title.trim(), note: "",
+    dueDate: null, dueTime: null, urgent: false, important: false,
+    completed: false, createdAt: Date.now(),
+    projectId: null, parentTaskId: null, recurrence: null, list: "courses"
+  });
+}
+
 function addTask() {
   const input = $("quickInput");
   const raw = input.value.trim();
   if (!raw) return;
 
-  // makeTask déduit urgent/important du texte ; on y ajoute les boutons cliqués
-  const flags = readFlags(document.querySelector(".quick-add"));
-  const task = makeTask(raw);
-  task.urgent = task.urgent || flags.urgent;
-  task.important = task.important || flags.important;
-  db.add(task);
+  if (state.view === "courses") {
+    addShoppingRayon(raw);                          // la saisie rapide crée un rayon
+  } else {
+    // makeTask déduit urgent/important du texte ; on y ajoute les boutons cliqués
+    const flags = readFlags(document.querySelector(".quick-add"));
+    const task = makeTask(raw);
+    task.urgent = task.urgent || flags.urgent;
+    task.important = task.important || flags.important;
+    db.add(task);
+  }
 
   input.value = "";
   document.querySelectorAll(".quick-add .flag").forEach(f => f.classList.remove("on"));
@@ -2430,6 +2482,17 @@ function renderContacts() {
 function toggleTask(id) {
   const t = getTask(id);
   if (!t) return;
+  // Rayon (liste de courses) : la racine n'est JAMAIS cochée. Son bouton sert à tout cocher
+  // ("tout acheté") ou tout décocher si déjà tout coché ("tout remettre dans la liste").
+  if (isShoppingRoot(t)) {
+    const kids = childTasks(t.id);
+    const allDone = kids.length > 0 && kids.every(k => k.completed);
+    setCompletedDeep(t.id, !allDone);
+    t.completed = false;
+    db.save();
+    render();
+    return;
+  }
   // Tâche récurrente (racine, sans sous-tâche) : cocher = passer à la prochaine occurrence.
   if (!t.completed && t.recurrence && t.dueDate != null && childTasks(t.id).length === 0) {
     advanceRecurrence(t);
@@ -2681,6 +2744,16 @@ function openEditor(id) {
   renderEditorProjectPicker(t);
   renderEditorRecurrence(t);
   renderEditorBreadcrumb(t);
+
+  // Mode liste de courses : aucun paramètre latéral utile ; recherche de produits sur un rayon.
+  const shop = isShoppingTask(t);
+  document.querySelector(".editor-side").style.display = shop ? "none" : "";
+  state.editSubFilter = "";
+  const subSearch = $("editSubSearch");
+  subSearch.value = "";
+  subSearch.hidden = !isShoppingRoot(t);          // recherche seulement sur un rayon (pas un produit)
+  $("editAddSubInput").placeholder = isShoppingRoot(t) ? "Nouveau produit…" : "Nouvelle sous-tâche…";
+
   renderEditorSubtasks(t);
   autoGrowDesc();
 
@@ -2889,10 +2962,14 @@ function renderEditorSubtasks(task) {
   const kids = childTasks(task.id);
   const canAdd = taskDepth(task) < MAX_TASK_DEPTH;
   const { done, total } = subtaskProgress(task.id);
-  $("editSubHead").textContent = total > 0 ? `Sous-tâches  ${done}/${total}` : "Sous-tâches";
+  const word = isShoppingRoot(task) ? "Produits" : "Sous-tâches";
+  $("editSubHead").textContent = total > 0 ? `${word}  ${done}/${total}` : word;
+  // Filtre de recherche (liste de courses) : ne montre que les produits correspondants.
+  const filter = (state.editSubFilter || "").trim().toLowerCase();
+  const shown = filter ? kids.filter(k => k.title.toLowerCase().includes(filter)) : kids;
   const ul = $("editSubList");
   ul.innerHTML = "";
-  kids.forEach(k => {
+  shown.forEach(k => {
     const li = document.createElement("li");
     li.className = "editor-sub" + (k.completed ? " done" : "");
     li.dataset.id = k.id;
@@ -3357,6 +3434,7 @@ function bindEvents() {
     if ($("overlay").classList.contains("open")) {
       const ae = document.activeElement;
       if (ae === $("editAddSubInput")) return;          // saisie d'une sous-tâche : Entrée = ajouter (reste ouvert)
+      if (ae === $("editSubSearch")) return;            // recherche de produit : Entrée ne ferme pas l'éditeur
       if (ae && ae.closest && ae.closest(".picker-panel")) return;  // recherche dans un menu déroulant (projet)
       if (ae && ae.tagName === "SELECT") return;        // listes déroulantes (récurrence…)
       e.preventDefault();
@@ -3385,6 +3463,12 @@ function bindEvents() {
   });
   $("editAddSubInput").addEventListener("blur", e => {
     if (!e.target.value.trim()) { e.target.hidden = true; $("editAddSubBtn").style.display = ""; }
+  });
+  // Recherche de produits (liste de courses) : filtre la liste des sous-tâches en direct
+  $("editSubSearch").addEventListener("input", e => {
+    state.editSubFilter = e.target.value;
+    const t = getTask(state.editingId);
+    if (t) renderEditorSubtasks(t);
   });
   $("editSubList").addEventListener("click", e => {
     const li = e.target.closest(".editor-sub");
