@@ -509,12 +509,6 @@
   .contact-card { cursor: pointer; transition: border-color .15s; }
   .contact-card:hover { border-color: var(--accent); }
   .contact-bday-show { font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
-  /* Coordonnées (téléphones + e-mails) sur la carte : compactes, affichées seulement si remplies */
-  .contact-fields { margin-top: 8px; display: flex; flex-direction: column; gap: 3px; }
-  .contact-field { font-size: 13px; display: flex; align-items: baseline; gap: 6px; color: var(--text); }
-  .cf-icon { font-size: 12px; flex-shrink: 0; }
-  .cf-label { color: var(--muted); font-size: 12px; flex-shrink: 0; }
-  .cf-value { word-break: break-all; }
 
   /* ===== FICHE CONTACT (modale) ===== */
   .contact-editor { max-width: 520px; }
@@ -2434,17 +2428,7 @@ function contactCard(contact) {
   // Projets délégués à ce contact
   const projects = state.projects.filter(p => p.status === "delegue" && p.assigneeId === contact.id);
   const bday = formatBirthday(contact.birthday);
-
-  // Coordonnées (téléphones + e-mails) : affichées seulement si remplies, au-dessus des projets
-  const fields = [
-    ...(contact.phones || []).map(p => ({ icon: "📞", label: p.label, value: p.value })),
-    ...(contact.emails || []).map(p => ({ icon: "✉️", label: p.label, value: p.value }))
-  ].filter(f => f.value);
-  const fieldsHtml = fields.length
-    ? `<div class="contact-fields">` + fields.map(f =>
-        `<div class="contact-field"><span class="cf-icon">${f.icon}</span>${f.label ? `<span class="cf-label">${esc(f.label)}</span>` : ""}<span class="cf-value">${esc(f.value)}</span></div>`
-      ).join("") + `</div>`
-    : "";
+  // Les téléphones / e-mails ne sont PAS affichés sur la carte : seulement dans la fiche (à l'ouverture).
 
   const projectsHtml = projects.length === 0
     ? `<div class="contact-none">Aucun projet délégué</div>`
@@ -2458,7 +2442,6 @@ function contactCard(contact) {
       ${bday ? `<span class="contact-bday-show">🎂 ${esc(bday)}</span>` : ""}
       <button class="contact-del" type="button" data-action="del" aria-label="Supprimer">×</button>
     </div>
-    ${fieldsHtml}
     ${projectsHtml}
   `;
   return li;
