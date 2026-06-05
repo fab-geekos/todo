@@ -997,6 +997,7 @@
     <div class="todo-tabs" id="todoTabs">
       <button class="subview-btn" data-todotab="all">Toutes</button>
       <button class="subview-btn" data-todotab="recur">🔁 Récurrentes</button>
+      <button class="subview-btn" data-todotab="bday">🎂 Anniversaires</button>
     </div>
 
     <div class="toolbar" id="toolbar">
@@ -1795,10 +1796,15 @@ function render() {
     $("todoTabs").querySelectorAll(".subview-btn").forEach(b =>
       b.classList.toggle("active", b.dataset.todotab === state.todoTab));
     const recur = state.todoTab === "recur";
+    const bday = state.todoTab === "bday";
     // Onglet Récurrentes : pas de tri par création (on bascule sur échéance le cas échéant)
     $("sortSelect").querySelector('option[value="created"]').hidden = recur;
     if (recur && state.sort === "created") { state.sort = "due"; $("sortSelect").value = "due"; }
+    // Onglet Anniversaires : ni tri ni saisie rapide (ce sont des contacts, pas des tâches)
+    $("toolbar").style.display = bday ? "none" : "flex";
+    document.querySelector(".quick-add").style.display = bday ? "none" : "block";
     if (recur) document.getElementById("viewSub").textContent = "Tes tâches récurrentes, par échéance";
+    if (bday) document.getElementById("viewSub").textContent = "Tous les anniversaires à venir";
   }
 
   // Compteurs : Todo compte les racines (cohérent avec l'affichage) ; Aujourd'hui compte toute échéance du jour
@@ -1875,6 +1881,17 @@ function renderTasksInto(ul, tasks, emptyHtml, flat = false) {
 
 function renderList() {
   const ul = $("taskList");
+  // Onglet Anniversaires (vue Todo) : tous les anniversaires à venir, triés du plus proche au plus lointain.
+  if (state.view === "todo" && state.todoTab === "bday") {
+    const list = upcomingBirthdays();
+    if (list.length === 0) {
+      renderTasksInto(ul, [], `<div class="big">🎂</div>Aucun anniversaire. Ajoute des dates dans la vue Contacts.`, false);
+      return;
+    }
+    ul.innerHTML = "";
+    list.forEach(b => ul.appendChild(birthdayCard(b, true)));
+    return;
+  }
   const tasks = visibleTasks();
   const isToday = state.view === "today";
   // Aujourd'hui : on ajoute les anniversaires du jour (cartes en lecture seule + rond "souhaité").
@@ -1902,16 +1919,23 @@ function renderList() {
   }
 }
 
-// Carte d'anniversaire (vue Aujourd'hui) : lecture seule (non ouvrable), avec un rond "souhaité"
-// qui marque l'anniversaire comme fait et le renvoie à l'année suivante.
-function birthdayCard(b) {
+// Carte d'anniversaire (Aujourd'hui & onglet Anniversaires) : lecture seule (non ouvrable),
+// avec un rond "souhaité" qui marque l'anniversaire comme fait et le renvoie à l'année suivante.
+// withDate=true (onglet Anniversaires) : affiche la date de la prochaine occurrence.
+function birthdayCard(b, withDate = false) {
   const li = document.createElement("li");
   li.className = "task bday-card";
   li.dataset.bdayId = b.contact.id;
   li.dataset.bdayYear = b.year;
-  const note = b.shifted
-    ? `<div class="task-note">Anniversaire le 29/02 — fêté le 28 février cette année</div>`
-    : `<div class="task-note">Anniversaire</div>`;
+  let note;
+  if (b.shifted) {
+    note = `<div class="task-note">Anniversaire le 29/02 — fêté le 28 février ${b.year}</div>`;
+  } else if (withDate) {
+    const isTodayB = b.ts != null && startOfDay(b.ts).getTime() === startOfDay(new Date()).getTime();
+    note = `<div class="task-note">📅 ${esc(isTodayB ? "Aujourd'hui 🎉" : formatBirthday(b.contact.birthday))}</div>`;
+  } else {
+    note = `<div class="task-note">Anniversaire</div>`;
+  }
   li.innerHTML = `
     <div class="task-row no-open">
       <span class="task-chevron-spacer"></span>
@@ -2390,6 +2414,32 @@ function birthdaysOnDay(dayTs) {
     state.contacts.filter(c => c.birthday === "02-29" && notDone(c)).forEach(c => result.push({ contact: c, shifted: true, year }));
   }
   return result;
+}
+
+// Prochaine occurrence d'un anniversaire (à partir d'un jour), en sautant les années déjà "souhaitées".
+// Renvoie { ts, year, shifted } ou null. (29/02 reporté au 28/02 les années non bissextiles.)
+function nextBirthdayOccurrence(contact, fromTs) {
+  if (!contact.birthday) return null;
+  const [mm, dd] = contact.birthday.split("-").map(Number);
+  const from = startOfDay(fromTs).getTime();
+  for (let i = 0; i < 6; i++) {
+    const y = new Date(fromTs).getFullYear() + i;
+    let day = dd, mon = mm - 1, shifted = false;
+    if (mm === 2 && dd === 29 && !isLeapYear(y)) { day = 28; shifted = true; }
+    const occ = startOfDay(new Date(y, mon, day)).getTime();
+    if (occ >= from && contact.bdayDoneYear !== y) return { ts: occ, year: y, shifted };
+  }
+  return null;
+}
+
+// Tous les anniversaires à venir (un par contact daté), tries du plus proche au plus lointain.
+function upcomingBirthdays() {
+  const today = startOfDay(new Date()).getTime();
+  return state.contacts
+    .filter(c => c.birthday)
+    .map(c => { const o = nextBirthdayOccurrence(c, today); return o ? { contact: c, year: o.year, ts: o.ts, shifted: o.shifted } : null; })
+    .filter(Boolean)
+    .sort((a, b) => a.ts - b.ts);
 }
 
 // Sous-arbre compact d'une tâche pour la vue semaine (chevron, guides en arbre partagés, clics délégués).
