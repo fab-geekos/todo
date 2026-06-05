@@ -483,16 +483,6 @@
   }
   .contact-head { display: flex; align-items: center; gap: 10px; }
   .contact-name { font-weight: 600; font-size: 16px; flex: 1; word-break: break-word; }
-  .contact-bday {
-    font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px;
-    cursor: pointer; border-radius: 8px; padding: 2px 6px; transition: background .15s;
-  }
-  .contact-bday:hover { background: var(--bg); }
-  .contact-bday-input {
-    width: 70px; font-family: inherit; font-size: 13px; color: var(--text);
-    border: 1px solid var(--accent); border-radius: 8px; padding: 4px 8px;
-    background: var(--card); outline: none; text-align: center;
-  }
   .contact-del {
     opacity: 0; background: none; border: none; cursor: pointer;
     color: var(--muted); font-size: 18px; line-height: 1; padding: 0 2px; transition: opacity .2s, color .2s;
@@ -570,7 +560,6 @@
   .vac-milestone.done .vac-ms-age, .vac-milestone.done .vac-ms-date { color: var(--muted); }
   .vac-ms-date { font-size: 13px; color: var(--muted); flex: 1; }
   .vac-ms-tag { font-size: 11px; font-weight: 600; color: var(--accent); background: rgba(74,111,165,.1); border-radius: 8px; padding: 1px 7px; flex-shrink: 0; }
-  .vac-note { font-size: 12px; color: var(--muted); margin-top: 12px; font-style: italic; }
 
   /* ===== MODAL ÉDITION ===== */
   .overlay {
@@ -1426,7 +1415,9 @@ function isShoppingTask(t) {           // true si la racine de t est un rayon
 }
 
 function startOfDay(d) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
-function endOfToday() { return startOfDay(new Date()).getTime() + DAY_MS - 1; }
+function todayTs() { return startOfDay(new Date()).getTime(); }   // aujourd'hui à minuit, en ms
+function pad2(n) { return String(n).padStart(2, "0"); }           // entier -> 2 chiffres ("3" -> "03")
+function endOfToday() { return todayTs() + DAY_MS - 1; }
 function isDueToday(t) { return t.dueDate != null && t.dueDate <= endOfToday(); }
 
 /* =========================================================
@@ -1504,7 +1495,7 @@ function nextOccurrence(fromTs, rec) {
 
 // Avance une tâche récurrente jusqu'à son prochain créneau strictement futur.
 function advanceRecurrence(task) {
-  const today = startOfDay(new Date()).getTime();
+  const today = todayTs();
   let next = nextOccurrence(task.dueDate, task.recurrence);
   let guard = 0;
   while (next != null && next <= today && guard++ < 5000) next = nextOccurrence(next, task.recurrence);
@@ -2002,7 +1993,7 @@ function renderList() {
   const tasks = visibleTasks();
   const isToday = state.view === "today";
   // Aujourd'hui : anniversaires du jour + rappel vaccin si l'échéance approche (~2 mois) ou est dépassée.
-  const bdays = isToday ? birthdaysOnDay(startOfDay(new Date()).getTime()) : [];
+  const bdays = isToday ? birthdaysOnDay(todayTs()) : [];
   const vacCard = isToday ? vaccineAgendaCard() : null;
 
   if (tasks.length === 0 && bdays.length === 0 && !vacCard) {
@@ -2040,7 +2031,7 @@ function birthdayCard(b, withDate = false) {
   if (b.shifted) {
     note = `<div class="task-note">Anniversaire le 29/02 — fêté le 28 février ${b.year}</div>`;
   } else if (withDate) {
-    const isTodayB = b.ts != null && startOfDay(b.ts).getTime() === startOfDay(new Date()).getTime();
+    const isTodayB = b.ts != null && startOfDay(b.ts).getTime() === todayTs();
     note = `<div class="task-note">📅 ${esc(isTodayB ? "Aujourd'hui 🎉" : formatBirthday(b.contact.birthday))}</div>`;
   } else {
     note = `<div class="task-note">Anniversaire</div>`;
@@ -2508,14 +2499,12 @@ function isLeapYear(y) { return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
 function birthdaysOnDay(dayTs) {
   const d = new Date(dayTs);
   const year = d.getFullYear();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  const key = mm + "-" + dd;
+  const key = pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
   // Anniversaire déjà "souhaité" pour cette année-là -> on ne l'affiche plus (renvoyé à l'an prochain).
   const notDone = c => c.bdayDoneYear !== year;
   const result = state.contacts.filter(c => c.birthday === key && notDone(c)).map(c => ({ contact: c, shifted: false, year }));
   // 29 février inexistant : on l'affiche le 28 février, avec une note.
-  if (mm === "02" && dd === "28" && !isLeapYear(year)) {
+  if (key === "02-28" && !isLeapYear(year)) {
     state.contacts.filter(c => c.birthday === "02-29" && notDone(c)).forEach(c => result.push({ contact: c, shifted: true, year }));
   }
   return result;
@@ -2539,7 +2528,7 @@ function nextBirthdayOccurrence(contact, fromTs) {
 
 // Tous les anniversaires à venir (un par contact daté), tries du plus proche au plus lointain.
 function upcomingBirthdays() {
-  const today = startOfDay(new Date()).getTime();
+  const today = todayTs();
   return state.contacts
     .filter(c => c.birthday)
     .map(c => { const o = nextBirthdayOccurrence(c, today); return o ? { contact: c, year: o.year, ts: o.ts, shifted: o.shifted } : null; })
@@ -2590,7 +2579,7 @@ function weekTaskTree(task, depth, ancestorContinues = [], isLast = false, late 
 }
 
 function renderWeek() {
-  const today = startOfDay(new Date()).getTime();
+  const today = todayTs();
   const anchor = startOfDay(state.weekAnchor != null ? state.weekAnchor : today).getTime();
   const days = Array.from({ length: 7 }, (_, i) => anchor + i * DAY_MS);
 
@@ -2688,7 +2677,7 @@ function rescheduleByDrop(itemEl, colEl) {
   const t = getTask(itemEl.dataset.id);
   if (!t || colEl.dataset.day == null) return;
   const targetDay = Number(colEl.dataset.day);
-  const todayTs = startOfDay(new Date()).getTime();
+  const todayTs = todayTs();
   const homeDay = (t.dueDate < todayTs) ? todayTs : startOfDay(t.dueDate).getTime(); // retards = colonne d'aujourd'hui
   if (targetDay !== homeDay) t.dueDate = targetDay;
 }
@@ -2698,7 +2687,7 @@ function setWeekAddDayLabel() {
   const el = $("weekAddDayLabel");
   if (weekAddDay == null) { el.textContent = "📥 Sans date"; return; }
   const d = new Date(weekAddDay);
-  const isToday = startOfDay(new Date()).getTime() === weekAddDay;
+  const isToday = todayTs() === weekAddDay;
   const cap = s => s.replace(/^./, c => c.toUpperCase());
   const label = (isToday ? "Aujourd'hui · " : cap(WEEKDAY_LABELS[d.getDay()]) + " ")
               + d.getDate() + " " + MONTH_LABELS[d.getMonth()];
@@ -2755,7 +2744,7 @@ function ageDate(birthDate, age) {
 // Initialise les jalons "faits" (ceux déjà passés) une seule fois, puisque l'utilisateur est à jour.
 function initVaccineDoneIfNeeded() {
   if (state.vaccineDone != null || !state.birthDate) return;
-  const today = startOfDay(new Date()).getTime();
+  const today = todayTs();
   state.vaccineDone = DTP_AGES.filter(a => ageDate(state.birthDate, a) < today);
   db.save();
 }
@@ -2768,7 +2757,7 @@ function nextVaccine() {
 }
 // Statut d'un rappel selon sa date : { cls, icon, label }
 function vaccineStatus(ts) {
-  const today = startOfDay(new Date()).getTime();
+  const today = todayTs();
   const days = Math.round((ts - today) / DAY_MS);
   if (days < 0) return { cls: "overdue", icon: "⚠️", label: `en retard (depuis ${durationLabel(-days)})` };
   if (days <= VACCINE_LEAD_DAYS) return { cls: "soon", icon: "⏳", label: `bientôt — dans ${durationLabel(days)}` };
@@ -2789,7 +2778,7 @@ function formatLongDate(ts) {
 function vaccineDueReminder() {
   const next = nextVaccine();
   if (!next) return null;
-  const today = startOfDay(new Date()).getTime();
+  const today = todayTs();
   return (today >= next.ts - VACCINE_LEAD_DAYS * DAY_MS) ? next : null;
 }
 // Coche/décoche un jalon de rappel
@@ -2809,8 +2798,7 @@ function saveBirthDate(raw) {
   if (!m) { render(); return; }   // incomplet : on annule (le re-render remet la valeur stockée)
   const day = +m[1], mon = +m[2], year = +m[3];
   if (day < 1 || day > 31 || mon < 1 || mon > 12 || year < 1900 || year > new Date().getFullYear()) { render(); return; }
-  const pad = n => String(n).padStart(2, "0");
-  const bd = year + "-" + pad(mon) + "-" + pad(day);
+  const bd = year + "-" + pad2(mon) + "-" + pad2(day);
   if (bd !== state.birthDate) { state.birthDate = bd; state.vaccineDone = null; }  // changement -> on réinitialise les jalons faits
   initVaccineDoneIfNeeded();
   db.save();
@@ -2850,7 +2838,6 @@ function renderVaccines() {
       <div class="vac-card">
         <div class="vac-card-title">💉 Rappel dTP <span class="vac-card-sub">Diphtérie · Tétanos · Poliomyélite</span></div>
         <div class="vac-milestones">${milestonesHtml}</div>
-        <div class="vac-note">Calendrier français — rappels adultes à âges fixes (25 / 45 / 65 ans). Coche un rappel une fois fait.</div>
       </div>`;
   }
 
@@ -3069,7 +3056,7 @@ function renderCal() {
   const first = cal.month;
   const lead = (first.getDay() + 6) % 7;   // décalage avant le 1er (lundi = 0)
   const daysInMonth = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
-  const todayTs = startOfDay(new Date()).getTime();
+  const todayTs = todayTs();
   const selTs = cal.date != null ? startOfDay(cal.date).getTime() : null;
 
   let cells = "";
@@ -3102,7 +3089,7 @@ function renderCalTimeField() {
 
 function calShortcut(sc) {
   if (sc === "none") { cal.date = null; cal.time = null; applyCalendar(); return; }
-  const t0 = startOfDay(new Date()).getTime();
+  const t0 = todayTs();
   let ts = t0;
   if (sc === "tomorrow") ts = t0 + DAY_MS;
   else if (sc === "weekend") { const wd = new Date(t0).getDay(); ts = t0 + ((6 - wd + 7) % 7) * DAY_MS; }     // prochain samedi
@@ -3663,7 +3650,7 @@ function bindEvents() {
 
   // Navigation de la vue semaine (Prochainement)
   const shiftWeek = days => {
-    const base = state.weekAnchor != null ? state.weekAnchor : startOfDay(new Date()).getTime();
+    const base = state.weekAnchor != null ? state.weekAnchor : todayTs();
     state.weekAnchor = startOfDay(base + days * DAY_MS).getTime();
     render();
   };
@@ -3672,7 +3659,7 @@ function bindEvents() {
   $("weekToday").addEventListener("click", () => { state.weekAnchor = null; render(); });
   // 2c — Cliquer le mois ouvre un calendrier de navigation : la date choisie devient le début de la semaine.
   $("weekMonth").addEventListener("click", () => {
-    const base = state.weekAnchor != null ? state.weekAnchor : startOfDay(new Date()).getTime();
+    const base = state.weekAnchor != null ? state.weekAnchor : todayTs();
     openCalendar({
       // navigation : pas d'heure, pas de raccourcis, et un clic sur un jour valide directement
       dueDate: base, showTime: false, showShortcuts: false, applyOnPick: true,
@@ -4080,19 +4067,6 @@ function deleteContact(id) {
   render();
 }
 
-// Enregistre l'anniversaire saisi (JJ/MM) au format stocké "MM-JJ". Vide = effacer.
-function saveBirthday(id, raw) {
-  const t = (raw || "").trim();
-  if (t === "") { db.updateContact(id, { birthday: null }); render(); return; }
-  const m = t.match(/^(\d{1,2})\/(\d{1,2})$/);
-  if (!m) { render(); return; }   // format incomplet : on annule sans rien casser
-  const day = parseInt(m[1], 10), mon = parseInt(m[2], 10);
-  if (day < 1 || day > 31 || mon < 1 || mon > 12) { render(); return; }
-  const pad = n => String(n).padStart(2, "0");
-  db.updateContact(id, { birthday: pad(mon) + "-" + pad(day) });
-  render();
-}
-
 /* ---- Fiche contact (modale) ---- */
 // Convertit une saisie "JJ/MM" en stockage "MM-JJ". null = effacer ; undefined = saisie invalide (ne pas toucher).
 function birthdayFromInput(raw) {
@@ -4102,8 +4076,7 @@ function birthdayFromInput(raw) {
   if (!m) return undefined;
   const day = parseInt(m[1], 10), mon = parseInt(m[2], 10);
   if (day < 1 || day > 31 || mon < 1 || mon > 12) return undefined;
-  const pad = n => String(n).padStart(2, "0");
-  return pad(mon) + "-" + pad(day);
+  return pad2(mon) + "-" + pad2(day);
 }
 // HTML d'une ligne coordonnée (libellé libre + valeur + suppression)
 function contactRowHtml(entry, valuePlaceholder) {
