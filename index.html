@@ -585,7 +585,7 @@
   /* Vue Étiquettes (pleine largeur) */
   .labels-view { display: none; }
   .label-add { display: flex; gap: 10px; align-items: center; margin-bottom: 18px; }
-  .label-add-color { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--border); cursor: pointer; flex-shrink: 0; }
+  .label-add-color { width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--border); cursor: pointer; flex-shrink: 0; }
   .label-list { display: flex; flex-direction: column; gap: 2px; }
   .label-row { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-radius: 10px; cursor: pointer; transition: background .15s; }
   .label-row:hover { background: var(--hover); }
@@ -2929,7 +2929,24 @@ function vaccineAgendaCard() {
 /* =========================================================
    LABELS (étiquettes transversales — plusieurs par tâche racine)
    ========================================================= */
-const LABEL_COLORS = ["#E0524A","#E8924A","#F2B705","#7CB518","#2D936C","#17A2B8","#4A6FA5","#5C6BC0","#7E57C2","#AB47BC","#C9637E","#EC407A","#8D6E63","#607D8B","#26A69A"];
+// Palette rangée du plus chaud au plus froid (ordre stable, identique dans toutes les vues)
+const LABEL_COLORS = [
+  "#E0524A", // rouge
+  "#EC407A", // rose vif
+  "#C9637E", // rose
+  "#E8924A", // orange
+  "#8D6E63", // brun
+  "#F2B705", // ambre
+  "#7CB518", // citron vert
+  "#2D936C", // vert
+  "#26A69A", // vert d'eau
+  "#17A2B8", // cyan
+  "#607D8B", // bleu-gris
+  "#4A6FA5", // bleu
+  "#5C6BC0", // indigo
+  "#7E57C2", // violet
+  "#AB47BC"  // pourpre
+];
 
 const getLabel = id => state.labels.find(l => l.id === id);
 function taskLabels(task) { return (task.labels || []).map(getLabel).filter(Boolean); }   // objets, ids supprimés ignorés
