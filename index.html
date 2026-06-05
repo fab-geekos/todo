@@ -566,29 +566,29 @@
   .label-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); white-space: nowrap; line-height: 1.5; }
   .label-chip-lg { font-size: 15px; font-weight: 600; color: var(--text); gap: 7px; }
   .label-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
-  .label-chip-lg .label-dot { width: 12px; height: 12px; }
+  .label-tag-icon { flex-shrink: 0; display: inline-block; }
   /* Étiquettes sur la carte : ligne dédiée, entre la tâche et la date/projet */
   .task-labels { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 5px; }
   /* Picker (fiche + quick-add) */
   .label-chips-trigger { display: inline-flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
   .picker-up .picker-panel { top: auto; bottom: calc(100% + 4px); }    /* s'ouvre vers le haut */
-  .picker-option-name { flex: 1; }
+  .picker-option-name { flex: 1; white-space: nowrap; }
   .label-dot-btn { border: none; padding: 0; cursor: pointer; width: 13px; height: 13px; transition: transform .12s; }
   .label-dot-btn:hover { transform: scale(1.25); }
   .picker-option.picker-create { color: var(--accent); font-weight: 500; }
-  /* Bouton étiquettes du quick-add (compact, à côté d'Important/Urgent) */
+  /* Bouton étiquettes du quick-add (compact) + panneau élargi pour la lisibilité */
   .quick-labels { width: auto; }
   .quick-labels .picker-trigger { width: auto; border-radius: 20px; padding: 5px 12px; font-size: 13px; gap: 6px; }
+  .quick-labels .picker-panel { left: 0; right: auto; width: 280px; }
   /* Palette de couleur flottante (recoloration + choix à la création) */
   .color-palette { position: fixed; z-index: 300; background: var(--card); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 8px; display: flex; flex-wrap: wrap; gap: 6px; width: 184px; }
   /* Vue Étiquettes (pleine largeur) */
   .labels-view { display: none; }
-  .label-add { display: flex; gap: 8px; align-items: center; margin-bottom: 18px; max-width: 560px; }
-  .label-add-color { width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--border); cursor: pointer; flex-shrink: 0; }
+  .label-add { display: flex; gap: 10px; align-items: center; margin-bottom: 18px; }
+  .label-add-color { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--border); cursor: pointer; flex-shrink: 0; }
   .label-list { display: flex; flex-direction: column; gap: 2px; }
   .label-row { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-radius: 10px; cursor: pointer; transition: background .15s; }
   .label-row:hover { background: var(--hover); }
-  .label-row .label-dot { width: 12px; height: 12px; }
   .label-row-name { flex: 1; font-weight: 500; word-break: break-word; }
   .label-row-count { color: var(--muted); font-size: 13px; }
   .label-empty { color: var(--muted); font-style: italic; padding: 20px 0; }
@@ -2957,10 +2957,14 @@ function toggleTaskLabel(taskId, labelId) {
   if (i >= 0) t.labels.splice(i, 1); else t.labels.push(labelId);
   db.save();
 }
-// Pastilles d'une tâche (sobres : point coloré + nom), pour les cartes
+// Icône "étiquette" colorée (remplace le simple point sur les affichages)
+function labelTagIcon(color, size = 13) {
+  return `<svg class="label-tag-icon" viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="${color}" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><circle cx="7" cy="7" r="1.4" fill="${color}" stroke="none"/></svg>`;
+}
+// Étiquettes d'une tâche (icône colorée + nom), pour les cartes
 function labelChipsHtml(task) {
   return taskLabels(task).map(l =>
-    `<span class="label-chip"><span class="label-dot" style="background:${l.color}"></span>${esc(l.name)}</span>`).join("");
+    `<span class="label-chip">${labelTagIcon(l.color)}${esc(l.name)}</span>`).join("");
 }
 
 /* ---- Palette de couleur flottante (réutilisable : recoloration + choix à la création) ---- */
@@ -2987,16 +2991,19 @@ function showColorPalette(anchorEl, current, onPick) {
 /* ---- Sélecteur de labels réutilisable : multi + recherche + création + recoloration ----
    opts = { selected():ids[], toggle(id), onChange(), up?:bool } */
 function attachLabelPicker(container, opts) {
-  container.className = "picker" + (opts.up ? " picker-up" : "");
+  container.classList.add("picker");                          // sans écraser les autres classes (ex. quick-labels)
+  container.classList.toggle("picker-up", !!opts.up);
   const chips = () => {
     const labels = opts.selected().map(getLabel).filter(Boolean);
     return labels.length
-      ? labels.map(l => `<span class="label-chip"><span class="label-dot" style="background:${l.color}"></span>${esc(l.name)}</span>`).join("")
+      ? labels.map(l => `<span class="label-chip">${labelTagIcon(l.color)}${esc(l.name)}</span>`).join("")
       : `<span class="picker-value">${esc(opts.placeholder || "Ajouter une étiquette…")}</span>`;
   };
   container.innerHTML = `<button class="picker-trigger" type="button"><span class="label-chips-trigger">${chips()}</span><span class="picker-caret">▾</span></button>`;
 
   let open = false;
+  let pendingNewColor = null;   // couleur choisie pour la prochaine étiquette créée ici
+  const nextFreeColor = () => { const used = state.labels.map(l => l.color); return LABEL_COLORS.find(c => !used.includes(c)) || LABEL_COLORS[0]; };
   const refreshChips = () => { const c = container.querySelector(".label-chips-trigger"); if (c) c.innerHTML = chips(); };
   function close() { open = false; const p = container.querySelector(".picker-panel"); if (p) p.remove(); document.removeEventListener("click", onDoc, true); closeColorPalette(); }
   function onDoc(e) { if (!container.contains(e.target) && !e.target.closest(".color-palette")) close(); }
@@ -3010,7 +3017,11 @@ function attachLabelPicker(container, opts) {
         ${sel.includes(l.id) ? `<span class="check">✓</span>` : ""}
       </div>`).join("");
     if (q && !state.labels.some(l => l.name.toLowerCase() === q)) {
-      html += `<div class="picker-option picker-create" data-create="1">+ Créer « ${esc(filter.trim())} »</div>`;
+      const createColor = pendingNewColor || nextFreeColor();
+      html += `<div class="picker-option picker-create" data-create="1">
+        <button class="label-dot label-dot-btn" data-create-color style="background:${createColor}" type="button" aria-label="Couleur"></button>
+        <span class="picker-option-name">+ Créer « ${esc(filter.trim())} »</span>
+      </div>`;
     }
     if (!html) html = `<div class="picker-empty">Tape un nom pour créer une étiquette</div>`;
     panel.querySelector(".picker-options").innerHTML = html;
@@ -3032,14 +3043,20 @@ function attachLabelPicker(container, opts) {
       if (ev.key === "Enter") {
         ev.preventDefault();
         const qn = search.value.trim(); if (!qn) return;
-        const l = state.labels.find(x => x.name.toLowerCase() === qn.toLowerCase()) || addLabel(qn);
+        const l = state.labels.find(x => x.name.toLowerCase() === qn.toLowerCase()) || addLabel(qn, pendingNewColor || nextFreeColor());
         if (!opts.selected().includes(l.id)) opts.toggle(l.id);
-        search.value = ""; apply();
+        search.value = ""; pendingNewColor = null; apply();
       } else if (ev.key === "Escape") { close(); }
     });
     panel.addEventListener("click", ev => {
+      const createColorBtn = ev.target.closest("[data-create-color]");
+      if (createColorBtn) {                       // choisir la couleur de la NOUVELLE étiquette
+        ev.stopPropagation();
+        showColorPalette(createColorBtn, pendingNewColor || nextFreeColor(), c => { pendingNewColor = c; renderOptions(panel, search.value); });
+        return;
+      }
       const recolor = ev.target.closest("[data-recolor]");
-      if (recolor) {
+      if (recolor) {                              // recolorer une étiquette existante
         ev.stopPropagation();
         const lbl = getLabel(recolor.dataset.recolor);
         showColorPalette(recolor, lbl ? lbl.color : null, color => {
@@ -3049,7 +3066,7 @@ function attachLabelPicker(container, opts) {
       }
       const opt = ev.target.closest(".picker-option");
       if (!opt) return;
-      if (opt.dataset.create) { const l = addLabel(search.value.trim()); opts.toggle(l.id); search.value = ""; }
+      if (opt.dataset.create) { const l = addLabel(search.value.trim(), pendingNewColor || nextFreeColor()); opts.toggle(l.id); search.value = ""; pendingNewColor = null; }
       else if (opt.dataset.label) { opts.toggle(opt.dataset.label); }
       apply();
     });
@@ -3088,7 +3105,7 @@ function renderLabels() {
     el.innerHTML = `
       <div class="label-detail-head">
         <button class="icon-btn" id="labelBack" aria-label="Retour aux étiquettes">←</button>
-        <span class="label-chip label-chip-lg"><span class="label-dot" style="background:${label.color}"></span>${esc(label.name)}</span>
+        <span class="label-chip label-chip-lg">${labelTagIcon(label.color, 17)}${esc(label.name)}</span>
       </div>
       <div class="label-edit">
         <input class="label-name-input" id="labelRename" type="text" value="${esc(label.name)}" placeholder="Nom de l'étiquette">
@@ -3105,19 +3122,18 @@ function renderLabels() {
     ? state.labels.map(l => {
         const count = state.tasks.filter(t => !t.completed && (t.labels || []).includes(l.id)).length;
         return `<div class="label-row" data-label="${l.id}">
-          <span class="label-dot" style="background:${l.color}"></span>
+          ${labelTagIcon(l.color, 15)}
           <span class="label-row-name">${esc(l.name)}</span>
           <span class="label-row-count">${count}</span>
         </div>`;
       }).join("")
     : `<div class="label-empty">Aucune étiquette. Crée-en une ci-dessus.</div>`;
-  // Couleur proposée pour la prochaine étiquette (1re libre de la palette)
-  const used = state.labels.map(l => l.color);
-  const nextColor = LABEL_COLORS.find(c => !used.includes(c)) || LABEL_COLORS[state.labels.length % LABEL_COLORS.length];
+  // Couleur par défaut de l'ajout : toujours la même (la 1re de la palette, le rouge)
+  const defaultColor = LABEL_COLORS[0];
   el.innerHTML = `
     <div class="label-add">
+      <button class="label-add-color" id="labelAddColor" type="button" data-color="${defaultColor}" style="background:${defaultColor}" aria-label="Couleur"></button>
       <input class="quick-input" id="labelAddInput" type="text" placeholder="Nouvelle étiquette…" autocomplete="off">
-      <button class="label-add-color" id="labelAddColor" type="button" data-color="${nextColor}" style="background:${nextColor}" aria-label="Couleur"></button>
       <button class="quick-submit" id="labelAddBtn">Ajouter</button>
     </div>
     <div class="label-list">${rows}</div>`;
