@@ -113,6 +113,7 @@
     cursor: pointer; color: var(--text); font-size: 15px;
     transition: background .2s; border: none; background: none;
     font-family: inherit; width: 100%; text-align: left;
+    flex-shrink: 0;                 /* la liste défile si besoin, sans écraser les éléments */
   }
   .nav-item:hover { background: rgba(74,111,165,.07); }
   .nav-item.active { background: rgba(224,122,95,.1); color: var(--alert); font-weight: 600; }
@@ -122,7 +123,10 @@
   .nav-item.soon:hover { background: none; }
   .nav-item.soon .count { font-size: 11px; font-style: italic; }
 
-  .nav-sep { height: 1px; background: var(--border); margin: 12px 4px; }
+  .nav-sep { height: 1px; flex-shrink: 0; background: var(--border); margin: 12px 4px; }
+  /* Séparateur de groupe (entre Eisenhower et Projets) : trait gris clair plus visible, même espacement */
+  .nav-sep-major { background: #d6dadf; }
+  body.dark .nav-sep-major { background: var(--border); }
 
   /* ===== MAIN ===== */
   .main-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 24px; }
@@ -946,7 +950,7 @@
     <button class="nav-item" data-view="eisenhower">
       <span class="icon">🎯</span> Eisenhower
     </button>
-    <div class="nav-sep"></div>
+    <div class="nav-sep nav-sep-major"></div>
     <button class="nav-item" data-view="projects">
       <span class="icon">📁</span> Projets
     </button>
