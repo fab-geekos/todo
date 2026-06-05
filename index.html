@@ -885,6 +885,8 @@
   }
   .week-bday-main { display: flex; align-items: center; gap: 8px; }
   .week-bday-note { font-size: 12px; color: var(--muted); font-style: italic; }
+  /* Rond "souhaité" des anniversaires (vues Aujourd'hui & Prochainement) */
+  .week-bday .checkbox, .bday-card .checkbox { margin-top: 0; flex-shrink: 0; }
   .week-late {
     display: inline-flex; align-items: center; font-size: 11px; font-weight: 600;
     color: var(--alert); border: 1px solid var(--alert); border-radius: 8px;
@@ -1845,17 +1847,60 @@ function renderTasksInto(ul, tasks, emptyHtml, flat = false) {
 }
 
 function renderList() {
-  const emptyHtml = state.view === "today"
-    ? `<div class="big">🎉</div>Rien de prévu aujourd'hui.`
-    : `<div class="big">📭</div>Aucune tâche. Ajoute-en une ci-dessus.`;
-  renderTasksInto($("taskList"), visibleTasks(), emptyHtml, state.flatList);
+  const ul = $("taskList");
+  const tasks = visibleTasks();
+  const isToday = state.view === "today";
+  // Aujourd'hui : on ajoute les anniversaires du jour (cartes en lecture seule + rond "souhaité").
+  const bdays = isToday ? birthdaysOnDay(startOfDay(new Date()).getTime()) : [];
+
+  if (tasks.length === 0 && bdays.length === 0) {
+    const emptyHtml = isToday
+      ? `<div class="big">🎉</div>Rien de prévu aujourd'hui.`
+      : `<div class="big">📭</div>Aucune tâche. Ajoute-en une ci-dessus.`;
+    renderTasksInto(ul, [], emptyHtml, state.flatList);
+    return;
+  }
+  ul.innerHTML = "";
+  tasks.forEach(t => ul.appendChild(taskCard(t, !state.flatList)));
+  bdays.forEach(b => ul.appendChild(birthdayCard(b)));
   // Aujourd'hui : seules les tâches SANS heure sont réordonnables par glisser-déposer
-  if (state.view === "today") {
-    [...$("taskList").children].forEach(li => {
+  if (isToday) {
+    [...ul.children].forEach(li => {
       const t = li.dataset.id ? getTask(li.dataset.id) : null;
       if (t && !t.dueTime) li.classList.add("agenda-drag");
     });
   }
+}
+
+// Carte d'anniversaire (vue Aujourd'hui) : lecture seule (non ouvrable), avec un rond "souhaité"
+// qui marque l'anniversaire comme fait et le renvoie à l'année suivante.
+function birthdayCard(b) {
+  const li = document.createElement("li");
+  li.className = "task bday-card";
+  li.dataset.bdayId = b.contact.id;
+  li.dataset.bdayYear = b.year;
+  const note = b.shifted
+    ? `<div class="task-note">Anniversaire le 29/02 — fêté le 28 février cette année</div>`
+    : `<div class="task-note">Anniversaire</div>`;
+  li.innerHTML = `
+    <div class="task-row no-open">
+      <span class="task-chevron-spacer"></span>
+      <button class="checkbox" data-action="bday-done" aria-label="Anniversaire souhaité"></button>
+      <div class="task-body">
+        <div class="task-titleline"><span class="task-title">🎂 ${esc(b.contact.name)}</span></div>
+        ${note}
+      </div>
+    </div>`;
+  return li;
+}
+
+// Marque l'anniversaire d'un contact comme souhaité pour l'année donnée (réapparaîtra l'an prochain).
+function markBirthdayDone(contactId, year) {
+  const c = getContact(contactId);
+  if (!c) return;
+  c.bdayDoneYear = year;
+  db.save();
+  render();
 }
 
 // Liste de courses : chaque rayon (racine list:"courses") est une carte qui englobe ses produits.
@@ -2303,13 +2348,16 @@ function contactCard(contact) {
 function isLeapYear(y) { return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0; }
 function birthdaysOnDay(dayTs) {
   const d = new Date(dayTs);
+  const year = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
   const key = mm + "-" + dd;
-  const result = state.contacts.filter(c => c.birthday === key).map(c => ({ contact: c, shifted: false }));
+  // Anniversaire déjà "souhaité" pour cette année-là -> on ne l'affiche plus (renvoyé à l'an prochain).
+  const notDone = c => c.bdayDoneYear !== year;
+  const result = state.contacts.filter(c => c.birthday === key && notDone(c)).map(c => ({ contact: c, shifted: false, year }));
   // 29 février inexistant : on l'affiche le 28 février, avec une note.
-  if (mm === "02" && dd === "28" && !isLeapYear(d.getFullYear())) {
-    state.contacts.filter(c => c.birthday === "02-29").forEach(c => result.push({ contact: c, shifted: true }));
+  if (mm === "02" && dd === "28" && !isLeapYear(year)) {
+    state.contacts.filter(c => c.birthday === "02-29" && notDone(c)).forEach(c => result.push({ contact: c, shifted: true, year }));
   }
   return result;
 }
@@ -2396,7 +2444,13 @@ function renderWeek() {
     let bdayBody = "";
     bdays.forEach(b => {
       const note = b.shifted ? `<div class="week-bday-note">Anniversaire le 29/02 — fêté le 28 février cette année</div>` : "";
-      bdayBody += `<div class="week-bday"><div class="week-bday-main">🎂 ${esc(b.contact.name)}</div>${note}</div>`;
+      // Rond "souhaité" : marque l'anniversaire comme fait et le renvoie à l'an prochain.
+      bdayBody += `<div class="week-bday" data-bday-id="${b.contact.id}" data-bday-year="${b.year}">
+        <div class="week-bday-main">
+          <button class="checkbox" data-action="bday-done" aria-label="Anniversaire souhaité"></button>
+          <span>🎂 ${esc(b.contact.name)}</span>
+        </div>${note}
+      </div>`;
     });
     const emptyMark = (items.length === 0 && bdays.length === 0) ? `<div class="week-empty">Rien de prévu</div>` : "";
     const body = `<div class="week-list">${listBody}</div>${bdayBody}${emptyMark}`;
@@ -3322,6 +3376,13 @@ function bindEvents() {
   // L'id vient de la LIGNE (.task-row) car une carte racine contient plusieurs lignes.
   document.querySelector(".main").addEventListener("click", e => {
     if (Date.now() - lastDragEnd < 300) return;  // un drag vient de se terminer
+    // Anniversaire (Aujourd'hui & Prochainement) : le rond marque "souhaité" et renvoie à l'an prochain.
+    const bdayBtn = e.target.closest('[data-action="bday-done"]');
+    if (bdayBtn) {
+      const wrap = bdayBtn.closest("[data-bday-id]");
+      if (wrap) markBirthdayDone(wrap.dataset.bdayId, Number(wrap.dataset.bdayYear));
+      return;
+    }
     const row = e.target.closest(".task-row");
     if (!row) return;
     const id = row.dataset.id;
