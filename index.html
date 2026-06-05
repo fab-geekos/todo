@@ -561,6 +561,31 @@
   .vac-ms-date { font-size: 13px; color: var(--muted); flex: 1; }
   .vac-ms-tag { font-size: 11px; font-weight: 600; color: var(--accent); background: rgba(74,111,165,.1); border-radius: 8px; padding: 1px 7px; flex-shrink: 0; }
 
+  /* ===== LABELS ===== */
+  .label-chip { display: inline-flex; align-items: center; font-size: 11px; font-weight: 600; border-radius: 8px; padding: 1px 8px; white-space: nowrap; line-height: 1.5; }
+  .label-dot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; display: inline-block; }
+  /* Picker labels de la fiche */
+  .label-chips-trigger { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+  .picker-option.picker-create { color: var(--accent); font-weight: 500; }
+  /* Vue Labels */
+  .labels-view { display: none; max-width: 620px; }
+  .label-add { display: flex; gap: 8px; margin-bottom: 18px; }
+  .label-list { display: flex; flex-direction: column; gap: 2px; }
+  .label-row { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-radius: 10px; cursor: pointer; transition: background .15s; }
+  .label-row:hover { background: var(--hover); }
+  .label-row-name { flex: 1; font-weight: 500; word-break: break-word; }
+  .label-row-count { color: var(--muted); font-size: 13px; }
+  .label-empty { color: var(--muted); font-style: italic; padding: 20px 0; }
+  .label-detail-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .label-detail-head .label-chip { font-size: 14px; padding: 4px 12px; }
+  .label-edit { display: flex; flex-direction: column; gap: 14px; align-items: flex-start; margin-bottom: 22px; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
+  .label-name-input { font-family: inherit; font-size: 18px; font-weight: 600; color: var(--text); border: none; border-bottom: 2px solid var(--border); background: none; outline: none; padding: 4px 0; min-width: 220px; }
+  .label-name-input:focus { border-bottom-color: var(--accent); }
+  .label-swatches { display: flex; flex-wrap: wrap; gap: 7px; }
+  .label-swatch { width: 26px; height: 26px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; transition: transform .12s; }
+  .label-swatch:hover { transform: scale(1.12); }
+  .label-swatch.sel { border-color: var(--text); }
+
   /* ===== MODAL ÉDITION ===== */
   .overlay {
     position: fixed; inset: 0; background: rgba(0,0,0,.35);
@@ -1013,8 +1038,8 @@
     <button class="nav-item" data-view="contacts">
       <span class="icon">🧑</span> Contacts
     </button>
-    <button class="nav-item soon">
-      <span class="icon">🏷️</span> Labels <span class="count">bientôt</span>
+    <button class="nav-item" data-view="labels">
+      <span class="icon">🏷️</span> Labels
     </button>
     <button class="nav-item" data-view="courses">
       <span class="icon">🛒</span> Liste de courses
@@ -1133,6 +1158,8 @@
 
     <div class="vaccines-view" id="vaccinesView"></div>
 
+    <div class="labels-view" id="labelsView"></div>
+
     <div class="week-modal-scrim" id="weekAddModal" hidden>
       <div class="week-modal" role="dialog" aria-label="Ajouter une tâche">
         <input class="week-modal-input" id="weekAddInput" type="text" placeholder="Nom de la tâche…" autocomplete="off">
@@ -1225,9 +1252,9 @@
             <button class="flag" id="editUrgent" data-flag="urgent">⚡ Urgent</button>
           </div>
         </div>
-        <div class="side-section muted-soon">
-          <div class="side-label">Labels <span class="soon-tag">bientôt</span></div>
-          <div class="picker-trigger"><span class="picker-value">Aucun</span><span class="picker-caret">▾</span></div>
+        <div class="side-section" id="editLabelsSection">
+          <div class="side-label">Labels</div>
+          <div id="editLabels" class="picker"></div>
         </div>
         <button class="editor-delete" id="editDelete">🗑 Supprimer la tâche</button>
       </div>
@@ -1315,6 +1342,8 @@ let state = {
   editingContactId: null, // contact ouvert dans la fiche contact
   birthDate: null,        // "AAAA-MM-JJ" : date de naissance (pour calculer les rappels vaccins)
   vaccineDone: null,      // [âges des rappels faits] ; null = pas encore initialisé
+  labels: [],             // étiquettes : [{ id, name, color }]
+  labelFilter: null,      // label sélectionné dans la vue Labels (null = liste des labels)
   projectId: null,        // projet actuellement ouvert (vue détaillée)
   projSub: "eisen",       // sous-vue du projet par défaut : "eisen" (matrice) ou "list"
   projectsTab: "active",  // onglet de la vue Projets : "active" (tableau) ou "done" (terminés)
@@ -1335,15 +1364,16 @@ let state = {
 // Transforme des données brutes (localStorage OU futur Firebase) en {tasks, projects}.
 // Gère l'ancien format (simple tableau de tâches) pour ne rien perdre.
 function normalizeData(raw) {
-  if (Array.isArray(raw)) return { tasks: raw, projects: [], contacts: [], birthDate: null, vaccineDone: null };
+  if (Array.isArray(raw)) return { tasks: raw, projects: [], contacts: [], birthDate: null, vaccineDone: null, labels: [] };
   if (raw && typeof raw === "object") return {
     tasks: raw.tasks || [],
     projects: raw.projects || [],
     contacts: raw.contacts || [],
     birthDate: raw.birthDate || null,
-    vaccineDone: raw.vaccineDone || null
+    vaccineDone: raw.vaccineDone || null,
+    labels: raw.labels || []
   };
-  return { tasks: [], projects: [], contacts: [], birthDate: null, vaccineDone: null };
+  return { tasks: [], projects: [], contacts: [], birthDate: null, vaccineDone: null, labels: [] };
 }
 
 const db = {
@@ -1356,11 +1386,12 @@ const db = {
     state.contacts = data.contacts;
     state.birthDate = data.birthDate;
     state.vaccineDone = data.vaccineDone;
+    state.labels = data.labels;
   },
   save() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       tasks: state.tasks, projects: state.projects, contacts: state.contacts,
-      birthDate: state.birthDate, vaccineDone: state.vaccineDone
+      birthDate: state.birthDate, vaccineDone: state.vaccineDone, labels: state.labels
     }));
   },
   // --- Tâches ---
@@ -1819,7 +1850,7 @@ function taskRowHtml(task, depth, ancestorContinues = [], isLast = false) {
       ${chevronHtml}
       ${isShoppingRoot(task) ? "" : `<button class="checkbox" data-action="toggle" aria-label="Terminer"></button>`}
       <div class="task-body"${canOpen ? ' data-action="edit"' : ''}>
-        <div class="task-titleline"><span class="task-title">${esc(task.title)}</span>${flagBadges(task)}${subCountBadge}</div>
+        <div class="task-titleline"><span class="task-title">${esc(task.title)}</span>${flagBadges(task)}${subCountBadge}${depth === 0 ? labelChipsHtml(task) : ""}</div>
         ${task.note ? `<div class="task-note">${esc(task.note)}</div>` : ""}
         ${metaHtml}
         ${progressHtml}
@@ -1866,7 +1897,8 @@ function render() {
     contacts: { t: "Contacts", s: "Tes contacts et leurs projets délégués" },
     week: { t: "Prochainement", s: "Tes échéances des 7 prochains jours" },
     courses: { t: "Liste de courses", s: "Tes rayons et les produits à acheter" },
-    vaccins: { t: "Vaccins", s: "Tes rappels de vaccins (calendrier français)" }
+    vaccins: { t: "Vaccins", s: "Tes rappels de vaccins (calendrier français)" },
+    labels: { t: "Labels", s: "Tes étiquettes — clique un label pour voir ses tâches" }
   };
   const info = titles[state.view] || { t: "", s: "" };
   document.getElementById("viewTitle").textContent = info.t;
@@ -1914,7 +1946,7 @@ function render() {
   });
 
   // Affichage : on masque tous les conteneurs de vues, puis on montre celui de la vue courante
-  ["taskList","eisenGrid","kanbanBoard","projectsTabs","projectsDone","projectsPriorities","projectView","contactsView","weekView","vaccinesView"]
+  ["taskList","eisenGrid","kanbanBoard","projectsTabs","projectsDone","projectsPriorities","projectView","contactsView","weekView","vaccinesView","labelsView"]
     .forEach(id => { $(id).style.display = "none"; });
   const gridEl = $("eisenGrid");
   const kanbanEl = $("kanbanBoard");
@@ -1957,6 +1989,9 @@ function render() {
   } else if (state.view === "vaccins") {
     $("vaccinesView").style.display = "block";
     renderVaccines();
+  } else if (state.view === "labels") {
+    $("labelsView").style.display = "block";
+    renderLabels();
   } else {
     $("taskList").style.display = "flex";
     renderList();
@@ -2563,7 +2598,7 @@ function weekTaskTree(task, depth, ancestorContinues = [], isLast = false, late 
       ${chevron}
       <button class="checkbox" data-action="toggle" aria-label="Terminer"></button>
       <div class="task-body" data-action="edit">
-        <div class="task-titleline"><span class="task-title">${esc(task.title)}</span>${flagBadges(task)}${lateHtml}${subCount}</div>
+        <div class="task-titleline"><span class="task-title">${esc(task.title)}</span>${flagBadges(task)}${lateHtml}${subCount}${depth === 0 ? labelChipsHtml(task) : ""}</div>
         ${meta}
         ${progressHtml}
       </div>
@@ -2733,7 +2768,9 @@ function renderContacts() {
 /* =========================================================
    VACCINS (calendrier français — rappels à âges fixes)
    ========================================================= */
-const DTP_AGES = [25, 45, 65];                 // rappels dTP adulte (France)
+const DTP_MAX_AGE = 105;                       // après 65 ans : rappel tous les 10 ans (jusqu'à cet âge)
+const DTP_AGES = [25, 45];                     // rappels dTP adulte (France), puis 65, 75, 85, 95, 105…
+for (let a = 65; a <= DTP_MAX_AGE; a += 10) DTP_AGES.push(a);
 const VACCINE_LEAD_DAYS = 60;                  // un rappel "remonte" dans l'agenda ~2 mois avant
 
 // Date (ms, minuit) du Nième anniversaire à partir de la date de naissance
@@ -2865,6 +2902,151 @@ function vaccineAgendaCard() {
     </div>
   </div>`;
   return li;
+}
+
+/* =========================================================
+   LABELS (étiquettes transversales — plusieurs par tâche racine)
+   ========================================================= */
+const LABEL_COLORS = ["#E0524A","#E8924A","#F2B705","#7CB518","#2D936C","#17A2B8","#4A6FA5","#5C6BC0","#7E57C2","#AB47BC","#C9637E","#EC407A","#8D6E63","#607D8B","#26A69A"];
+
+const getLabel = id => state.labels.find(l => l.id === id);
+function taskLabels(task) { return (task.labels || []).map(getLabel).filter(Boolean); }   // objets, ids supprimés ignorés
+// Couleur de texte lisible (sombre/blanc) selon la luminance du fond
+function labelTextColor(hex) {
+  const r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+  return (0.299*r + 0.587*g + 0.114*b) > 150 ? "#1f2937" : "#fff";
+}
+function addLabel(name) {                         // crée un label (couleur auto : 1re libre de la palette)
+  const used = state.labels.map(l => l.color);
+  const color = LABEL_COLORS.find(c => !used.includes(c)) || LABEL_COLORS[state.labels.length % LABEL_COLORS.length];
+  const label = { id: uid(), name: name.trim(), color };
+  state.labels.push(label);
+  db.save();
+  return label;
+}
+function deleteLabel(id) {
+  state.labels = state.labels.filter(l => l.id !== id);
+  state.tasks.forEach(t => { if (t.labels) t.labels = t.labels.filter(x => x !== id); });
+  if (state.labelFilter === id) state.labelFilter = null;
+  db.save();
+}
+function toggleTaskLabel(taskId, labelId) {
+  const t = getTask(taskId);
+  if (!t) return;
+  if (!t.labels) t.labels = [];
+  const i = t.labels.indexOf(labelId);
+  if (i >= 0) t.labels.splice(i, 1); else t.labels.push(labelId);
+  db.save();
+}
+// Pastilles (couleur + nom) d'une tâche, pour les cartes
+function labelChipsHtml(task) {
+  return taskLabels(task).map(l =>
+    `<span class="label-chip" style="background:${l.color};color:${labelTextColor(l.color)}">${esc(l.name)}</span>`).join("");
+}
+
+// Sélecteur de labels dans la fiche : multi-sélection + recherche + création à la volée.
+function renderEditorLabels(task) {
+  const container = $("editLabels");
+  container.className = "picker";
+  const chipsHtml = () => {
+    const labels = taskLabels(task);
+    return labels.length
+      ? labels.map(l => `<span class="label-chip" style="background:${l.color};color:${labelTextColor(l.color)}">${esc(l.name)}</span>`).join("")
+      : `<span class="picker-value">Ajouter un label…</span>`;
+  };
+  container.innerHTML = `<button class="picker-trigger" type="button"><span class="label-chips-trigger">${chipsHtml()}</span><span class="picker-caret">▾</span></button>`;
+
+  let open = false;
+  const refreshChips = () => { const c = container.querySelector(".label-chips-trigger"); if (c) c.innerHTML = chipsHtml(); };
+  function close() { open = false; const p = container.querySelector(".picker-panel"); if (p) p.remove(); document.removeEventListener("click", onDoc, true); }
+  function onDoc(e) { if (!container.contains(e.target)) close(); }
+  function renderOptions(panel, filter = "") {
+    const q = filter.trim().toLowerCase();
+    const sel = task.labels || [];
+    let html = state.labels.filter(l => !q || l.name.toLowerCase().includes(q)).map(l => `
+      <div class="picker-option${sel.includes(l.id) ? " selected" : ""}" data-label="${l.id}">
+        <span class="label-dot" style="background:${l.color}"></span><span>${esc(l.name)}</span>
+        ${sel.includes(l.id) ? `<span class="check">✓</span>` : ""}
+      </div>`).join("");
+    if (q && !state.labels.some(l => l.name.toLowerCase() === q)) {
+      html += `<div class="picker-option picker-create" data-create="1">+ Créer « ${esc(filter.trim())} »</div>`;
+    }
+    if (!html) html = `<div class="picker-empty">Tape un nom pour créer un label</div>`;
+    panel.querySelector(".picker-options").innerHTML = html;
+  }
+  container.querySelector(".picker-trigger").addEventListener("click", e => {
+    e.stopPropagation();
+    if (open) { close(); return; }
+    open = true;
+    const panel = document.createElement("div");
+    panel.className = "picker-panel";
+    panel.innerHTML = `<input class="picker-search" type="text" placeholder="Rechercher ou créer…" autocomplete="off"><div class="picker-options"></div>`;
+    container.appendChild(panel);
+    renderOptions(panel, "");
+    const search = panel.querySelector(".picker-search");
+    search.focus();
+    const apply = () => { refreshChips(); renderOptions(panel, search.value); render(); };
+    search.addEventListener("input", () => renderOptions(panel, search.value));
+    search.addEventListener("keydown", ev => {
+      if (ev.key === "Enter") {
+        ev.preventDefault();
+        const qn = search.value.trim(); if (!qn) return;
+        const l = state.labels.find(x => x.name.toLowerCase() === qn.toLowerCase()) || addLabel(qn);
+        toggleTaskLabel(task.id, l.id); search.value = ""; apply();
+      } else if (ev.key === "Escape") { close(); }
+    });
+    panel.addEventListener("click", ev => {
+      const opt = ev.target.closest(".picker-option");
+      if (!opt) return;
+      if (opt.dataset.create) { const l = addLabel(search.value.trim()); toggleTaskLabel(task.id, l.id); search.value = ""; }
+      else if (opt.dataset.label) { toggleTaskLabel(task.id, opt.dataset.label); }
+      apply();
+    });
+    setTimeout(() => document.addEventListener("click", onDoc, true), 0);
+  });
+}
+
+// Vue Labels : liste de labels (clic -> tâches du label) ; détail = renommer / recolorer / supprimer + tâches.
+function renderLabels() {
+  const el = $("labelsView");
+  if (state.labelFilter) {
+    const label = getLabel(state.labelFilter);
+    if (!label) { state.labelFilter = null; renderLabels(); return; }
+    const tasks = state.tasks.filter(t => !t.completed && isRoot(t) && (t.labels || []).includes(label.id));
+    const swatches = LABEL_COLORS.map(c =>
+      `<button class="label-swatch${c === label.color ? " sel" : ""}" data-color="${c}" style="background:${c}" aria-label="Couleur"></button>`).join("");
+    el.innerHTML = `
+      <div class="label-detail-head">
+        <button class="icon-btn" id="labelBack" aria-label="Retour aux labels">←</button>
+        <span class="label-chip" style="background:${label.color};color:${labelTextColor(label.color)}">${esc(label.name)}</span>
+      </div>
+      <div class="label-edit">
+        <input class="label-name-input" id="labelRename" type="text" value="${esc(label.name)}" placeholder="Nom du label">
+        <div class="label-swatches">${swatches}</div>
+        <button class="editor-delete" id="labelDelete">🗑 Supprimer le label</button>
+      </div>
+      <ul class="task-list" id="labelTaskList"></ul>`;
+    const ul = $("labelTaskList");
+    if (tasks.length) tasks.forEach(t => ul.appendChild(taskCard(t, true)));
+    else ul.innerHTML = `<div class="empty"><div class="big">🏷️</div>Aucune tâche avec ce label.</div>`;
+    return;
+  }
+  const rows = state.labels.length
+    ? state.labels.map(l => {
+        const count = state.tasks.filter(t => !t.completed && (t.labels || []).includes(l.id)).length;
+        return `<div class="label-row" data-label="${l.id}">
+          <span class="label-dot" style="background:${l.color}"></span>
+          <span class="label-row-name">${esc(l.name)}</span>
+          <span class="label-row-count">${count}</span>
+        </div>`;
+      }).join("")
+    : `<div class="label-empty">Aucun label. Crée-en un ci-dessus.</div>`;
+  el.innerHTML = `
+    <div class="label-add">
+      <input class="quick-input" id="labelAddInput" type="text" placeholder="Nouveau label…" autocomplete="off">
+      <button class="quick-submit" id="labelAddBtn">Ajouter</button>
+    </div>
+    <div class="label-list">${rows}</div>`;
 }
 
 function toggleTask(id) {
@@ -3139,6 +3321,10 @@ function openEditor(id) {
   // on passe directement aux produits ; recherche disponible sur un rayon.
   const shop = isShoppingTask(t);
   document.querySelector(".editor-side").style.display = shop ? "none" : "";
+  // Labels : uniquement sur les tâches racines (pas les sous-tâches ni la liste de courses)
+  const showLabels = isRoot(t) && !shop;
+  $("editLabelsSection").style.display = showLabels ? "" : "none";
+  if (showLabels) renderEditorLabels(t);
   $("editNote").style.display = shop ? "none" : "";             // pas de description en mode courses
   $("editSubHead").style.display = shop ? "none" : "";          // pas d'entête "Produits X/Y"
   $("editCheckbox").style.display = isShoppingRoot(t) ? "none" : "";  // un rayon ne se coche pas
@@ -3444,6 +3630,7 @@ function applyMode() {
 
 function navigate(view) {
   state.view = view;
+  state.labelFilter = null;   // la navigation ramène toujours à la liste des labels
   closeSidebar();
   render();
 }
@@ -4051,6 +4238,26 @@ function bindEvents() {
   $("vaccinesView").addEventListener("click", e => {
     const ms = e.target.closest('[data-action="vac-toggle"]');
     if (ms) toggleVaccineMilestone(Number(ms.dataset.age));
+  });
+
+  // ----- Vue Labels -----
+  const submitLabelAdd = () => { const v = $("labelAddInput").value.trim(); if (v) { addLabel(v); render(); } };
+  $("labelsView").addEventListener("click", e => {
+    if (e.target.closest("#labelAddBtn")) return submitLabelAdd();
+    if (e.target.closest("#labelBack")) { state.labelFilter = null; render(); return; }
+    if (e.target.closest("#labelDelete")) { if (confirm("Supprimer ce label ?")) { deleteLabel(state.labelFilter); render(); } return; }
+    const sw = e.target.closest(".label-swatch");
+    if (sw) { const l = getLabel(state.labelFilter); if (l) { l.color = sw.dataset.color; db.save(); render(); } return; }
+    const row = e.target.closest(".label-row");
+    if (row) { state.labelFilter = row.dataset.label; render(); return; }
+    // (les clics sur les cartes de tâches sont gérés par la délégation .main)
+  });
+  $("labelsView").addEventListener("keydown", e => {
+    if (e.target.id === "labelAddInput" && e.key === "Enter") { e.preventDefault(); submitLabelAdd(); }
+    if (e.target.id === "labelRename" && e.key === "Enter") { e.preventDefault(); e.target.blur(); }
+  });
+  $("labelsView").addEventListener("change", e => {
+    if (e.target.id === "labelRename") { const l = getLabel(state.labelFilter); const v = e.target.value.trim(); if (l && v) { l.name = v; db.save(); render(); } }
   });
 
   // Bascule thème clair / nuit
