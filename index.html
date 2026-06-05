@@ -560,8 +560,14 @@
     background: var(--card); outline: none; margin-bottom: 8px;
   }
   .editor-sub-search:focus { border-color: var(--accent); }
+  /* Éditeur en mode courses : on enchaîne titre -> produits, sans trait de séparation */
+  .editor-subtasks.courses-mode { border-top: none; margin-top: 12px; padding-top: 0; }
   /* Vue Liste de courses : un rayon est une catégorie, pas de barre de priorité colorée */
   body.view-courses .task { border-left-color: transparent; }
+  /* Pas de connecteurs en arbre (bras gris) : la hiérarchie rayon → produits est déjà lisible */
+  body.view-courses .task-row::before,
+  body.view-courses .task-row::after { content: none; }
+  body.view-courses .task-row { background-image: none !important; }
   .editor-sub-list { list-style: none; display: flex; flex-direction: column; }
   .editor-sub {
     display: flex; align-items: center; gap: 10px; padding: 8px 0;
@@ -1683,7 +1689,8 @@ function taskRowHtml(task, depth, ancestorContinues = [], isLast = false) {
     ? `<button class="task-chevron" data-action="toggle-children" aria-label="Déplier">${expanded ? "▾" : "▸"}</button>`
     : `<span class="task-chevron-spacer"></span>`;
   // Racine : barre de progression complète. Sous-tâche : petit badge X/Y à côté du titre.
-  const progressHtml = (depth === 0 && total > 0) ? progressBarHtml(done, total) : "";
+  // Exception : les rayons de la liste de courses restent épurés (ni barre, ni "X/Y fait").
+  const progressHtml = (depth === 0 && total > 0 && !isShoppingRoot(task)) ? progressBarHtml(done, total) : "";
   const subCountBadge = (depth > 0 && total > 0) ? `<span class="count-badge">${done}/${total}</span>` : "";
   const canAddChild = taskDepth(task) < MAX_TASK_DEPTH;
   const doneCls = task.completed ? " done" : "";
@@ -2745,9 +2752,12 @@ function openEditor(id) {
   renderEditorRecurrence(t);
   renderEditorBreadcrumb(t);
 
-  // Mode liste de courses : aucun paramètre latéral utile ; recherche de produits sur un rayon.
+  // Mode liste de courses : éditeur épuré (ni paramètres latéraux, ni description, ni trait),
+  // on passe directement aux produits ; recherche disponible sur un rayon.
   const shop = isShoppingTask(t);
   document.querySelector(".editor-side").style.display = shop ? "none" : "";
+  $("editNote").style.display = shop ? "none" : "";             // pas de description en mode courses
+  $("editSubtasks").classList.toggle("courses-mode", shop);     // retire le trait horizontal au-dessus
   state.editSubFilter = "";
   const subSearch = $("editSubSearch");
   subSearch.value = "";
