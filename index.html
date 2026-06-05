@@ -372,6 +372,8 @@
   .kanban-list { list-style: none; display: flex; flex-direction: column; gap: 8px; min-height: 8px; }
 
   .projects-tabs { display: none; gap: 8px; margin-bottom: 18px; }
+  /* Onglets de la vue Todo (Toutes / Récurrentes) : réutilisent le style .subview-btn */
+  .todo-tabs { display: none; gap: 8px; margin-bottom: 16px; }
   #projectsPriorities { display: none; margin-top: 32px; }
   .section-title { font-size: 18px; font-weight: 700; margin-bottom: 2px; }
   .section-sub { font-size: 13px; color: var(--muted); margin-bottom: 16px; }
@@ -992,6 +994,11 @@
       </div>
     </div>
 
+    <div class="todo-tabs" id="todoTabs">
+      <button class="subview-btn" data-todotab="all">Toutes</button>
+      <button class="subview-btn" data-todotab="recur">🔁 Récurrentes</button>
+    </div>
+
     <div class="toolbar" id="toolbar">
       <select class="sort-select" id="sortSelect">
         <option value="due">Trier par échéance</option>
@@ -1219,6 +1226,7 @@ let state = {
   contacts: [],
   view: "todo",
   sort: "due",
+  todoTab: "all",         // onglet de la vue Todo : "all" (toutes) ou "recur" (récurrentes)
   editingId: null,
   projectId: null,        // projet actuellement ouvert (vue détaillée)
   projSub: "eisen",       // sous-vue du projet par défaut : "eisen" (matrice) ou "list"
@@ -1613,6 +1621,8 @@ function visibleTasks() {
   } else {
     // Todo : seulement les racines (hors rayons de la liste de courses) ; les sous-tâches s'affichent en dépliant
     list = list.filter(t => isRoot(t) && !isShoppingRoot(t));
+    // Onglet "Récurrentes" : ne garder que les tâches ayant une récurrence
+    if (state.todoTab === "recur") list = list.filter(t => t.recurrence);
     state.flatList = false;
   }
   return sortTasks(list);
@@ -1778,6 +1788,19 @@ function render() {
     : "Ex : Acheter du pain demain 18h";
   document.querySelector(".quick-add .flags").style.display = courses ? "none" : "";
 
+  // Onglets de la vue Todo (Toutes / Récurrentes)
+  const todoView = state.view === "todo";
+  $("todoTabs").style.display = todoView ? "flex" : "none";
+  if (todoView) {
+    $("todoTabs").querySelectorAll(".subview-btn").forEach(b =>
+      b.classList.toggle("active", b.dataset.todotab === state.todoTab));
+    const recur = state.todoTab === "recur";
+    // Onglet Récurrentes : pas de tri par création (on bascule sur échéance le cas échéant)
+    $("sortSelect").querySelector('option[value="created"]').hidden = recur;
+    if (recur && state.sort === "created") { state.sort = "due"; $("sortSelect").value = "due"; }
+    if (recur) document.getElementById("viewSub").textContent = "Tes tâches récurrentes, par échéance";
+  }
+
   // Compteurs : Todo compte les racines (cohérent avec l'affichage) ; Aujourd'hui compte toute échéance du jour
   const active = state.tasks.filter(t => !t.completed);
   $("count-todo").textContent = active.filter(t => isRoot(t) && !isShoppingRoot(t)).length || "";
@@ -1858,8 +1881,11 @@ function renderList() {
   const bdays = isToday ? birthdaysOnDay(startOfDay(new Date()).getTime()) : [];
 
   if (tasks.length === 0 && bdays.length === 0) {
+    const isRecur = state.view === "todo" && state.todoTab === "recur";
     const emptyHtml = isToday
       ? `<div class="big">🎉</div>Rien de prévu aujourd'hui.`
+      : isRecur
+      ? `<div class="big">🔁</div>Aucune tâche récurrente.`
       : `<div class="big">📭</div>Aucune tâche. Ajoute-en une ci-dessus.`;
     renderTasksInto(ul, [], emptyHtml, state.flatList);
     return;
@@ -3314,6 +3340,14 @@ function bindEvents() {
   // Tri
   document.getElementById("sortSelect").addEventListener("change", e => {
     state.sort = e.target.value;
+    render();
+  });
+
+  // Onglets de la vue Todo : Toutes / Récurrentes
+  $("todoTabs").addEventListener("click", e => {
+    const btn = e.target.closest(".subview-btn");
+    if (!btn) return;
+    state.todoTab = btn.dataset.todotab;
     render();
   });
 
