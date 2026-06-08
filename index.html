@@ -131,6 +131,8 @@
   .nav-item:hover { background: rgba(74,111,165,.07); }
   .nav-item.active { background: rgba(224,122,95,.1); color: var(--alert); font-weight: 600; }
   .nav-item .icon { font-size: 18px; width: 22px; text-align: center; }
+  /* Icône à deux emojis (ex. Multimédia 📚🎬) : un peu plus large, emojis resserrés */
+  .nav-item .icon.icon-multi { width: 24px; font-size: 13px; letter-spacing: -1px; }
   .nav-item .count { margin-left: auto; color: var(--muted); font-size: 13px; }
   .nav-item.soon { color: var(--muted); cursor: default; }
   .nav-item.soon:hover { background: none; }
@@ -1116,7 +1118,7 @@
       <span class="icon">🧳</span> Affaires / Voyages
     </button>
     <button class="nav-item" data-view="mediatheque">
-      <span class="icon">🏛️</span> Médiathèque
+      <span class="icon icon-multi">📚🎬</span> Multimédia
     </button>
     <button class="nav-item" data-view="vaccins">
       <span class="icon">💉</span> Vaccins
@@ -1588,13 +1590,13 @@ const LIST_VIEWS = {
     emptyIcon: "🧳", emptyText: "Aucune affaire ici. Ajoute-en une ci-dessus (ex : Chargeur).",
     persistChecks: true, reset: true,
     subTabs: [
-      { id: "famille",  label: "👪 Retour famille" },
-      { id: "vacances", label: "🏖️ Vacances" },
-      { id: "rando",    label: "🥾 Randonnée" }
+      { id: "famille",  icon: "👪",  label: "Retour famille" },
+      { id: "vacances", icon: "🏖️", label: "Vacances" },
+      { id: "rando",    icon: "🥾",  label: "Randonnée" }
     ]
   },
   mediatheque: {
-    icon: "🏛️", title: "Médiathèque", sub: "À regarder, à lire, à jouer…",
+    icon: "📚🎬", title: "Multimédia", sub: "À regarder, à lire, à jouer…",
     shape: "flat",                               // liste plate de titres
     search: true, searchPlaceholder: "Rechercher un titre…",
     removeOnCheck: true,                         // cocher = vu/lu/joué → l'item PART (supprimé)
@@ -1602,10 +1604,10 @@ const LIST_VIEWS = {
     emptyIcon: "🎬", emptyText: "Rien ici pour l'instant. Ajoute un titre ci-dessus.",
     persistChecks: false, reset: false,
     subTabs: [
-      { id: "read",       label: "📚 À lire" },
-      { id: "watch",      label: "🎬 À regarder" },
-      { id: "boardgames", label: "🎲 Jeux de société" },
-      { id: "ps4",        label: "🎮 PS4" }
+      { id: "read",       icon: "📚", label: "À lire" },
+      { id: "watch",      icon: "🎬", label: "À regarder" },
+      { id: "boardgames", icon: "🎲", label: "Jeux de société" },
+      { id: "ps4",        icon: "🎮", label: "PS4" }
     ]
   }
 };
@@ -1617,6 +1619,8 @@ function activeListTab(view) {
   if (!cfg || !cfg.subTabs) return null;
   return state.listTab[view] || cfg.subTabs[0].id;
 }
+// Libellé d'un sous-onglet = son icône + son texte (centralisé : onglets, chips d'ajout, éditeur).
+const subTabLabel = s => (s.icon ? s.icon + " " : "") + s.label;
 // Racine d'une vue-liste = une catégorie/rayon (tâche sans parent dont `list` est connue).
 const isListRoot = t => t.parentTaskId == null && t.list != null && isListView(t.list);
 // Remonte à la racine de t ; la renvoie si c'est une racine de vue-liste, sinon null.
@@ -2318,9 +2322,12 @@ function renderListView() {
   const flat = listShape(view) === "flat";
   // Mode "flat" : affaires non cochées en haut, cochées (rayées) en bas. Sinon, ordre d'ajout.
   if (flat) roots = [...roots].sort((a, b) => (a.completed ? 1 : 0) - (b.completed ? 1 : 0));
+  // Onglet vide : on affiche l'icône du sous-onglet actif (sinon l'icône de la vue).
+  const activeSub = cfg.subTabs ? cfg.subTabs.find(s => s.id === tab) : null;
+  const bigIcon = (activeSub && activeSub.icon) ? activeSub.icon : cfg.emptyIcon;
   const emptyHtml = q
     ? `<div class="big">🔍</div>Rien ne correspond à « ${esc(state.listQuery.trim())} » dans cet onglet.`
-    : `<div class="big">${cfg.emptyIcon}</div>${esc(cfg.emptyText)}`;
+    : `<div class="big">${bigIcon}</div>${esc(cfg.emptyText)}`;
   renderTasksInto($("taskList"), roots, emptyHtml, flat);
 }
 
@@ -2328,7 +2335,7 @@ function renderListView() {
 function renderListTabs(view) {
   const cfg = listConfig(view), active = activeListTab(view);
   const tabsHtml = cfg.subTabs.map(s =>
-    `<button class="subview-btn${s.id === active ? " active" : ""}" data-listtab="${s.id}">${esc(s.label)}</button>`
+    `<button class="subview-btn${s.id === active ? " active" : ""}" data-listtab="${s.id}">${esc(subTabLabel(s))}</button>`
   ).join("");
   const resetHtml = cfg.reset
     ? `<button class="list-reset" type="button" data-action="list-reset" title="Décocher tout cet onglet">↺ Tout décocher</button>`
@@ -2343,7 +2350,7 @@ function renderListAddTabs(view) {
   $("listAddTabs").innerHTML =
     `<span class="list-add-label">Ajouter dans :</span>` +
     cfg.subTabs.map(s =>
-      `<button type="button" class="list-add-chip${s.id === active ? " on" : ""}" data-addtab="${s.id}">${esc(s.label)}</button>`
+      `<button type="button" class="list-add-chip${s.id === active ? " on" : ""}" data-addtab="${s.id}">${esc(subTabLabel(s))}</button>`
     ).join("");
 }
 
@@ -3677,7 +3684,7 @@ function renderEditorAffaireTabs(t) {
                .map(x => x.tab || cfg.subTabs[0].id)
   );
   $("editAffaireChips").innerHTML = cfg.subTabs.map(s =>
-    `<button type="button" class="list-add-chip${tabsWith.has(s.id) ? " on" : ""}" data-edittab="${s.id}">${esc(s.label)}</button>`
+    `<button type="button" class="list-add-chip${tabsWith.has(s.id) ? " on" : ""}" data-edittab="${s.id}">${esc(subTabLabel(s))}</button>`
   ).join("");
 }
 
