@@ -1109,14 +1109,14 @@
     <button class="nav-item" data-view="labels">
       <span class="icon">🏷️</span> Étiquettes
     </button>
-    <button class="nav-item" data-view="courses">
-      <span class="icon">🛒</span> Liste de courses
-    </button>
     <button class="nav-item" data-view="bagages">
       <span class="icon">🧳</span> Affaires / Voyages
     </button>
+    <button class="nav-item" data-view="courses">
+      <span class="icon">🛒</span> Liste de courses
+    </button>
     <button class="nav-item" data-view="mediatheque">
-      <span class="icon">🎬</span> Médiathèque
+      <span class="icon">🤓</span> Médiathèque
     </button>
     <button class="nav-item" data-view="vaccins">
       <span class="icon">💉</span> Vaccins
@@ -1588,13 +1588,13 @@ const LIST_VIEWS = {
     emptyIcon: "🧳", emptyText: "Aucune affaire ici. Ajoute-en une ci-dessus (ex : Chargeur).",
     persistChecks: true, reset: true,
     subTabs: [
-      { id: "famille",  label: "Retour famille" },
-      { id: "vacances", label: "Vacances" },
-      { id: "rando",    label: "Randonnée" }
+      { id: "famille",  label: "👪 Retour famille" },
+      { id: "vacances", label: "🏖️ Vacances" },
+      { id: "rando",    label: "🥾 Randonnée" }
     ]
   },
   mediatheque: {
-    icon: "🎬", title: "Médiathèque", sub: "À regarder, à lire, à jouer…",
+    icon: "🤓", title: "Médiathèque", sub: "À regarder, à lire, à jouer…",
     shape: "flat",                               // liste plate de titres
     search: true, searchPlaceholder: "Rechercher un titre…",
     removeOnCheck: true,                         // cocher = vu/lu/joué → l'item PART (supprimé)
@@ -1602,10 +1602,10 @@ const LIST_VIEWS = {
     emptyIcon: "🎬", emptyText: "Rien ici pour l'instant. Ajoute un titre ci-dessus.",
     persistChecks: false, reset: false,
     subTabs: [
-      { id: "watch",      label: "🎬 À regarder" },
       { id: "read",       label: "📚 À lire" },
-      { id: "ps4",        label: "🎮 PS4" },
-      { id: "boardgames", label: "🎲 Jeux de société" }
+      { id: "watch",      label: "🎬 À regarder" },
+      { id: "boardgames", label: "🎲 Jeux de société" },
+      { id: "ps4",        label: "🎮 PS4" }
     ]
   }
 };
