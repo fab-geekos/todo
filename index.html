@@ -107,6 +107,19 @@
     display: grid; place-items: center; font-size: 18px; line-height: 1;
   }
 
+  /* Sélecteur d'espace pro / perso (haut de la barre latérale) */
+  .espace-switch {
+    display: flex; gap: 3px; padding: 3px; margin-bottom: 6px;
+    background: var(--hover); border: 1px solid var(--border); border-radius: 10px;
+  }
+  .espace-opt {
+    flex: 1; font-family: inherit; font-size: 13px; font-weight: 600;
+    cursor: pointer; border: none; background: none; color: var(--muted);
+    padding: 6px 8px; border-radius: 8px; transition: all .15s;
+  }
+  .espace-opt:hover { color: var(--text); }
+  .espace-opt.active { background: var(--card); color: var(--accent); box-shadow: var(--shadow); }
+
   .nav-item {
     display: flex; align-items: center; gap: 12px;
     padding: 9px 12px; border-radius: var(--radius);
@@ -141,6 +154,20 @@
     display: grid; place-items: center;
   }
   .icon-btn:hover { background: var(--hover); }
+  /* Menu discret « Sauvegarde » (export / import JSON) dans l'en-tête */
+  .kebab-wrap { position: relative; }
+  .kebab-menu {
+    position: absolute; right: 0; top: 48px; z-index: 60;
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.18); padding: 6px; min-width: 190px;
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .kebab-menu[hidden] { display: none; }
+  .kebab-menu button {
+    font-family: inherit; font-size: 14px; text-align: left; cursor: pointer;
+    background: none; border: none; color: var(--text); padding: 9px 12px; border-radius: 8px;
+  }
+  .kebab-menu button:hover { background: var(--hover); }
 
   .toolbar {
     display: flex; align-items: center; gap: 10px;
@@ -925,7 +952,8 @@
   /* Calendrier réutilisable (sélecteur de date + heure) */
   .cal-scrim {
     position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,.32);
-    display: flex; align-items: center; justify-content: center; padding: 16px;
+    display: flex; align-items: flex-start; justify-content: center;
+    padding: 8vh 16px 24px; overflow-y: auto;
   }
   .cal-scrim[hidden] { display: none; }
   .cal {
@@ -1029,6 +1057,10 @@
 
 <div class="app">
   <aside class="sidebar" id="sidebar">
+    <div class="espace-switch" id="espaceSwitch" role="group" aria-label="Espace pro / perso">
+      <button class="espace-opt" type="button" data-espace="perso">Perso</button>
+      <button class="espace-opt" type="button" data-espace="pro">Pro</button>
+    </div>
     <button class="add-btn" id="focusAdd">
       <span class="plus">+</span> Ajouter une tâche
     </button>
@@ -1073,6 +1105,14 @@
       </div>
       <div class="head-actions">
         <button class="icon-btn" id="themeToggle" aria-label="Changer de thème">🌙</button>
+        <div class="kebab-wrap">
+          <button class="icon-btn" id="dataMenuBtn" aria-label="Sauvegarde des données" aria-haspopup="true">⋯</button>
+          <div class="kebab-menu" id="dataMenu" hidden>
+            <button type="button" id="exportBtn">⬇️ Exporter (JSON)</button>
+            <button type="button" id="importBtn">⬆️ Importer (JSON)</button>
+          </div>
+        </div>
+        <input type="file" id="importFile" accept="application/json,.json" hidden>
       </div>
     </div>
 
@@ -1311,7 +1351,17 @@
 /* =========================================================
    CONFIG
    ========================================================= */
-const STORAGE_KEY = "todo_app_v1";
+// --- Espaces (pro / perso) : namespaces distincts dans le même stockage ---
+// L'espace vient de l'URL (?espace=pro|perso) ; défaut = perso.
+// Demain (Firebase) : seul le backend de db.load/save changera, cette logique reste.
+const ESPACES = ["perso", "pro"];
+function getEspace() {
+  const p = new URLSearchParams(location.search).get("espace");
+  return ESPACES.includes(p) ? p : "perso";
+}
+const ESPACE = getEspace();
+const LEGACY_KEY = "todo_app_v1";                 // ancienne clé unique (avant les espaces)
+const STORAGE_KEY = LEGACY_KEY + "__" + ESPACE;   // ex. todo_app_v1__perso
 const THEME_KEY = "todo_theme";
 const DAY_MS = 86400000;                 // millisecondes dans une journée
 const DEFAULT_PROJECT_ICON = "📁";       // icône par défaut d'un nouveau projet
@@ -1395,8 +1445,16 @@ function normalizeData(raw) {
 
 const db = {
   load() {
-    let raw = null;
+    let raw = null, adopted = false;
     try { raw = JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch {}
+    // Migration douce : 1er passage sur l'espace "perso" sans données propres
+    // → on adopte l'ancienne clé unique (les données historiques sont perso).
+    if (raw == null && ESPACE === "perso") {
+      try {
+        const legacy = JSON.parse(localStorage.getItem(LEGACY_KEY));
+        if (legacy != null) { raw = legacy; adopted = true; }
+      } catch {}
+    }
     const data = normalizeData(raw);
     state.tasks = data.tasks;
     state.projects = data.projects;
@@ -1404,6 +1462,7 @@ const db = {
     state.birthDate = data.birthDate;
     state.vaccineDone = data.vaccineDone;
     state.labels = data.labels;
+    if (adopted) this.save();   // recopie l'historique dans la clé d'espace
   },
   save() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
@@ -4569,10 +4628,82 @@ function toggleTheme() {
 /* =========================================================
    INIT
    ========================================================= */
+/* =========================================================
+   ESPACE (pro / perso) + SAUVEGARDE (export / import JSON)
+   ========================================================= */
+function initEspaceSwitch() {
+  document.querySelectorAll(".espace-opt").forEach(b => {
+    b.classList.toggle("active", b.dataset.espace === ESPACE);
+    b.addEventListener("click", () => {
+      if (b.dataset.espace === ESPACE) return;
+      const params = new URLSearchParams(location.search);
+      params.set("espace", b.dataset.espace);
+      location.search = params.toString();   // recharge l'app sur le nouvel espace
+    });
+  });
+}
+
+// Exporte l'espace courant en fichier JSON (filet de sécurité + sauvegarde manuelle).
+function exportData() {
+  const payload = {
+    _app: "todo", _version: 1, _espace: ESPACE, _exportedAt: new Date().toISOString(),
+    tasks: state.tasks, projects: state.projects, contacts: state.contacts,
+    birthDate: state.birthDate, vaccineDone: state.vaccineDone, labels: state.labels
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `todo-${ESPACE}-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+// Importe un JSON exporté → remplace les données de l'espace courant (après confirmation).
+function importData(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    let raw;
+    try { raw = JSON.parse(reader.result); }
+    catch { alert("Import impossible : le fichier n'est pas un JSON valide."); return; }
+    const data = normalizeData(raw);
+    const msg = `Importer ce fichier dans l'espace « ${ESPACE} » ?\n\n`
+      + `• ${data.tasks.length} tâche(s)\n• ${data.projects.length} projet(s)\n`
+      + `• ${data.contacts.length} contact(s)\n• ${data.labels.length} étiquette(s)\n\n`
+      + `⚠️ Cela REMPLACE toutes les données actuelles de cet espace.`;
+    if (!confirm(msg)) return;
+    state.tasks = data.tasks; state.projects = data.projects; state.contacts = data.contacts;
+    state.birthDate = data.birthDate; state.vaccineDone = data.vaccineDone; state.labels = data.labels;
+    db.save();
+    render();
+    alert("Import terminé ✅");
+  };
+  reader.onerror = () => alert("Lecture du fichier impossible.");
+  reader.readAsText(file);
+}
+
+function bindDataMenu() {
+  const btn = $("dataMenuBtn"), menu = $("dataMenu");
+  btn.addEventListener("click", e => { e.stopPropagation(); menu.hidden = !menu.hidden; });
+  document.addEventListener("click", e => {
+    if (!menu.hidden && !e.target.closest(".kebab-wrap")) menu.hidden = true;
+  });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") menu.hidden = true; });
+  $("exportBtn").addEventListener("click", () => { menu.hidden = true; exportData(); });
+  $("importBtn").addEventListener("click", () => { menu.hidden = true; $("importFile").click(); });
+  $("importFile").addEventListener("change", e => {
+    const f = e.target.files[0];
+    if (f) importData(f);
+    e.target.value = "";   // autorise un ré-import du même fichier
+  });
+}
+
 function init() {
   db.load();
   applyMode();
   bindEvents();
+  initEspaceSwitch();
+  bindDataMenu();
   initTheme();
   render();
 }
