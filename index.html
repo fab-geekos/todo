@@ -418,6 +418,10 @@
   }
   .list-add-chip:hover { border-color: var(--accent); color: var(--text); }
   .list-add-chip.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  /* Recherche dans une vue-liste (réutilise .search-box / .search-input des contacts) */
+  .list-search { margin-bottom: 16px; max-width: 420px; }
+  /* Chips d'appartenance aux sous-onglets dans l'éditeur d'affaire */
+  .affaire-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
   #projectsPriorities { display: none; margin-top: 32px; }
   .section-title { font-size: 18px; font-weight: 700; margin-bottom: 2px; }
   .section-sub { font-size: 13px; color: var(--muted); margin-bottom: 16px; }
@@ -1160,6 +1164,12 @@
     <!-- Sous-onglets des vues-listes (ex. Affaires/Voyages), remplis dynamiquement -->
     <div class="todo-tabs" id="listTabs" style="display:none"></div>
 
+    <!-- Recherche dans une vue-liste (scopée au sous-onglet actif) -->
+    <div class="search-box list-search" id="listSearch" style="display:none">
+      <span class="search-icon">🔍</span>
+      <input class="search-input" id="listSearchInput" type="text" placeholder="Rechercher une affaire…" autocomplete="off">
+    </div>
+
     <div class="toolbar" id="toolbar">
       <select class="sort-select" id="sortSelect">
         <option value="due">Trier par échéance</option>
@@ -1312,6 +1322,11 @@
           <div class="editor-addsub" id="editAddSubBtn"><span class="plus-sm" style="font-size:16px;">+</span> Ajouter une sous-tâche</div>
           <input class="editor-addsub-input" id="editAddSubInput" type="text" placeholder="Nouvelle sous-tâche…" hidden>
         </div>
+        <!-- Éditeur d'affaire (vue-liste flat) : gérer ses sous-onglets d'appartenance -->
+        <div class="editor-affaire-tabs" id="editAffaireTabs" hidden>
+          <div class="editor-subtasks-head">Dans quels onglets ?</div>
+          <div class="affaire-chips" id="editAffaireChips"></div>
+        </div>
       </div>
       <div class="editor-side">
         <div class="side-section">
@@ -1388,6 +1403,9 @@ const ESPACE = getEspace();
 const LEGACY_KEY = "todo_app_v1";                 // ancienne clé unique (avant les espaces)
 const STORAGE_KEY = LEGACY_KEY + "__" + ESPACE;   // ex. todo_app_v1__perso
 const THEME_KEY = "todo_theme";
+// Vues masquées selon l'espace (outil perso : certaines vues n'ont pas de sens côté pro).
+const ESPACE_HIDDEN_VIEWS = { pro: ["courses", "bagages", "vaccins"] };
+const isViewHidden = view => (ESPACE_HIDDEN_VIEWS[ESPACE] || []).includes(view);
 const DAY_MS = 86400000;                 // millisecondes dans une journée
 const DEFAULT_PROJECT_ICON = "📁";       // icône par défaut d'un nouveau projet
 
@@ -1444,7 +1462,8 @@ let state = {
   expandedTasks: new Set(),  // ids dépliés dans le Todo (tout est replié par défaut)
   expandedWeek: new Set(),   // ids dépliés dans la vue Prochainement (indépendant du Todo)
   editSubFilter: "",         // texte de recherche des produits dans l'éditeur (liste de courses)
-  listTab: {}                // sous-onglet actif par vue-liste (ex. { bagages: "famille" })
+  listTab: {},               // sous-onglet actif par vue-liste (ex. { bagages: "famille" })
+  listQuery: ""              // recherche dans la vue-liste courante (scopée au sous-onglet actif)
 };
 
 /* =========================================================
@@ -1560,6 +1579,7 @@ const LIST_VIEWS = {
   bagages: {
     icon: "🧳", title: "Affaires / Voyages", sub: "Tes affaires à préparer selon la situation",
     shape: "flat",                               // liste plate d'affaires cochables (pas de catégories)
+    search: true,                                // barre de recherche dans la vue (scopée au sous-onglet)
     addRootPlaceholder: "Ajouter une affaire (ex : Chargeur)",
     emptyIcon: "🧳", emptyText: "Aucune affaire ici. Ajoute-en une ci-dessus (ex : Chargeur).",
     persistChecks: true, reset: true,
@@ -1593,6 +1613,9 @@ const listShape = view => (listConfig(view) && listConfig(view).shape) || "tree"
 // Catégorie = racine d'une vue-liste en mode arbre (pas de case à cocher, son bouton coche tout,
 // peut recevoir des items). En mode "flat", une racine est une affaire cochable normale.
 const isListCategory = t => isListRoot(t) && listShape(t.list) === "tree";
+// Affaire multi-onglets (mode flat) : toutes les copies d'une même affaire partagent un `group`
+// (généré à l'ajout). Repli sur l'id pour les affaires créées avant ce champ.
+const affaireGroup = t => t.group || t.id;
 
 // Compat : isShoppingRoot = « racine de vue-liste » (sert aux exclusions Todo/Eisenhower/compteurs).
 // Pour le comportement « catégorie » (pas de case, coche tout, sous-tâches) → isListCategory.
@@ -1992,8 +2015,9 @@ function taskRowHtml(task, depth, ancestorContinues = [], isLast = false) {
   // Vue-liste en arbre : seule une catégorie peut recevoir des items (2 niveaux). En mode "flat",
   // une affaire est une feuille (pas d'ajout d'enfant). Hors vue-liste : profondeur max classique.
   const canAddChild = isListTask(task) ? isListCategory(task) : (taskDepth(task) < MAX_TASK_DEPTH);
-  // Un item de liste ne s'ouvre pas (coche/supprime) ; une catégorie (mode arbre) s'ouvre.
-  const canOpen = !isListTask(task) || isListCategory(task);
+  // S'ouvre : tout sauf un item d'arbre (sous-tâche d'une catégorie). Une catégorie ET une
+  // affaire (flat) s'ouvrent pour être éditées ; un item d'arbre se coche/supprime seulement.
+  const canOpen = !isListTask(task) || isListRoot(task);
   const doneCls = task.completed ? " done" : "";
 
   // Guides en arbre : une verticale de fond par ancêtre dont la branche continue (calculé au rendu).
@@ -2079,6 +2103,8 @@ function render() {
   // Sous-onglets éventuels de la vue-liste (ex. Affaires/Voyages)
   $("listTabs").style.display = (listView && lcfg.subTabs) ? "flex" : "none";
   if (listView && lcfg.subTabs) renderListTabs(state.view);
+  // Barre de recherche de la vue-liste (si activée dans la config) ; l'input garde sa valeur.
+  $("listSearch").style.display = (listView && lcfg.search) ? "flex" : "none";
 
   // Onglets de la vue Todo (Toutes / Récurrentes)
   const todoView = state.view === "todo";
@@ -2263,10 +2289,15 @@ function renderListView() {
   const view = state.view, cfg = listConfig(view), tab = activeListTab(view);
   let roots = state.tasks.filter(t => isListRoot(t) && t.list === view);
   if (cfg.subTabs) roots = roots.filter(t => (t.tab || cfg.subTabs[0].id) === tab);
+  // Recherche (la vue + le sous-onglet actif sont déjà filtrés au-dessus → scope respecté).
+  const q = (state.listQuery || "").trim().toLowerCase();
+  if (q) roots = roots.filter(t => t.title.toLowerCase().includes(q));
   const flat = listShape(view) === "flat";
   // Mode "flat" : affaires non cochées en haut, cochées (rayées) en bas. Sinon, ordre d'ajout.
   if (flat) roots = [...roots].sort((a, b) => (a.completed ? 1 : 0) - (b.completed ? 1 : 0));
-  const emptyHtml = `<div class="big">${cfg.emptyIcon}</div>${esc(cfg.emptyText)}`;
+  const emptyHtml = q
+    ? `<div class="big">🔍</div>Rien ne correspond à « ${esc(state.listQuery.trim())} » dans cet onglet.`
+    : `<div class="big">${cfg.emptyIcon}</div>${esc(cfg.emptyText)}`;
   renderTasksInto($("taskList"), roots, emptyHtml, flat);
 }
 
@@ -2546,12 +2577,12 @@ function readFlags(container) {
 
 // Crée une catégorie (racine) d'une vue-liste : tâche racine `list:<vue>`, sans date ni priorité
 // (texte pris tel quel, pas de parsing). `tab` = sous-onglet si la vue en a, sinon null.
-function addListRoot(view, title, tab = null) {
+function addListRoot(view, title, tab = null, group = null) {
   db.add({
     id: uid(), title: title.trim(), note: "",
     dueDate: null, dueTime: null, urgent: false, important: false,
     completed: false, createdAt: Date.now(),
-    projectId: null, parentTaskId: null, recurrence: null, list: view, tab
+    projectId: null, parentTaskId: null, recurrence: null, list: view, tab, group: group || uid()
   });
 }
 
@@ -2563,10 +2594,11 @@ function addTask() {
   if (isListView(state.view)) {
     const cfg = listConfig(state.view);
     if (cfg.shape === "flat" && cfg.subTabs) {
-      // Affaire ajoutée dans tous les sous-onglets cochés (au moins l'onglet actif).
+      // Affaire ajoutée dans tous les sous-onglets cochés (au moins l'onglet actif), même `group`.
       let tabs = [...document.querySelectorAll("#listAddTabs .list-add-chip.on")].map(c => c.dataset.addtab);
       if (tabs.length === 0) tabs = [activeListTab(state.view)];
-      tabs.forEach(tab => addListRoot(state.view, raw, tab));
+      const gid = uid();
+      tabs.forEach(tab => addListRoot(state.view, raw, tab, gid));
     } else {
       addListRoot(state.view, raw, activeListTab(state.view));   // crée une catégorie (mode arbre)
     }
@@ -3609,6 +3641,35 @@ function renderEditorDate(t) {
   btn.classList.remove("empty");
 }
 
+// Éditeur d'une affaire (vue-liste flat) : chips des sous-onglets où l'affaire (le groupe) existe.
+function renderEditorAffaireTabs(t) {
+  const cfg = listConfig(t.list), key = affaireGroup(t);
+  const tabsWith = new Set(
+    state.tasks.filter(x => isListRoot(x) && x.list === t.list && affaireGroup(x) === key)
+               .map(x => x.tab || cfg.subTabs[0].id)
+  );
+  $("editAffaireChips").innerHTML = cfg.subTabs.map(s =>
+    `<button type="button" class="list-add-chip${tabsWith.has(s.id) ? " on" : ""}" data-edittab="${s.id}">${esc(s.label)}</button>`
+  ).join("");
+}
+
+// (Dé)place l'affaire dans un sous-onglet : ajoute une copie (même group) ou retire celle de l'onglet.
+// Refuse de retirer le dernier onglet. Renvoie true si une modif a eu lieu.
+function toggleAffaireTab(t, tabId) {
+  const cfg = listConfig(t.list), key = affaireGroup(t);
+  const members = state.tasks.filter(x => isListRoot(x) && x.list === t.list && affaireGroup(x) === key);
+  const inTab = members.filter(x => (x.tab || cfg.subTabs[0].id) === tabId);
+  if (inTab.length) {
+    if (members.length - inTab.length === 0) return false;   // garder au moins un onglet
+    const ids = new Set(inTab.map(x => x.id));
+    state.tasks = state.tasks.filter(x => !ids.has(x.id));
+    db.save();
+  } else {
+    addListRoot(t.list, members[0] ? members[0].title : t.title, tabId, key);   // db.save inclus
+  }
+  return true;
+}
+
 function openEditor(id) {
   const t = getTask(id);
   if (!t) return;
@@ -3642,7 +3703,13 @@ function openEditor(id) {
   const subSearch = $("editSubSearch");
   subSearch.value = "";
   subSearch.hidden = !isShoppingRoot(t);          // recherche seulement sur un rayon (pas un produit)
-  $("editAddSubInput").placeholder = isListRoot(t) ? listConfig(t.list).addItemPlaceholder : "Nouvelle sous-tâche…";
+  $("editAddSubInput").placeholder = isListRoot(t) ? (listConfig(t.list).addItemPlaceholder || "Nouvel élément…") : "Nouvelle sous-tâche…";
+
+  // Mode "affaire" (vue-liste flat) : titre + onglets d'appartenance, pas de sous-tâches.
+  const flatAffaire = isListRoot(t) && listShape(t.list) === "flat";
+  $("editSubtasks").style.display = flatAffaire ? "none" : "";
+  $("editAffaireTabs").hidden = !flatAffaire;
+  if (flatAffaire) renderEditorAffaireTabs(t);
 
   renderEditorSubtasks(t);
   autoGrowDesc();
@@ -3853,7 +3920,7 @@ function renderEditorSubtasks(task) {
   // Liste de courses : seul un rayon peut ajouter des produits (pas de 3e niveau).
   const canAdd = isShoppingTask(task) ? isShoppingRoot(task) : (taskDepth(task) < MAX_TASK_DEPTH);
   const { done, total } = subtaskProgress(task.id);
-  const word = isListRoot(task) ? listConfig(task.list).itemWordPlural : "Sous-tâches";
+  const word = isListRoot(task) ? (listConfig(task.list).itemWordPlural || "Éléments") : "Sous-tâches";
   $("editSubHead").textContent = total > 0 ? `${word}  ${done}/${total}` : word;
   // Filtre de recherche (liste de courses) : ne montre que les produits correspondants.
   const filter = (state.editSubFilter || "").trim().toLowerCase();
@@ -3920,7 +3987,14 @@ function saveEditorFields() {
   const t = getTask(id);
   if (!t) return;
   const title = $("editTitle").value.trim();
-  if (title) t.title = title;     // on n'efface pas un titre par mégarde
+  if (title) {
+    t.title = title;     // on n'efface pas un titre par mégarde
+    // Affaire (vue-liste flat) : renomme toutes les copies du groupe (tous les onglets).
+    if (isListRoot(t) && listShape(t.list) === "flat") {
+      const key = affaireGroup(t);
+      state.tasks.forEach(x => { if (isListRoot(x) && x.list === t.list && affaireGroup(x) === key) x.title = title; });
+    }
+  }
   t.note = $("editNote").value.trim();
   db.save();
 }
@@ -3938,10 +4012,22 @@ function applyMode() {
 }
 
 function navigate(view) {
+  if (isViewHidden(view)) return;            // vue masquée dans l'espace courant
   state.view = view;
   state.labelFilter = null;   // la navigation ramène toujours à la liste des labels
+  state.listQuery = "";       // on réinitialise la recherche en changeant de vue
+  const si = $("listSearchInput"); if (si) si.value = "";
   closeSidebar();
   render();
+}
+
+// Masque, pour l'espace courant, les vues non pertinentes (bouton de nav + repli si on y est).
+function applyEspaceViews() {
+  (ESPACE_HIDDEN_VIEWS[ESPACE] || []).forEach(v => {
+    const btn = document.querySelector(`.nav-item[data-view="${v}"]`);
+    if (btn) btn.style.display = "none";
+  });
+  if (isViewHidden(state.view)) state.view = "todo";
 }
 
 /* =========================================================
@@ -4156,6 +4242,29 @@ function bindEvents() {
   $("listAddTabs").addEventListener("click", e => {
     const chip = e.target.closest(".list-add-chip");
     if (chip) chip.classList.toggle("on");
+  });
+
+  // Recherche dans une vue-liste (scopée au sous-onglet actif) : ne re-rend que la liste (focus gardé)
+  $("listSearchInput").addEventListener("input", e => {
+    state.listQuery = e.target.value;
+    renderListView();
+  });
+
+  // Éditeur d'affaire : (dé)cocher un sous-onglet d'appartenance (ajoute/retire une copie)
+  $("editAffaireChips").addEventListener("click", e => {
+    const chip = e.target.closest("[data-edittab]");
+    if (!chip) return;
+    const t = getTask(state.editingId);
+    if (!t) return;
+    const key = affaireGroup(t);
+    if (!toggleAffaireTab(t, chip.dataset.edittab)) return;   // refus : dernier onglet
+    if (!getTask(state.editingId)) {                          // l'affaire éditée a été retirée
+      const survivor = state.tasks.find(x => isListRoot(x) && listShape(x.list) === "flat" && affaireGroup(x) === key);
+      if (!survivor) { closeEditor(); render(); return; }
+      state.editingId = survivor.id;
+    }
+    renderEditorAffaireTabs(getTask(state.editingId));
+    render();
   });
 
   // Navigation sidebar
@@ -4865,6 +4974,7 @@ function init() {
   bindEvents();
   initEspaceSwitch();
   bindDataMenu();
+  applyEspaceViews();
   initTheme();
   render();
 }
