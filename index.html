@@ -400,7 +400,7 @@
 
   .projects-tabs { display: none; gap: 8px; margin-bottom: 18px; }
   /* Onglets de la vue Todo (Toutes / Récurrentes) : réutilisent le style .subview-btn */
-  .todo-tabs { display: none; gap: 8px; margin-bottom: 16px; }
+  .todo-tabs { display: none; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
   /* Bouton « Tout décocher » d'une vue-liste (poussé à droite de la barre de sous-onglets) */
   .list-reset {
     margin-left: auto; font-family: inherit; font-size: 13px; cursor: pointer;
@@ -1115,6 +1115,9 @@
     <button class="nav-item" data-view="bagages">
       <span class="icon">🧳</span> Affaires / Voyages
     </button>
+    <button class="nav-item" data-view="mediatheque">
+      <span class="icon">🎬</span> Médiathèque
+    </button>
     <button class="nav-item" data-view="vaccins">
       <span class="icon">💉</span> Vaccins
     </button>
@@ -1404,7 +1407,7 @@ const LEGACY_KEY = "todo_app_v1";                 // ancienne clé unique (avant
 const STORAGE_KEY = LEGACY_KEY + "__" + ESPACE;   // ex. todo_app_v1__perso
 const THEME_KEY = "todo_theme";
 // Vues masquées selon l'espace (outil perso : certaines vues n'ont pas de sens côté pro).
-const ESPACE_HIDDEN_VIEWS = { pro: ["courses", "bagages", "vaccins"] };
+const ESPACE_HIDDEN_VIEWS = { pro: ["courses", "bagages", "mediatheque", "vaccins"] };
 const isViewHidden = view => (ESPACE_HIDDEN_VIEWS[ESPACE] || []).includes(view);
 const DAY_MS = 86400000;                 // millisecondes dans une journée
 const DEFAULT_PROJECT_ICON = "📁";       // icône par défaut d'un nouveau projet
@@ -1579,7 +1582,8 @@ const LIST_VIEWS = {
   bagages: {
     icon: "🧳", title: "Affaires / Voyages", sub: "Tes affaires à préparer selon la situation",
     shape: "flat",                               // liste plate d'affaires cochables (pas de catégories)
-    search: true,                                // barre de recherche dans la vue (scopée au sous-onglet)
+    search: true, searchPlaceholder: "Rechercher une affaire…",
+    multiAdd: true,                              // saisie rapide : ajouter dans plusieurs sous-onglets à la fois
     addRootPlaceholder: "Ajouter une affaire (ex : Chargeur)",
     emptyIcon: "🧳", emptyText: "Aucune affaire ici. Ajoute-en une ci-dessus (ex : Chargeur).",
     persistChecks: true, reset: true,
@@ -1587,6 +1591,21 @@ const LIST_VIEWS = {
       { id: "famille",  label: "Retour famille" },
       { id: "vacances", label: "Vacances" },
       { id: "rando",    label: "Randonnée" }
+    ]
+  },
+  mediatheque: {
+    icon: "🎬", title: "Médiathèque", sub: "À regarder, à lire, à jouer…",
+    shape: "flat",                               // liste plate de titres
+    search: true, searchPlaceholder: "Rechercher un titre…",
+    removeOnCheck: true,                         // cocher = vu/lu/joué → l'item PART (supprimé)
+    addRootPlaceholder: "Ajouter un titre (film, livre, jeu…)",
+    emptyIcon: "🎬", emptyText: "Rien ici pour l'instant. Ajoute un titre ci-dessus.",
+    persistChecks: false, reset: false,
+    subTabs: [
+      { id: "watch",      label: "🎬 À regarder" },
+      { id: "read",       label: "📚 À lire" },
+      { id: "ps4",        label: "🎮 PS4" },
+      { id: "boardgames", label: "🎲 Jeux de société" }
     ]
   }
 };
@@ -1616,6 +1635,9 @@ const isListCategory = t => isListRoot(t) && listShape(t.list) === "tree";
 // Affaire multi-onglets (mode flat) : toutes les copies d'une même affaire partagent un `group`
 // (généré à l'ajout). Repli sur l'id pour les affaires créées avant ce champ.
 const affaireGroup = t => t.group || t.id;
+// Une affaire est "éditable" (clic → éditeur d'appartenance aux sous-onglets) seulement dans une
+// vue flat qui gère le multi-onglets (Affaires/Voyages). Pas dans une vue "removeOnCheck" (Médiathèque).
+const affaireEditable = t => isListRoot(t) && listShape(t.list) === "flat" && !!(listConfig(t.list) && listConfig(t.list).multiAdd);
 
 // Compat : isShoppingRoot = « racine de vue-liste » (sert aux exclusions Todo/Eisenhower/compteurs).
 // Pour le comportement « catégorie » (pas de case, coche tout, sous-tâches) → isListCategory.
@@ -2015,9 +2037,9 @@ function taskRowHtml(task, depth, ancestorContinues = [], isLast = false) {
   // Vue-liste en arbre : seule une catégorie peut recevoir des items (2 niveaux). En mode "flat",
   // une affaire est une feuille (pas d'ajout d'enfant). Hors vue-liste : profondeur max classique.
   const canAddChild = isListTask(task) ? isListCategory(task) : (taskDepth(task) < MAX_TASK_DEPTH);
-  // S'ouvre : tout sauf un item d'arbre (sous-tâche d'une catégorie). Une catégorie ET une
-  // affaire (flat) s'ouvrent pour être éditées ; un item d'arbre se coche/supprime seulement.
-  const canOpen = !isListTask(task) || isListRoot(task);
+  // S'ouvre : tout sauf un item de liste non éditable. Catégorie (arbre) et affaire multi-onglets
+  // (flat) s'ouvrent ; un item d'arbre ou un titre Médiathèque se coche/supprime seulement.
+  const canOpen = !isListTask(task) || isListCategory(task) || affaireEditable(task);
   const doneCls = task.completed ? " done" : "";
 
   // Guides en arbre : une verticale de fond par ancêtre dont la branche continue (calculé au rendu).
@@ -2097,7 +2119,7 @@ function render() {
   document.querySelector(".quick-add .flags").style.display = listView ? "none" : "";
   // Saisie rapide multi-onglets (vues-listes "flat" à sous-onglets : Affaires/Voyages) :
   // permet d'ajouter une affaire dans plusieurs sous-onglets d'un coup.
-  const flatMulti = listView && listShape(state.view) === "flat" && !!lcfg.subTabs;
+  const flatMulti = listView && listShape(state.view) === "flat" && !!lcfg.subTabs && !!lcfg.multiAdd;
   $("listAddTabs").style.display = flatMulti ? "flex" : "none";
   if (flatMulti) renderListAddTabs(state.view);
   // Sous-onglets éventuels de la vue-liste (ex. Affaires/Voyages)
@@ -2105,6 +2127,7 @@ function render() {
   if (listView && lcfg.subTabs) renderListTabs(state.view);
   // Barre de recherche de la vue-liste (si activée dans la config) ; l'input garde sa valeur.
   $("listSearch").style.display = (listView && lcfg.search) ? "flex" : "none";
+  if (listView && lcfg.search) $("listSearchInput").placeholder = lcfg.searchPlaceholder || "Rechercher…";
 
   // Onglets de la vue Todo (Toutes / Récurrentes)
   const todoView = state.view === "todo";
@@ -2593,7 +2616,7 @@ function addTask() {
 
   if (isListView(state.view)) {
     const cfg = listConfig(state.view);
-    if (cfg.shape === "flat" && cfg.subTabs) {
+    if (cfg.shape === "flat" && cfg.subTabs && cfg.multiAdd) {
       // Affaire ajoutée dans tous les sous-onglets cochés (au moins l'onglet actif), même `group`.
       let tabs = [...document.querySelectorAll("#listAddTabs .list-add-chip.on")].map(c => c.dataset.addtab);
       if (tabs.length === 0) tabs = [activeListTab(state.view)];
@@ -3403,6 +3426,11 @@ function toggleTask(id) {
     render();
     return;
   }
+  // Vue-liste "removeOnCheck" (ex. Médiathèque) : cocher = vu/lu/joué → l'item disparaît.
+  if (isListRoot(t) && listConfig(t.list) && listConfig(t.list).removeOnCheck) {
+    deleteTask(t.id);
+    return;
+  }
   // Tâche récurrente (racine, sans sous-tâche) : cocher = passer à la prochaine occurrence.
   if (!t.completed && t.recurrence && t.dueDate != null && childTasks(t.id).length === 0) {
     advanceRecurrence(t);
@@ -3705,8 +3733,8 @@ function openEditor(id) {
   subSearch.hidden = !isShoppingRoot(t);          // recherche seulement sur un rayon (pas un produit)
   $("editAddSubInput").placeholder = isListRoot(t) ? (listConfig(t.list).addItemPlaceholder || "Nouvel élément…") : "Nouvelle sous-tâche…";
 
-  // Mode "affaire" (vue-liste flat) : titre + onglets d'appartenance, pas de sous-tâches.
-  const flatAffaire = isListRoot(t) && listShape(t.list) === "flat";
+  // Mode "affaire" (vue-liste flat multi-onglets) : titre + onglets d'appartenance, pas de sous-tâches.
+  const flatAffaire = affaireEditable(t);
   $("editSubtasks").style.display = flatAffaire ? "none" : "";
   $("editAffaireTabs").hidden = !flatAffaire;
   if (flatAffaire) renderEditorAffaireTabs(t);
