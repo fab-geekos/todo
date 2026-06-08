@@ -401,6 +401,13 @@
   .projects-tabs { display: none; gap: 8px; margin-bottom: 18px; }
   /* Onglets de la vue Todo (Toutes / Récurrentes) : réutilisent le style .subview-btn */
   .todo-tabs { display: none; gap: 8px; margin-bottom: 16px; }
+  /* Bouton « Tout décocher » d'une vue-liste (poussé à droite de la barre de sous-onglets) */
+  .list-reset {
+    margin-left: auto; font-family: inherit; font-size: 13px; cursor: pointer;
+    background: var(--card); color: var(--muted); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 12px; transition: all .15s;
+  }
+  .list-reset:hover { color: var(--alert); border-color: var(--alert); }
   #projectsPriorities { display: none; margin-top: 32px; }
   .section-title { font-size: 18px; font-weight: 700; margin-bottom: 2px; }
   .section-sub { font-size: 13px; color: var(--muted); margin-bottom: 16px; }
@@ -689,12 +696,12 @@
   .editor-sub-search:focus { border-color: var(--accent); }
   /* Éditeur en mode courses : on enchaîne titre -> produits, sans trait de séparation */
   .editor-subtasks.courses-mode { border-top: none; margin-top: 12px; padding-top: 0; }
-  /* Vue Liste de courses : un rayon est une catégorie, pas de barre de priorité colorée */
-  body.view-courses .task { border-left-color: transparent; }
-  /* Pas de connecteurs en arbre (bras gris) : la hiérarchie rayon → produits est déjà lisible */
-  body.view-courses .task-row::before,
-  body.view-courses .task-row::after { content: none; }
-  body.view-courses .task-row { background-image: none !important; }
+  /* Vues-listes (courses, affaires/voyages…) : une catégorie n'a pas de barre de priorité colorée */
+  body.view-list .task { border-left-color: transparent; }
+  /* Pas de connecteurs en arbre (bras gris) : la hiérarchie catégorie → items est déjà lisible */
+  body.view-list .task-row::before,
+  body.view-list .task-row::after { content: none; }
+  body.view-list .task-row { background-image: none !important; }
   /* Un produit ne s'ouvre pas : curseur normal (seul le cercle reste cliquable) */
   .task-row.no-open { cursor: default; }
   .editor-sub-list { list-style: none; display: flex; flex-direction: column; }
@@ -1091,6 +1098,9 @@
     <button class="nav-item" data-view="courses">
       <span class="icon">🛒</span> Liste de courses
     </button>
+    <button class="nav-item" data-view="bagages">
+      <span class="icon">🧳</span> Affaires / Voyages
+    </button>
     <button class="nav-item" data-view="vaccins">
       <span class="icon">💉</span> Vaccins
     </button>
@@ -1134,6 +1144,9 @@
       <button class="subview-btn" data-todotab="recur">🔁 Récurrentes</button>
       <button class="subview-btn" data-todotab="bday">🎂 Anniversaires</button>
     </div>
+
+    <!-- Sous-onglets des vues-listes (ex. Affaires/Voyages), remplis dynamiquement -->
+    <div class="todo-tabs" id="listTabs" style="display:none"></div>
 
     <div class="toolbar" id="toolbar">
       <select class="sort-select" id="sortSelect">
@@ -1418,7 +1431,8 @@ let state = {
   weekAnchor: null,       // début (ms) de la semaine affichée dans Prochainement (null = aujourd'hui)
   expandedTasks: new Set(),  // ids dépliés dans le Todo (tout est replié par défaut)
   expandedWeek: new Set(),   // ids dépliés dans la vue Prochainement (indépendant du Todo)
-  editSubFilter: ""          // texte de recherche des produits dans l'éditeur (liste de courses)
+  editSubFilter: "",         // texte de recherche des produits dans l'éditeur (liste de courses)
+  listTab: {}                // sous-onglet actif par vue-liste (ex. { bagages: "famille" })
 };
 
 /* =========================================================
@@ -1513,13 +1527,59 @@ const getTask = id => state.tasks.find(t => t.id === id);
 const getProject = id => state.projects.find(p => p.id === id);
 const getContact = id => state.contacts.find(c => c.id === id);
 const isRoot = t => t.parentTaskId == null;   // tâche racine = sans parent
-// Liste de courses : un rayon = tâche racine marquée list "courses". Un produit = sous-tâche d'un rayon.
-const isShoppingRoot = t => t.parentTaskId == null && t.list === "courses";
-function isShoppingTask(t) {           // true si la racine de t est un rayon
+/* =========================================================
+   MOTEUR DE LISTES (vues « checklist » : courses, affaires/voyages, …)
+   Une vue-liste = UNE entrée de LIST_VIEWS. Le champ `list` d'une tâche
+   RACINE = la clé de la vue (ex. "courses"). Une racine = une catégorie
+   (rayon) ; ses sous-tâches = les items. Tout le comportement spécial
+   (pas de priorité, 2 niveaux, racine qui coche tout, éditeur épuré…)
+   est piloté par ces helpers — AUCUN code dupliqué d'une vue à l'autre.
+   Pour ajouter une vue-liste : il suffit d'ajouter une entrée ici + un
+   bouton de nav (et un sous-onglet si besoin). Rien d'autre à toucher.
+   ========================================================= */
+const LIST_VIEWS = {
+  courses: {
+    icon: "🛒", title: "Liste de courses", sub: "Tes rayons et les produits à acheter",
+    addRootPlaceholder: "Ajouter un rayon (ex : Fruits et légumes)",
+    itemWordPlural: "Produits", addItemPlaceholder: "Nouveau produit…",
+    emptyIcon: "🛒", emptyText: "Aucun rayon. Ajoute-en un ci-dessus (ex : Fruits et légumes).",
+    persistChecks: true, subTabs: null, reset: false
+  },
+  bagages: {
+    icon: "🧳", title: "Affaires / Voyages", sub: "Tes affaires à préparer selon la situation",
+    addRootPlaceholder: "Ajouter une catégorie (ex : Vêtements)",
+    itemWordPlural: "Affaires", addItemPlaceholder: "Nouvelle affaire…",
+    emptyIcon: "🧳", emptyText: "Aucune catégorie ici. Ajoute-en une ci-dessus (ex : Vêtements).",
+    persistChecks: true, reset: true,
+    subTabs: [
+      { id: "famille",  label: "Retour famille" },
+      { id: "vacances", label: "Vacances" },
+      { id: "rando",    label: "Randonnée" }
+    ]
+  }
+};
+const listConfig = view => LIST_VIEWS[view] || null;           // config d'une vue-liste (ou null)
+const isListView = view => listConfig(view) != null;           // la vue est-elle une vue-liste ?
+// Sous-onglet actif d'une vue-liste (défaut = 1er onglet) ; null si pas de sous-onglets.
+function activeListTab(view) {
+  const cfg = listConfig(view);
+  if (!cfg || !cfg.subTabs) return null;
+  return state.listTab[view] || cfg.subTabs[0].id;
+}
+// Racine d'une vue-liste = une catégorie/rayon (tâche sans parent dont `list` est connue).
+const isListRoot = t => t.parentTaskId == null && t.list != null && isListView(t.list);
+// Remonte à la racine de t ; la renvoie si c'est une racine de vue-liste, sinon null.
+function listRootOf(t) {
   let cur = t;
   while (cur && cur.parentTaskId) cur = getTask(cur.parentTaskId);
-  return !!(cur && cur.list === "courses");
+  return (cur && cur.list != null && isListView(cur.list)) ? cur : null;
 }
+const isListTask = t => listRootOf(t) != null;   // t appartient-elle à une vue-liste ?
+
+// Compat : les anciens noms « shopping » deviennent des alias des helpers génériques.
+// → tous les points d'appel existants se généralisent à TOUTES les vues-listes sans modif.
+const isShoppingRoot = isListRoot;
+const isShoppingTask = isListTask;
 
 function startOfDay(d) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
 function todayTs() { return startOfDay(new Date()).getTime(); }   // aujourd'hui à minuit, en ms
@@ -1973,25 +2033,28 @@ function render() {
     projects: { t: "Projets", s: "Tes projets, organisés par statut" },
     contacts: { t: "Contacts", s: "Tes contacts et leurs projets délégués" },
     week: { t: "Prochainement", s: "Tes échéances des 7 prochains jours" },
-    courses: { t: "Liste de courses", s: "Tes rayons et les produits à acheter" },
     vaccins: { t: "Vaccins", s: "Tes rappels de vaccins (calendrier français)" },
     labels: { t: "Étiquettes", s: "" }
   };
-  const info = titles[state.view] || { t: "", s: "" };
+  // Les vues-listes tirent leur titre/sous-titre de LIST_VIEWS (source unique).
+  const lc0 = listConfig(state.view);
+  const info = titles[state.view] || (lc0 ? { t: lc0.title, s: lc0.sub } : { t: "", s: "" });
   document.getElementById("viewTitle").textContent = info.t;
   document.getElementById("viewSub").textContent = info.s;
 
-  // La saisie rapide et le tri ne concernent que les vues de tâches simples (+ liste de courses)
-  const courses = state.view === "courses";
-  const tasksView = state.view === "todo" || state.view === "today" || courses;
+  // La saisie rapide et le tri ne concernent que les vues de tâches simples (+ vues-listes)
+  const listView = isListView(state.view);
+  const lcfg = listConfig(state.view);
+  const tasksView = state.view === "todo" || state.view === "today" || listView;
   $("toolbar").style.display = state.view === "todo" ? "flex" : "none";
   document.querySelector(".quick-add").style.display = tasksView ? "block" : "none";
-  // En liste de courses : la saisie rapide crée un RAYON (placeholder dédié, pas de priorité)
-  document.body.classList.toggle("view-courses", courses);
-  $("quickInput").placeholder = courses
-    ? "Ajouter un rayon (ex : Fruits et légumes)"
-    : "Ex : Acheter du pain demain 18h";
-  document.querySelector(".quick-add .flags").style.display = courses ? "none" : "";
+  // En vue-liste : la saisie rapide crée une CATÉGORIE/rayon (placeholder dédié, pas de priorité)
+  document.body.classList.toggle("view-list", listView);
+  $("quickInput").placeholder = listView ? lcfg.addRootPlaceholder : "Ex : Acheter du pain demain 18h";
+  document.querySelector(".quick-add .flags").style.display = listView ? "none" : "";
+  // Sous-onglets éventuels de la vue-liste (ex. Affaires/Voyages)
+  $("listTabs").style.display = (listView && lcfg.subTabs) ? "flex" : "none";
+  if (listView && lcfg.subTabs) renderListTabs(state.view);
 
   // Onglets de la vue Todo (Toutes / Récurrentes)
   const todoView = state.view === "todo";
@@ -2060,9 +2123,9 @@ function render() {
   } else if (state.view === "week") {
     $("weekView").style.display = "block";
     renderWeek();
-  } else if (state.view === "courses") {
+  } else if (isListView(state.view)) {
     $("taskList").style.display = "flex";
-    renderCourses();
+    renderListView();
   } else if (state.view === "vaccins") {
     $("vaccinesView").style.display = "block";
     renderVaccines();
@@ -2169,12 +2232,41 @@ function markBirthdayDone(contactId, year) {
   render();
 }
 
-// Liste de courses : chaque rayon (racine list:"courses") est une carte qui englobe ses produits.
-// Réutilise le rendu en arbre ; les rayons restent affichés même quand tous les produits sont cochés.
-function renderCourses() {
-  const rayons = state.tasks.filter(isShoppingRoot);
-  const emptyHtml = `<div class="big">🛒</div>Aucun rayon. Ajoute-en un ci-dessus (ex : Fruits et légumes).`;
-  renderTasksInto($("taskList"), rayons, emptyHtml);
+// Vue-liste générique : chaque catégorie (racine `list:<vue>`) est une carte englobant ses items.
+// Réutilise le rendu en arbre ; les catégories restent affichées même quand tout est coché.
+// Vue à sous-onglets : on ne montre que les catégories de l'onglet actif.
+function renderListView() {
+  const view = state.view, cfg = listConfig(view), tab = activeListTab(view);
+  let roots = state.tasks.filter(t => isListRoot(t) && t.list === view);
+  if (cfg.subTabs) roots = roots.filter(t => (t.tab || cfg.subTabs[0].id) === tab);
+  const emptyHtml = `<div class="big">${cfg.emptyIcon}</div>${esc(cfg.emptyText)}`;
+  renderTasksInto($("taskList"), roots, emptyHtml);
+}
+
+// Barre de sous-onglets d'une vue-liste (+ bouton « Tout décocher » si la vue le permet).
+function renderListTabs(view) {
+  const cfg = listConfig(view), active = activeListTab(view);
+  const tabsHtml = cfg.subTabs.map(s =>
+    `<button class="subview-btn${s.id === active ? " active" : ""}" data-listtab="${s.id}">${esc(s.label)}</button>`
+  ).join("");
+  const resetHtml = cfg.reset
+    ? `<button class="list-reset" type="button" data-action="list-reset" title="Décocher tout cet onglet">↺ Tout décocher</button>`
+    : "";
+  $("listTabs").innerHTML = tabsHtml + resetHtml;
+}
+
+// « Tout décocher » : décoche tous les items de l'onglet actif d'une vue-liste (catégories laissées en place).
+function resetListTab(view) {
+  const cfg = listConfig(view), tab = activeListTab(view);
+  const roots = state.tasks.filter(t => isListRoot(t) && t.list === view
+    && (!cfg.subTabs || (t.tab || cfg.subTabs[0].id) === tab));
+  const ids = new Set();
+  const collect = pid => childTasks(pid).forEach(c => { ids.add(c.id); collect(c.id); });
+  roots.forEach(r => collect(r.id));
+  if (ids.size === 0) return;
+  state.tasks.forEach(t => { if (ids.has(t.id)) { t.completed = false; t.completedAt = null; } });
+  db.save();
+  render();
 }
 
 // Remplit une <ul> avec des cartes, ou un message si la liste est vide.
@@ -2410,14 +2502,14 @@ function readFlags(container) {
   return { urgent: on("urgent"), important: on("important") };
 }
 
-// Crée un rayon de la liste de courses : tâche racine marquée list:"courses", sans date ni priorité
-// (pas de parsing du texte : un nom de rayon est pris tel quel).
-function addShoppingRayon(title) {
+// Crée une catégorie (racine) d'une vue-liste : tâche racine `list:<vue>`, sans date ni priorité
+// (texte pris tel quel, pas de parsing). `tab` = sous-onglet si la vue en a, sinon null.
+function addListRoot(view, title, tab = null) {
   db.add({
     id: uid(), title: title.trim(), note: "",
     dueDate: null, dueTime: null, urgent: false, important: false,
     completed: false, createdAt: Date.now(),
-    projectId: null, parentTaskId: null, recurrence: null, list: "courses"
+    projectId: null, parentTaskId: null, recurrence: null, list: view, tab
   });
 }
 
@@ -2426,8 +2518,8 @@ function addTask() {
   const raw = input.value.trim();
   if (!raw) return;
 
-  if (state.view === "courses") {
-    addShoppingRayon(raw);                          // la saisie rapide crée un rayon
+  if (isListView(state.view)) {
+    addListRoot(state.view, raw, activeListTab(state.view));   // la saisie rapide crée une catégorie
   } else {
     // makeTask déduit urgent/important du texte ; on y ajoute les boutons cliqués
     const flags = readFlags(document.querySelector(".quick-add"));
@@ -3499,7 +3591,7 @@ function openEditor(id) {
   const subSearch = $("editSubSearch");
   subSearch.value = "";
   subSearch.hidden = !isShoppingRoot(t);          // recherche seulement sur un rayon (pas un produit)
-  $("editAddSubInput").placeholder = isShoppingRoot(t) ? "Nouveau produit…" : "Nouvelle sous-tâche…";
+  $("editAddSubInput").placeholder = isListRoot(t) ? listConfig(t.list).addItemPlaceholder : "Nouvelle sous-tâche…";
 
   renderEditorSubtasks(t);
   autoGrowDesc();
@@ -3710,7 +3802,7 @@ function renderEditorSubtasks(task) {
   // Liste de courses : seul un rayon peut ajouter des produits (pas de 3e niveau).
   const canAdd = isShoppingTask(task) ? isShoppingRoot(task) : (taskDepth(task) < MAX_TASK_DEPTH);
   const { done, total } = subtaskProgress(task.id);
-  const word = isShoppingRoot(task) ? "Produits" : "Sous-tâches";
+  const word = isListRoot(task) ? listConfig(task.list).itemWordPlural : "Sous-tâches";
   $("editSubHead").textContent = total > 0 ? `${word}  ${done}/${total}` : word;
   // Filtre de recherche (liste de courses) : ne montre que les produits correspondants.
   const filter = (state.editSubFilter || "").trim().toLowerCase();
@@ -3994,6 +4086,18 @@ function bindEvents() {
     const btn = e.target.closest(".subview-btn");
     if (!btn) return;
     state.todoTab = btn.dataset.todotab;
+    render();
+  });
+
+  // Sous-onglets des vues-listes (Affaires/Voyages…) + bouton « Tout décocher »
+  $("listTabs").addEventListener("click", e => {
+    if (e.target.closest('[data-action="list-reset"]')) {
+      if (confirm("Décocher tous les items de cet onglet ?")) resetListTab(state.view);
+      return;
+    }
+    const btn = e.target.closest("[data-listtab]");
+    if (!btn) return;
+    state.listTab[state.view] = btn.dataset.listtab;
     render();
   });
 
