@@ -408,6 +408,16 @@
     border-radius: 8px; padding: 6px 12px; transition: all .15s;
   }
   .list-reset:hover { color: var(--alert); border-color: var(--alert); }
+  /* Saisie rapide multi-onglets (vues-listes "flat") : dans quels sous-onglets créer l'affaire */
+  .list-add-tabs { display: none; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+  .list-add-label { font-size: 13px; color: var(--muted); }
+  .list-add-chip {
+    font-family: inherit; font-size: 13px; cursor: pointer;
+    background: var(--card); color: var(--muted); border: 1px solid var(--border);
+    border-radius: 20px; padding: 5px 12px; transition: all .15s;
+  }
+  .list-add-chip:hover { border-color: var(--accent); color: var(--text); }
+  .list-add-chip.on { background: var(--accent); color: #fff; border-color: var(--accent); }
   #projectsPriorities { display: none; margin-top: 32px; }
   .section-title { font-size: 18px; font-weight: 700; margin-bottom: 2px; }
   .section-sub { font-size: 13px; color: var(--muted); margin-bottom: 16px; }
@@ -1137,6 +1147,8 @@
         <button class="flag" data-flag="urgent">⚡ Urgent</button>
         <div id="quickLabels" class="picker quick-labels"></div>
       </div>
+      <!-- Vues-listes "flat" multi-onglets : où créer l'affaire (rempli dynamiquement) -->
+      <div class="list-add-tabs" id="listAddTabs" style="display:none"></div>
     </div>
 
     <div class="todo-tabs" id="todoTabs">
@@ -1547,9 +1559,9 @@ const LIST_VIEWS = {
   },
   bagages: {
     icon: "🧳", title: "Affaires / Voyages", sub: "Tes affaires à préparer selon la situation",
-    addRootPlaceholder: "Ajouter une catégorie (ex : Vêtements)",
-    itemWordPlural: "Affaires", addItemPlaceholder: "Nouvelle affaire…",
-    emptyIcon: "🧳", emptyText: "Aucune catégorie ici. Ajoute-en une ci-dessus (ex : Vêtements).",
+    shape: "flat",                               // liste plate d'affaires cochables (pas de catégories)
+    addRootPlaceholder: "Ajouter une affaire (ex : Chargeur)",
+    emptyIcon: "🧳", emptyText: "Aucune affaire ici. Ajoute-en une ci-dessus (ex : Chargeur).",
     persistChecks: true, reset: true,
     subTabs: [
       { id: "famille",  label: "Retour famille" },
@@ -1575,9 +1587,15 @@ function listRootOf(t) {
   return (cur && cur.list != null && isListView(cur.list)) ? cur : null;
 }
 const isListTask = t => listRootOf(t) != null;   // t appartient-elle à une vue-liste ?
+// Forme d'une vue-liste : "tree" (catégories → items, ex. courses) ou "flat" (les racines SONT
+// des items cochables, ex. affaires/voyages). Défaut : "tree".
+const listShape = view => (listConfig(view) && listConfig(view).shape) || "tree";
+// Catégorie = racine d'une vue-liste en mode arbre (pas de case à cocher, son bouton coche tout,
+// peut recevoir des items). En mode "flat", une racine est une affaire cochable normale.
+const isListCategory = t => isListRoot(t) && listShape(t.list) === "tree";
 
-// Compat : les anciens noms « shopping » deviennent des alias des helpers génériques.
-// → tous les points d'appel existants se généralisent à TOUTES les vues-listes sans modif.
+// Compat : isShoppingRoot = « racine de vue-liste » (sert aux exclusions Todo/Eisenhower/compteurs).
+// Pour le comportement « catégorie » (pas de case, coche tout, sous-tâches) → isListCategory.
 const isShoppingRoot = isListRoot;
 const isShoppingTask = isListTask;
 
@@ -1971,10 +1989,11 @@ function taskRowHtml(task, depth, ancestorContinues = [], isLast = false) {
   // Exception : les rayons de la liste de courses restent épurés (ni barre, ni "X/Y fait").
   const progressHtml = (depth === 0 && total > 0 && !isShoppingRoot(task)) ? progressBarHtml(done, total) : "";
   const subCountBadge = (depth > 0 && total > 0) ? `<span class="count-badge">${done}/${total}</span>` : "";
-  // Liste de courses : seul un rayon peut recevoir des produits ; un produit n'a pas de sous-tâche (2 niveaux).
-  const canAddChild = isShoppingTask(task) ? isShoppingRoot(task) : (taskDepth(task) < MAX_TASK_DEPTH);
-  // Un produit (sous-tâche d'un rayon) ne s'ouvre pas : on le coche/décoche seulement. Le rayon, lui, s'ouvre.
-  const canOpen = !(isShoppingTask(task) && !isShoppingRoot(task));
+  // Vue-liste en arbre : seule une catégorie peut recevoir des items (2 niveaux). En mode "flat",
+  // une affaire est une feuille (pas d'ajout d'enfant). Hors vue-liste : profondeur max classique.
+  const canAddChild = isListTask(task) ? isListCategory(task) : (taskDepth(task) < MAX_TASK_DEPTH);
+  // Un item de liste ne s'ouvre pas (coche/supprime) ; une catégorie (mode arbre) s'ouvre.
+  const canOpen = !isListTask(task) || isListCategory(task);
   const doneCls = task.completed ? " done" : "";
 
   // Guides en arbre : une verticale de fond par ancêtre dont la branche continue (calculé au rendu).
@@ -1984,7 +2003,7 @@ function taskRowHtml(task, depth, ancestorContinues = [], isLast = false) {
   return `
     <div class="task-row${doneCls}${lastCls}${canOpen ? "" : " no-open"}" data-id="${task.id}" style="--depth:${depth};${guideStyle}">
       ${chevronHtml}
-      ${isShoppingRoot(task) ? "" : `<button class="checkbox" data-action="toggle" aria-label="Terminer"></button>`}
+      ${isListCategory(task) ? "" : `<button class="checkbox" data-action="toggle" aria-label="Terminer"></button>`}
       <div class="task-body"${canOpen ? ' data-action="edit"' : ''}>
         <div class="task-titleline"><span class="task-title">${esc(task.title)}</span>${flagBadges(task)}${subCountBadge}</div>
         ${task.note ? `<div class="task-note">${esc(task.note)}</div>` : ""}
@@ -2052,6 +2071,11 @@ function render() {
   document.body.classList.toggle("view-list", listView);
   $("quickInput").placeholder = listView ? lcfg.addRootPlaceholder : "Ex : Acheter du pain demain 18h";
   document.querySelector(".quick-add .flags").style.display = listView ? "none" : "";
+  // Saisie rapide multi-onglets (vues-listes "flat" à sous-onglets : Affaires/Voyages) :
+  // permet d'ajouter une affaire dans plusieurs sous-onglets d'un coup.
+  const flatMulti = listView && listShape(state.view) === "flat" && !!lcfg.subTabs;
+  $("listAddTabs").style.display = flatMulti ? "flex" : "none";
+  if (flatMulti) renderListAddTabs(state.view);
   // Sous-onglets éventuels de la vue-liste (ex. Affaires/Voyages)
   $("listTabs").style.display = (listView && lcfg.subTabs) ? "flex" : "none";
   if (listView && lcfg.subTabs) renderListTabs(state.view);
@@ -2239,8 +2263,11 @@ function renderListView() {
   const view = state.view, cfg = listConfig(view), tab = activeListTab(view);
   let roots = state.tasks.filter(t => isListRoot(t) && t.list === view);
   if (cfg.subTabs) roots = roots.filter(t => (t.tab || cfg.subTabs[0].id) === tab);
+  const flat = listShape(view) === "flat";
+  // Mode "flat" : affaires non cochées en haut, cochées (rayées) en bas. Sinon, ordre d'ajout.
+  if (flat) roots = [...roots].sort((a, b) => (a.completed ? 1 : 0) - (b.completed ? 1 : 0));
   const emptyHtml = `<div class="big">${cfg.emptyIcon}</div>${esc(cfg.emptyText)}`;
-  renderTasksInto($("taskList"), roots, emptyHtml);
+  renderTasksInto($("taskList"), roots, emptyHtml, flat);
 }
 
 // Barre de sous-onglets d'une vue-liste (+ bouton « Tout décocher » si la vue le permet).
@@ -2255,14 +2282,29 @@ function renderListTabs(view) {
   $("listTabs").innerHTML = tabsHtml + resetHtml;
 }
 
+// Sélecteur de la saisie rapide (vues-listes "flat" multi-onglets) : dans quels sous-onglets
+// créer l'affaire. L'onglet actif est pré-coché ; on peut en cocher plusieurs (évite de retaper).
+function renderListAddTabs(view) {
+  const cfg = listConfig(view), active = activeListTab(view);
+  $("listAddTabs").innerHTML =
+    `<span class="list-add-label">Ajouter dans :</span>` +
+    cfg.subTabs.map(s =>
+      `<button type="button" class="list-add-chip${s.id === active ? " on" : ""}" data-addtab="${s.id}">${esc(s.label)}</button>`
+    ).join("");
+}
+
 // « Tout décocher » : décoche tous les items de l'onglet actif d'une vue-liste (catégories laissées en place).
 function resetListTab(view) {
   const cfg = listConfig(view), tab = activeListTab(view);
   const roots = state.tasks.filter(t => isListRoot(t) && t.list === view
     && (!cfg.subTabs || (t.tab || cfg.subTabs[0].id) === tab));
   const ids = new Set();
-  const collect = pid => childTasks(pid).forEach(c => { ids.add(c.id); collect(c.id); });
-  roots.forEach(r => collect(r.id));
+  if (listShape(view) === "flat") {
+    roots.forEach(r => ids.add(r.id));            // mode "flat" : les affaires elles-mêmes
+  } else {
+    const collect = pid => childTasks(pid).forEach(c => { ids.add(c.id); collect(c.id); });
+    roots.forEach(r => collect(r.id));            // mode arbre : tous les items des catégories
+  }
   if (ids.size === 0) return;
   state.tasks.forEach(t => { if (ids.has(t.id)) { t.completed = false; t.completedAt = null; } });
   db.save();
@@ -2519,7 +2561,15 @@ function addTask() {
   if (!raw) return;
 
   if (isListView(state.view)) {
-    addListRoot(state.view, raw, activeListTab(state.view));   // la saisie rapide crée une catégorie
+    const cfg = listConfig(state.view);
+    if (cfg.shape === "flat" && cfg.subTabs) {
+      // Affaire ajoutée dans tous les sous-onglets cochés (au moins l'onglet actif).
+      let tabs = [...document.querySelectorAll("#listAddTabs .list-add-chip.on")].map(c => c.dataset.addtab);
+      if (tabs.length === 0) tabs = [activeListTab(state.view)];
+      tabs.forEach(tab => addListRoot(state.view, raw, tab));
+    } else {
+      addListRoot(state.view, raw, activeListTab(state.view));   // crée une catégorie (mode arbre)
+    }
   } else {
     // makeTask déduit urgent/important du texte ; on y ajoute les boutons cliqués
     const flags = readFlags(document.querySelector(".quick-add"));
@@ -3310,9 +3360,9 @@ function renderLabels() {
 function toggleTask(id) {
   const t = getTask(id);
   if (!t) return;
-  // Rayon (liste de courses) : la racine n'est JAMAIS cochée. Son bouton sert à tout cocher
-  // ("tout acheté") ou tout décocher si déjà tout coché ("tout remettre dans la liste").
-  if (isShoppingRoot(t)) {
+  // Catégorie (vue-liste en arbre) : la racine n'est JAMAIS cochée. Son bouton coche tout
+  // ou décoche tout si déjà tout coché. (En mode "flat", une affaire se coche normalement.)
+  if (isListCategory(t)) {
     const kids = childTasks(t.id);
     const allDone = kids.length > 0 && kids.every(k => k.completed);
     setCompletedDeep(t.id, !allDone);
@@ -3362,8 +3412,9 @@ function openSubtaskInput(taskId) {
 function addSubtask(parentId, raw) {
   const parent = getTask(parentId);
   if (!parent || taskDepth(parent) >= MAX_TASK_DEPTH) return;
-  // Liste de courses : 2 niveaux seulement (rayon → produit). Un produit n'a pas de sous-tâche.
-  if (isShoppingTask(parent) && !isShoppingRoot(parent)) return;
+  // Vue-liste : on n'ajoute des sous-tâches que sous une catégorie (mode arbre). Pas de 3e niveau,
+  // et rien sous une affaire (mode "flat").
+  if (isListTask(parent) && !isListCategory(parent)) return;
   const task = makeTask(raw, { urgent: false, important: false }, parent.projectId, parentId);
   state.tasks.push(task);
   if (parent.recurrence) parent.recurrence = null;   // une tâche à sous-tâches n'est plus récurrente
@@ -4099,6 +4150,12 @@ function bindEvents() {
     if (!btn) return;
     state.listTab[state.view] = btn.dataset.listtab;
     render();
+  });
+
+  // Sélecteur multi-onglets de la saisie rapide (vues-listes "flat") : (dé)cocher un onglet cible
+  $("listAddTabs").addEventListener("click", e => {
+    const chip = e.target.closest(".list-add-chip");
+    if (chip) chip.classList.toggle("on");
   });
 
   // Navigation sidebar
