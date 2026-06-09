@@ -133,6 +133,38 @@
   .nav-item .icon { font-size: 18px; width: 22px; text-align: center; }
   /* Icône à deux emojis (ex. Multimédia 📚🎬) : un peu plus large, emojis resserrés */
   .nav-item .icon.icon-multi { width: 24px; font-size: 13px; letter-spacing: -1px; }
+
+  /* ===== CADEAUX (idées par personne, liées aux contacts/anniversaires) ===== */
+  .cadeaux-view { display: none; }
+  .cadeaux-add { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 20px; }
+  .cadeaux-add #giftContactPicker { min-width: 190px; }
+  .cadeaux-add .quick-input { flex: 1; min-width: 180px; }
+  .cadeaux-list { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+  .gift-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 14px;
+    padding: 14px 16px; box-shadow: var(--shadow);
+  }
+  .gift-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+  .gift-name { font-size: 16px; font-weight: 600; color: var(--text); }
+  .gift-bday { font-size: 13px; color: var(--muted); }
+  .gift-ideas { display: flex; flex-direction: column; gap: 2px; }
+  .gift-idea { display: flex; align-items: center; gap: 10px; padding: 6px 4px; border-radius: 8px; }
+  .gift-idea:hover { background: var(--hover); }
+  .gift-idea .checkbox { margin-top: 0; }
+  .gift-idea.done .checkbox { background: var(--success); border-color: var(--success); }
+  .gift-idea.done .checkbox::after { opacity: 1; }
+  .gift-idea-title { flex: 1; font-size: 14px; color: var(--text); word-break: break-word; }
+  .gift-idea.done .gift-idea-title { text-decoration: line-through; color: var(--muted); }
+  .gift-del {
+    background: none; border: none; color: var(--muted); font-size: 18px; line-height: 1;
+    cursor: pointer; opacity: 0; transition: opacity .15s;
+  }
+  .gift-idea:hover .gift-del { opacity: 1; }
+  .gift-del:hover { color: var(--alert); }
+  .gift-addrow { display: flex; align-items: center; gap: 6px; margin-top: 8px; color: var(--muted); }
+  .gift-add-input { flex: 1; font-family: inherit; font-size: 14px; border: none; background: none; color: var(--text); padding: 4px 0; }
+  .gift-add-input:focus { outline: none; }
+  .gift-add-input::placeholder { color: var(--muted); }
   .nav-item .count { margin-left: auto; color: var(--muted); font-size: 13px; }
   .nav-item.soon { color: var(--muted); cursor: default; }
   .nav-item.soon:hover { background: none; }
@@ -1108,6 +1140,9 @@
     <button class="nav-item" data-view="contacts">
       <span class="icon">🧑</span> Contacts
     </button>
+    <button class="nav-item" data-view="cadeaux">
+      <span class="icon">🎁</span> Cadeaux
+    </button>
     <button class="nav-item" data-view="labels">
       <span class="icon">🏷️</span> Étiquettes
     </button>
@@ -1253,6 +1288,15 @@
     </div>
 
     <div class="vaccines-view" id="vaccinesView"></div>
+
+    <div class="cadeaux-view" id="cadeauxView">
+      <div class="cadeaux-add">
+        <div id="giftContactPicker"></div>
+        <input class="quick-input" id="giftInput" type="text" placeholder="Une idée de cadeau…" autocomplete="off">
+        <button class="quick-submit" id="giftAdd">Ajouter</button>
+      </div>
+      <ul class="cadeaux-list" id="cadeauxList"></ul>
+    </div>
 
     <div class="labels-view" id="labelsView"></div>
 
@@ -1409,7 +1453,7 @@ const LEGACY_KEY = "todo_app_v1";                 // ancienne clé unique (avant
 const STORAGE_KEY = LEGACY_KEY + "__" + ESPACE;   // ex. todo_app_v1__perso
 const THEME_KEY = "todo_theme";
 // Vues masquées selon l'espace (outil perso : certaines vues n'ont pas de sens côté pro).
-const ESPACE_HIDDEN_VIEWS = { pro: ["courses", "bagages", "mediatheque", "vaccins"] };
+const ESPACE_HIDDEN_VIEWS = { pro: ["courses", "bagages", "mediatheque", "cadeaux", "vaccins"] };
 const isViewHidden = view => (ESPACE_HIDDEN_VIEWS[ESPACE] || []).includes(view);
 const DAY_MS = 86400000;                 // millisecondes dans une journée
 const DEFAULT_PROJECT_ICON = "📁";       // icône par défaut d'un nouveau projet
@@ -1468,7 +1512,8 @@ let state = {
   expandedWeek: new Set(),   // ids dépliés dans la vue Prochainement (indépendant du Todo)
   editSubFilter: "",         // texte de recherche des produits dans l'éditeur (liste de courses)
   listTab: {},               // sous-onglet actif par vue-liste (ex. { bagages: "famille" })
-  listQuery: ""              // recherche dans la vue-liste courante (scopée au sous-onglet actif)
+  listQuery: "",             // recherche dans la vue-liste courante (scopée au sous-onglet actif)
+  giftPickContact: null      // personne sélectionnée dans la saisie d'idée cadeau (vue Cadeaux)
 };
 
 /* =========================================================
@@ -2103,6 +2148,7 @@ function render() {
     contacts: { t: "Contacts", s: "Tes contacts et leurs projets délégués" },
     week: { t: "Prochainement", s: "Tes échéances des 7 prochains jours" },
     vaccins: { t: "Vaccins", s: "Tes rappels de vaccins (calendrier français)" },
+    cadeaux: { t: "Cadeaux", s: "Tes idées de cadeaux, par personne (triées par anniversaire)" },
     labels: { t: "Étiquettes", s: "" }
   };
   // Les vues-listes tirent leur titre/sous-titre de LIST_VIEWS (source unique).
@@ -2163,7 +2209,7 @@ function render() {
   });
 
   // Affichage : on masque tous les conteneurs de vues, puis on montre celui de la vue courante
-  ["taskList","eisenGrid","kanbanBoard","projectsTabs","projectsDone","projectsPriorities","projectView","contactsView","weekView","vaccinesView","labelsView"]
+  ["taskList","eisenGrid","kanbanBoard","projectsTabs","projectsDone","projectsPriorities","projectView","contactsView","weekView","vaccinesView","cadeauxView","labelsView"]
     .forEach(id => { $(id).style.display = "none"; });
   const gridEl = $("eisenGrid");
   const kanbanEl = $("kanbanBoard");
@@ -2203,6 +2249,9 @@ function render() {
   } else if (isListView(state.view)) {
     $("taskList").style.display = "flex";
     renderListView();
+  } else if (state.view === "cadeaux") {
+    $("cadeauxView").style.display = "block";
+    renderCadeaux();
   } else if (state.view === "vaccins") {
     $("vaccinesView").style.display = "block";
     renderVaccines();
@@ -3048,6 +3097,87 @@ function renderContacts() {
   } else {
     list.forEach(c => ul.appendChild(contactCard(c)));
   }
+}
+
+/* =========================================================
+   CADEAUX (idées par personne, liées aux Contacts + Anniversaires)
+   Les idées vivent SUR le contact : contact.gifts = [{ id, title, done }].
+   ========================================================= */
+const contactGifts = c => c.gifts || (c.gifts = []);
+
+// Prochain anniversaire en texte court ("🎂 12 mars · dans 23 jours"), ou "" si pas de date.
+function giftBdayLabel(contact) {
+  if (!contact.birthday) return "";
+  const occ = nextBirthdayOccurrence(contact, todayTs());
+  if (!occ) return "";
+  const days = Math.round((occ.ts - todayTs()) / DAY_MS);
+  const when = days <= 0 ? "aujourd'hui 🎉" : "dans " + durationLabel(days);
+  return `🎂 ${formatBirthday(contact.birthday)} · ${when}`;
+}
+
+function addGift(contactId, title) {
+  const c = getContact(contactId);
+  const t = (title || "").trim();
+  if (!c || !t) return;
+  contactGifts(c).push({ id: uid(), title: t, done: false });
+  db.save();
+}
+
+function giftCard(contact) {
+  const li = document.createElement("li");
+  li.className = "gift-card";
+  li.dataset.id = contact.id;
+  // Idées : non offertes en haut, offertes (rayées) en bas.
+  const ideas = [...contactGifts(contact)].sort((a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0));
+  const bday = giftBdayLabel(contact);
+  const ideasHtml = ideas.map(g => `
+    <div class="gift-idea${g.done ? " done" : ""}" data-gift="${g.id}">
+      <button class="checkbox" data-action="gift-toggle" aria-label="Offert"></button>
+      <span class="gift-idea-title">${esc(g.title)}</span>
+      <button class="gift-del" type="button" data-action="gift-del" aria-label="Supprimer">×</button>
+    </div>`).join("");
+  li.innerHTML = `
+    <div class="gift-head">
+      <span class="gift-name">🎁 ${esc(contact.name || "Sans nom")}</span>
+      ${bday ? `<span class="gift-bday">${esc(bday)}</span>` : ""}
+    </div>
+    <div class="gift-ideas">${ideasHtml}</div>
+    <div class="gift-addrow">
+      <span class="plus-sm">+</span>
+      <input class="gift-add-input" type="text" placeholder="Ajouter une idée pour ${esc(contact.name || "cette personne")}…" autocomplete="off">
+    </div>`;
+  return li;
+}
+
+function renderCadeaux() {
+  // Sélecteur de personne (réutilise createPicker) pour la saisie en haut.
+  const items = [...state.contacts]
+    .sort((a, b) => (a.name || "").localeCompare(b.name || "", "fr"))
+    .map(c => ({ id: c.id, label: c.name || "Sans nom", icon: "🧑" }));
+  createPicker($("giftContactPicker"), {
+    items, selectedId: state.giftPickContact,
+    placeholder: "Choisir une personne…", searchPlaceholder: "Rechercher un contact…",
+    onSelect(id) { state.giftPickContact = id; }
+  });
+
+  // Personnes ayant au moins une idée, triées par anniversaire le plus proche (sans date → en bas).
+  const withGifts = state.contacts.filter(c => contactGifts(c).length > 0).sort((a, b) => {
+    const oa = nextBirthdayOccurrence(a, todayTs()), ob = nextBirthdayOccurrence(b, todayTs());
+    return (oa ? oa.ts : Infinity) - (ob ? ob.ts : Infinity);
+  });
+
+  const ul = $("cadeauxList");
+  ul.innerHTML = "";
+  if (withGifts.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.innerHTML = state.contacts.length === 0
+      ? `<div class="big">🎁</div>Aucun contact. Ajoute des personnes dans la vue Contacts.`
+      : `<div class="big">🎁</div>Aucune idée encore. Choisis une personne ci-dessus et note une idée.`;
+    ul.appendChild(empty);
+    return;
+  }
+  withGifts.forEach(c => ul.appendChild(giftCard(c)));
 }
 
 /* =========================================================
@@ -4650,6 +4780,39 @@ function bindEvents() {
     const c = { id: uid(), name: "", birthday: null, phones: [], emails: [] };
     db.addContact(c);
     openContactEditor(c.id);
+  });
+
+  // Cadeaux : ajout depuis le haut (personne choisie + idée).
+  const submitTopGift = () => {
+    if (!state.giftPickContact) { alert("Choisis d'abord une personne."); return; }
+    if (!$("giftInput").value.trim()) return;
+    addGift(state.giftPickContact, $("giftInput").value);
+    $("giftInput").value = "";
+    render();
+  };
+  $("giftAdd").addEventListener("click", submitTopGift);
+  $("giftInput").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); submitTopGift(); } });
+
+  // Cadeaux : cocher « offert » / supprimer une idée (délégation sur la vue).
+  $("cadeauxView").addEventListener("click", e => {
+    const action = e.target.closest("[data-action]")?.dataset.action;
+    const card = e.target.closest(".gift-card");
+    if (!action || !card) return;
+    const contact = getContact(card.dataset.id);
+    const giftEl = e.target.closest("[data-gift]");
+    if (!contact || !giftEl) return;
+    const gift = contactGifts(contact).find(g => g.id === giftEl.dataset.gift);
+    if (!gift) return;
+    if (action === "gift-toggle") { gift.done = !gift.done; db.save(); render(); }
+    else if (action === "gift-del") { contact.gifts = contactGifts(contact).filter(g => g.id !== gift.id); db.save(); render(); }
+  });
+  // Cadeaux : ajout inline d'une idée dans la carte d'une personne (Entrée).
+  $("cadeauxView").addEventListener("keydown", e => {
+    const input = e.target.closest(".gift-add-input");
+    if (!input || e.key !== "Enter") return;
+    e.preventDefault();
+    const card = e.target.closest(".gift-card");
+    if (card) { addGift(card.dataset.id, input.value); render(); }
   });
   // Clic sur une carte : supprimer / ouvrir un projet délégué / sinon ouvrir la fiche contact
   $("contactList").addEventListener("click", e => {
