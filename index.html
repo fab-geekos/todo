@@ -165,6 +165,33 @@
   .gift-add-input { flex: 1; font-family: inherit; font-size: 14px; border: none; background: none; color: var(--text); padding: 4px 0; }
   .gift-add-input:focus { outline: none; }
   .gift-add-input::placeholder { color: var(--muted); }
+
+  /* ===== IDÉES / NOTES (capture rapide, sans cases à cocher) ===== */
+  .notes-view { display: none; }
+  .notes-add { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 20px; }
+  .notes-input {
+    flex: 1; font-family: inherit; font-size: 15px; line-height: 1.5; resize: none; overflow: hidden;
+    border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px;
+    background: var(--card); color: var(--text); min-height: 22px;
+  }
+  .notes-input:focus { outline: none; border-color: var(--accent); }
+  .notes-list { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .note-card {
+    display: flex; align-items: flex-start; gap: 8px;
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 10px 12px; box-shadow: var(--shadow);
+  }
+  .note-text {
+    flex: 1; font-family: inherit; font-size: 14px; line-height: 1.5; resize: none; overflow: hidden;
+    border: none; background: none; color: var(--text); padding: 4px 0; min-height: 20px;
+  }
+  .note-text:focus { outline: none; }
+  .note-del {
+    background: none; border: none; color: var(--muted); font-size: 18px; line-height: 1;
+    cursor: pointer; opacity: 0; transition: opacity .15s; flex-shrink: 0;
+  }
+  .note-card:hover .note-del { opacity: 1; }
+  .note-del:hover { color: var(--alert); }
   .nav-item .count { margin-left: auto; color: var(--muted); font-size: 13px; }
   .nav-item.soon { color: var(--muted); cursor: default; }
   .nav-item.soon:hover { background: none; }
@@ -1155,6 +1182,12 @@
     <button class="nav-item" data-view="mediatheque">
       <span class="icon icon-multi">📚🎬</span> Multimédia
     </button>
+    <button class="nav-item" data-view="autres">
+      <span class="icon">🗂️</span> Autres listes
+    </button>
+    <button class="nav-item" data-view="idees">
+      <span class="icon">💡</span> Idées / notes
+    </button>
     <button class="nav-item" data-view="vaccins">
       <span class="icon">💉</span> Vaccins
     </button>
@@ -1296,6 +1329,14 @@
         <button class="quick-submit" id="giftAdd">Ajouter</button>
       </div>
       <ul class="cadeaux-list" id="cadeauxList"></ul>
+    </div>
+
+    <div class="notes-view" id="notesView">
+      <div class="notes-add">
+        <textarea class="notes-input" id="noteInput" rows="1" placeholder="Une idée, une note… (Entrée pour ajouter · Maj+Entrée = nouvelle ligne)"></textarea>
+        <button class="quick-submit" id="noteAdd">Ajouter</button>
+      </div>
+      <ul class="notes-list" id="notesList"></ul>
     </div>
 
     <div class="labels-view" id="labelsView"></div>
@@ -1501,6 +1542,7 @@ let state = {
   birthDate: null,        // "AAAA-MM-JJ" : date de naissance (pour calculer les rappels vaccins)
   vaccineDone: null,      // [âges des rappels faits] ; null = pas encore initialisé
   labels: [],             // étiquettes : [{ id, name, color }]
+  notes: [],              // idées / notes : [{ id, text, createdAt }] (vue Idées/notes)
   labelFilter: null,      // étiquette sélectionnée dans la vue Étiquettes (null = liste)
   quickAddLabels: [],     // étiquettes pré-sélectionnées pour la prochaine tâche du quick-add
   projectId: null,        // projet actuellement ouvert (vue détaillée)
@@ -1526,16 +1568,17 @@ let state = {
 // Transforme des données brutes (localStorage OU futur Firebase) en {tasks, projects}.
 // Gère l'ancien format (simple tableau de tâches) pour ne rien perdre.
 function normalizeData(raw) {
-  if (Array.isArray(raw)) return { tasks: raw, projects: [], contacts: [], birthDate: null, vaccineDone: null, labels: [] };
+  if (Array.isArray(raw)) return { tasks: raw, projects: [], contacts: [], birthDate: null, vaccineDone: null, labels: [], notes: [] };
   if (raw && typeof raw === "object") return {
     tasks: raw.tasks || [],
     projects: raw.projects || [],
     contacts: raw.contacts || [],
     birthDate: raw.birthDate || null,
     vaccineDone: raw.vaccineDone || null,
-    labels: raw.labels || []
+    labels: raw.labels || [],
+    notes: raw.notes || []
   };
-  return { tasks: [], projects: [], contacts: [], birthDate: null, vaccineDone: null, labels: [] };
+  return { tasks: [], projects: [], contacts: [], birthDate: null, vaccineDone: null, labels: [], notes: [] };
 }
 
 const db = {
@@ -1557,12 +1600,14 @@ const db = {
     state.birthDate = data.birthDate;
     state.vaccineDone = data.vaccineDone;
     state.labels = data.labels;
+    state.notes = data.notes;
     if (adopted) this.save();   // recopie l'historique dans la clé d'espace
   },
   save() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
       tasks: state.tasks, projects: state.projects, contacts: state.contacts,
-      birthDate: state.birthDate, vaccineDone: state.vaccineDone, labels: state.labels
+      birthDate: state.birthDate, vaccineDone: state.vaccineDone, labels: state.labels,
+      notes: state.notes
     }));
   },
   // --- Tâches ---
@@ -1654,6 +1699,13 @@ const LIST_VIEWS = {
       { id: "boardgames", icon: "🎲", label: "Jeux de société" },
       { id: "ps4",        icon: "🎮", label: "PS4" }
     ]
+  },
+  autres: {
+    icon: "🗂️", title: "Autres listes", sub: "Tes listes en vrac (tout ce qui ne rentre nulle part ailleurs)",
+    addRootPlaceholder: "Ajouter une liste (ex : Idées resto)",
+    itemWordPlural: "Éléments", addItemPlaceholder: "Nouvel élément…",
+    emptyIcon: "🗂️", emptyText: "Aucune liste. Ajoute-en une ci-dessus (ex : Films à montrer aux enfants).",
+    persistChecks: true, subTabs: null, reset: false   // mode "tree" (défaut), comme Courses
   }
 };
 const listConfig = view => LIST_VIEWS[view] || null;           // config d'une vue-liste (ou null)
@@ -2149,6 +2201,7 @@ function render() {
     week: { t: "Prochainement", s: "Tes échéances des 7 prochains jours" },
     vaccins: { t: "Vaccins", s: "Tes rappels de vaccins (calendrier français)" },
     cadeaux: { t: "Cadeaux", s: "Tes idées de cadeaux, par personne (triées par anniversaire)" },
+    idees: { t: "Idées / notes", s: "Capture rapide : tes idées et notes (sans cases à cocher)" },
     labels: { t: "Étiquettes", s: "" }
   };
   // Les vues-listes tirent leur titre/sous-titre de LIST_VIEWS (source unique).
@@ -2209,7 +2262,7 @@ function render() {
   });
 
   // Affichage : on masque tous les conteneurs de vues, puis on montre celui de la vue courante
-  ["taskList","eisenGrid","kanbanBoard","projectsTabs","projectsDone","projectsPriorities","projectView","contactsView","weekView","vaccinesView","cadeauxView","labelsView"]
+  ["taskList","eisenGrid","kanbanBoard","projectsTabs","projectsDone","projectsPriorities","projectView","contactsView","weekView","vaccinesView","cadeauxView","notesView","labelsView"]
     .forEach(id => { $(id).style.display = "none"; });
   const gridEl = $("eisenGrid");
   const kanbanEl = $("kanbanBoard");
@@ -2252,6 +2305,9 @@ function render() {
   } else if (state.view === "cadeaux") {
     $("cadeauxView").style.display = "block";
     renderCadeaux();
+  } else if (state.view === "idees") {
+    $("notesView").style.display = "block";
+    renderNotes();
   } else if (state.view === "vaccins") {
     $("vaccinesView").style.display = "block";
     renderVaccines();
@@ -3178,6 +3234,42 @@ function renderCadeaux() {
     return;
   }
   withGifts.forEach(c => ul.appendChild(giftCard(c)));
+}
+
+/* =========================================================
+   IDÉES / NOTES (capture rapide, sans cases à cocher)
+   state.notes = [{ id, text, createdAt }] (plus récente en haut).
+   ========================================================= */
+// Auto-agrandit une zone de texte à son contenu (réutilisable).
+function autoGrow(el) { if (!el) return; el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; }
+
+function addNote(text) {
+  const t = (text || "").trim();
+  if (!t) return;
+  state.notes.unshift({ id: uid(), text: t, createdAt: Date.now() });
+  db.save();
+}
+
+function renderNotes() {
+  const ul = $("notesList");
+  ul.innerHTML = "";
+  if (state.notes.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.innerHTML = `<div class="big">💡</div>Aucune note. Capture une idée ci-dessus.`;
+    ul.appendChild(empty);
+    return;
+  }
+  state.notes.forEach(n => {
+    const li = document.createElement("li");
+    li.className = "note-card";
+    li.dataset.id = n.id;
+    li.innerHTML = `
+      <textarea class="note-text" rows="1" aria-label="Note">${esc(n.text)}</textarea>
+      <button class="note-del" type="button" data-action="note-del" aria-label="Supprimer">×</button>`;
+    ul.appendChild(li);
+  });
+  ul.querySelectorAll(".note-text").forEach(autoGrow);
 }
 
 /* =========================================================
@@ -4814,6 +4906,38 @@ function bindEvents() {
     const card = e.target.closest(".gift-card");
     if (card) { addGift(card.dataset.id, input.value); render(); }
   });
+
+  // Idées/notes : capture en haut (Entrée = ajouter, Maj+Entrée = nouvelle ligne).
+  const submitNote = () => { addNote($("noteInput").value); $("noteInput").value = ""; autoGrow($("noteInput")); render(); $("noteInput").focus(); };
+  $("noteAdd").addEventListener("click", submitNote);
+  $("noteInput").addEventListener("input", () => autoGrow($("noteInput")));
+  $("noteInput").addEventListener("keydown", e => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submitNote(); }
+  });
+  // Édition d'une note : auto-grow + sauvegarde au fil de la frappe (pas de re-render → focus gardé).
+  $("notesView").addEventListener("input", e => {
+    const ta = e.target.closest(".note-text");
+    if (!ta) return;
+    autoGrow(ta);
+    const card = ta.closest(".note-card");
+    const n = state.notes.find(x => x.id === card.dataset.id);
+    if (n) { n.text = ta.value; db.save(); }
+  });
+  // Note vidée puis quittée → on la supprime (blur ne bulle pas → capture).
+  $("notesView").addEventListener("blur", e => {
+    const ta = e.target.closest(".note-text");
+    if (!ta || ta.value.trim()) return;
+    const card = ta.closest(".note-card");
+    state.notes = state.notes.filter(n => n.id !== card.dataset.id);
+    db.save(); render();
+  }, true);
+  // Suppression d'une note (croix).
+  $("notesView").addEventListener("click", e => {
+    if (!e.target.closest('[data-action="note-del"]')) return;
+    const card = e.target.closest(".note-card");
+    state.notes = state.notes.filter(n => n.id !== card.dataset.id);
+    db.save(); render();
+  });
   // Clic sur une carte : supprimer / ouvrir un projet délégué / sinon ouvrir la fiche contact
   $("contactList").addEventListener("click", e => {
     const card = e.target.closest(".contact-card");
@@ -5116,7 +5240,8 @@ function exportData() {
   const payload = {
     _app: "todo", _version: 1, _espace: ESPACE, _exportedAt: new Date().toISOString(),
     tasks: state.tasks, projects: state.projects, contacts: state.contacts,
-    birthDate: state.birthDate, vaccineDone: state.vaccineDone, labels: state.labels
+    birthDate: state.birthDate, vaccineDone: state.vaccineDone, labels: state.labels,
+    notes: state.notes
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -5142,6 +5267,7 @@ function importData(file) {
     if (!confirm(msg)) return;
     state.tasks = data.tasks; state.projects = data.projects; state.contacts = data.contacts;
     state.birthDate = data.birthDate; state.vaccineDone = data.vaccineDone; state.labels = data.labels;
+    state.notes = data.notes;
     db.save();
     render();
     alert("Import terminé ✅");
