@@ -109,7 +109,7 @@
 
   /* « Bonjour … » sur la ligne du hamburger (fixe à gauche), bord droit aligné sur perso/pro */
   .side-greeting {
-    height: 42px; display: flex; align-items: center; margin: 0 0 8px 50px;
+    height: 42px; display: flex; align-items: center; justify-content: center; margin: 0 0 8px 50px;
     font-size: 15px; font-weight: 600; color: var(--text);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
@@ -616,6 +616,14 @@
   /* ===== FICHE CONTACT (modale) ===== */
   .contact-editor { max-width: 520px; }
   .contact-editor-main { padding: 4px 24px 22px; overflow-y: auto; }
+  .ce-icons { display: flex; gap: 8px; }
+  .ce-icon {
+    width: 44px; height: 44px; font-size: 22px; cursor: pointer;
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    display: grid; place-items: center; transition: all .15s;
+  }
+  .ce-icon:hover { border-color: var(--accent); }
+  .ce-icon.active { border-color: var(--accent); background: rgba(74,111,165,.1); }
   .ce-section { margin-top: 18px; }
   .ce-label { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 8px; }
   .ce-rows { display: flex; flex-direction: column; gap: 8px; }
@@ -966,6 +974,9 @@
   /* Glisser-déposer dans les vues agenda (Aujourd'hui & Prochainement) */
   .agenda-drag { cursor: grab; }
   body.is-dragging .agenda-drag { cursor: grabbing; }
+  /* Vues-listes : lignes réordonnables au glisser */
+  body.view-list .task-row { cursor: grab; }
+  body.is-dragging .task-row { cursor: grabbing; }
   .week-task.dragging { opacity: .35; pointer-events: none; }
   .week-task.drag-ghost { margin: 0; }
   .week-col.drop-target { background: var(--hover); border-radius: 12px; }
@@ -1334,6 +1345,10 @@
         <span class="search-icon">🔍</span>
         <input class="search-input" id="giftSearch" type="text" placeholder="Rechercher une personne…" autocomplete="off">
       </div>
+      <div class="todo-tabs gift-sort" id="giftSort" style="display:flex">
+        <button class="subview-btn" type="button" data-giftsort="bday">🎂 Anniversaire</button>
+        <button class="subview-btn" type="button" data-giftsort="name">🔤 Nom</button>
+      </div>
       <ul class="cadeaux-list" id="cadeauxList"></ul>
     </div>
 
@@ -1455,6 +1470,15 @@
     <div class="contact-editor-main">
       <input class="editor-title" id="ceName" placeholder="Nom du contact">
       <div class="ce-section">
+        <div class="ce-label">Icône</div>
+        <div class="ce-icons" id="ceIcons">
+          <button class="ce-icon" type="button" data-icon="👨">👨</button>
+          <button class="ce-icon" type="button" data-icon="👩">👩</button>
+          <button class="ce-icon" type="button" data-icon="👦">👦</button>
+          <button class="ce-icon" type="button" data-icon="👧">👧</button>
+        </div>
+      </div>
+      <div class="ce-section">
         <div class="ce-label">🎂 Anniversaire</div>
         <input class="ce-bday-input" id="ceBday" type="text" inputmode="numeric" maxlength="5" placeholder="JJ/MM" autocomplete="off">
       </div>
@@ -1556,6 +1580,7 @@ let state = {
   rowSearch: {},             // recherche de produits par rayon déplié (courses) : { [rayonId]: texte }
   giftPickContact: null,     // personne sélectionnée dans la saisie d'idée cadeau (vue Cadeaux)
   giftSearch: "",            // recherche de personne dans la vue Cadeaux
+  giftSort: "bday",          // tri Cadeaux : "bday" (anniversaire) ou "name" (alphabétique)
   expandedGifts: new Set()   // contacts dont les idées de cadeaux sont dépliées
 };
 
@@ -1671,7 +1696,9 @@ const LIST_VIEWS = {
     itemWordPlural: "Produits", addItemPlaceholder: "Nouveau produit…",
     emptyIcon: "🛒", emptyText: "Aucun rayon. Ajoute-en un ci-dessus (ex : Fruits et légumes).",
     persistChecks: true, subTabs: null, reset: false,
-    itemSearch: true   // recherche de produits sous le nom du rayon (déplié)
+    itemSearch: true,    // recherche de produits sous le nom du rayon (déplié)
+    sortDone: true,      // produits : non cochés en haut, cochés en bas (le + récemment coché en tête des cochés)
+    reorderItems: true   // drag-and-drop des produits dans un rayon
   },
   bagages: {
     icon: "🧳", title: "Affaires / Voyages", sub: "",
@@ -2146,13 +2173,15 @@ function taskRowHtml(task, depth, ancestorContinues = [], isLast = false) {
   // d'arbre (rayons, notes) ne s'ouvrent PLUS : on les déplie (chevron) ; items = coche/supprime.
   const canOpen = !isListTask(task) || affaireEditable(task);
   const doneCls = task.completed ? " done" : "";
+  // Ligne-item d'une vue-liste en arbre (produit d'un rayon, sous-élément) : draggable.
+  const itemRowCls = (depth > 0 && isListTask(task) && !isListRoot(task)) ? " prod-row" : "";
 
   // Guides en arbre : une verticale de fond par ancêtre dont la branche continue (calculé au rendu).
   const guideStyle = treeGuideStyle(depth, ancestorContinues);
   const lastCls = (depth >= 1 && isLast) ? " task-last" : "";
 
   return `
-    <div class="task-row${doneCls}${lastCls}${canOpen ? "" : " no-open"}" data-id="${task.id}" style="--depth:${depth};${guideStyle}">
+    <div class="task-row${doneCls}${lastCls}${itemRowCls}${canOpen ? "" : " no-open"}" data-id="${task.id}" style="--depth:${depth};${guideStyle}">
       ${chevronHtml}
       ${isListCategory(task) ? "" : `<button class="checkbox" data-action="toggle" aria-label="Terminer"></button>`}
       <div class="task-body"${canOpen ? ' data-action="edit"' : ''}>
@@ -2178,7 +2207,11 @@ function taskTreeRows(task, depth, ancestorContinues = [], isLast = false) {
     let kids = childTasks(task.id);
     // Vue-liste avec sortDone (Idées/Notes/Autres) : sous-éléments cochés envoyés en bas.
     const lr = listRootOf(task);
-    if (lr && listConfig(lr.list).sortDone) kids = [...kids].sort((a, b) => (a.completed ? 1 : 0) - (b.completed ? 1 : 0));
+    if (lr && listConfig(lr.list).sortDone) kids = [...kids].sort((a, b) => {
+      if (!!a.completed !== !!b.completed) return a.completed ? 1 : -1;      // non cochés en haut
+      if (a.completed) return (b.completedAt || 0) - (a.completedAt || 0);   // cochés : le + récemment coché en tête
+      return 0;                                                             // non cochés : ordre manuel (drag), stable
+    });
     // Recherche de produits sous le nom du rayon (config itemSearch, ex. courses).
     if (isListCategory(task) && lr && listConfig(lr.list).itemSearch) {
       const q = state.rowSearch[task.id] || "";
@@ -2920,7 +2953,7 @@ function contactCard(contact) {
 
   li.innerHTML = `
     <div class="contact-head">
-      <span class="contact-name">${esc(contact.name || "Sans nom")}</span>
+      <span class="contact-name">${contact.icon ? esc(contact.icon) + " " : ""}${esc(contact.name || "Sans nom")}</span>
       ${bday ? `<span class="contact-bday-show">🎂 ${esc(bday)}</span>` : ""}
       <button class="contact-del" type="button" data-action="del" aria-label="Supprimer">×</button>
     </div>
@@ -3217,7 +3250,7 @@ function giftCard(contact) {
   li.innerHTML = `
     <div class="gift-head" data-action="gift-expand">
       <button class="task-chevron" data-action="gift-expand" aria-label="Déplier">${expanded ? "▾" : "▸"}</button>
-      <span class="gift-name">${esc(contact.name || "Sans nom")}</span>
+      <span class="gift-name">${contact.icon ? esc(contact.icon) + " " : ""}${esc(contact.name || "Sans nom")}</span>
       ${bday ? `<span class="gift-bday">${esc(bday)}</span>` : ""}
     </div>
     ${expanded ? `
@@ -3240,11 +3273,16 @@ function renderCadeaux() {
     onSelect(id) { state.giftPickContact = id; }
   });
 
-  // Personnes ayant au moins une idée, triées par anniversaire le plus proche (sans date → en bas).
+  // Bouton de tri actif (anniversaire / nom)
+  document.querySelectorAll("#giftSort .subview-btn").forEach(b =>
+    b.classList.toggle("active", b.dataset.giftsort === state.giftSort));
+
+  // Personnes ayant au moins une idée, triées selon state.giftSort.
   const q = (state.giftSearch || "").trim().toLowerCase();
   const withGifts = state.contacts
     .filter(c => contactGifts(c).length > 0 && (!q || (c.name || "").toLowerCase().includes(q)))
     .sort((a, b) => {
+      if (state.giftSort === "name") return (a.name || "").localeCompare(b.name || "", "fr");
       const oa = nextBirthdayOccurrence(a, todayTs()), ob = nextBirthdayOccurrence(b, todayTs());
       return (oa ? oa.ts : Infinity) - (ob ? ob.ts : Infinity);
     });
@@ -4362,13 +4400,23 @@ function insertBeforeEl(list, y, itemSelector) {
 
 function onDragPointerDown(e, board, config) {
   if (e.button != null && e.button !== 0) return;                 // clic gauche / tactile uniquement
-  const itemEl = e.target.closest(config.item);
-  if (!itemEl || !board.contains(itemEl)) return;
-  // ne pas démarrer sur un contrôle interne (cocher, supprimer, bouton +, champ de saisie)
-  if (e.target.closest("button, input, [data-action='toggle'], [data-action='delete']")) return;
+  let itemEl, free = false, list = null, itemSel = null;
+  if (config.getItem) {
+    // Mode "réordonnancement libre" (vues-listes) : getItem décide quel élément déplacer (ou null).
+    itemEl = config.getItem(e);
+    if (!itemEl) return;
+    free = true;
+    if (itemEl.classList.contains("task")) { list = board; itemSel = ":scope > .task"; }   // racines (cartes)
+    else { list = itemEl.closest(".task"); itemSel = ".prod-row"; }                          // items (produits)
+  } else {
+    // Mode "colonnes" (Eisenhower, Kanban, agenda, semaine).
+    itemEl = e.target.closest(config.item);
+    if (!itemEl || !board.contains(itemEl)) return;
+    if (e.target.closest("button, input, [data-action='toggle'], [data-action='delete']")) return;
+  }
 
   drag = {
-    config, board, itemEl,
+    config, board, itemEl, free, list, itemSel,
     id: itemEl.dataset.id,
     startX: e.clientX, startY: e.clientY,
     started: false, isTouch: e.pointerType === "touch", timer: null
@@ -4421,6 +4469,14 @@ function onDragPointerMove(e) {
   drag.ghost.style.left = (e.clientX - drag.offsetX) + "px";
   drag.ghost.style.top = (e.clientY - drag.offsetY) + "px";
 
+  // Mode libre (vues-listes) : on réordonne dans une seule liste (pas de colonnes).
+  if (drag.free) {
+    const before = insertBeforeEl(drag.list, e.clientY, drag.itemSel);
+    if (before) drag.list.insertBefore(drag.itemEl, before);
+    else drag.list.appendChild(drag.itemEl);
+    return;
+  }
+
   const col = columnUnderPoint(e.clientX, e.clientY, config.column);
   drag.board.querySelectorAll(config.column).forEach(c => c.classList.toggle("drop-target", c === col));
 
@@ -4440,9 +4496,13 @@ function onDragPointerUp() {
   const { config } = drag;
   const wasDragging = drag.started;
   if (wasDragging) {
-    const col = drag.itemEl.closest(config.column);  // colonne d'arrivée réelle
-    if (col) config.onDrop(drag.itemEl, col);
-    config.persist();
+    if (drag.free) {
+      config.persist(drag.itemEl);
+    } else {
+      const col = drag.itemEl.closest(config.column);  // colonne d'arrivée réelle
+      if (col) config.onDrop(drag.itemEl, col);
+      config.persist();
+    }
   }
   cleanupDrag();
   if (wasDragging) { lastDragEnd = Date.now(); render(); }
@@ -4874,6 +4934,26 @@ function bindEvents() {
     persist() { state.tasks = reorderFromDOM(state.tasks, "#weekGrid .agenda-drag"); db.save(); }
   });
 
+  // Vues-listes : réordonnancement libre. Racines (cartes) partout ; produits (prod-row) si reorderItems.
+  makeDraggable($("taskList"), {
+    getItem(e) {
+      if (!isListView(state.view)) return null;
+      if (e.target.closest("button, input, .checkbox, .task-del, .task-chevron, .task-addsub, .row-search, .list-additem")) return null;
+      const row = e.target.closest(".task-row");
+      if (!row) return null;
+      const task = getTask(row.dataset.id);
+      if (!task) return null;
+      if (isListRoot(task)) return row.closest(".task");                 // déplacer la carte racine
+      const cfg = listConfig(state.view);
+      if (cfg && cfg.reorderItems && isListTask(task)) return row;        // déplacer un produit
+      return null;
+    },
+    persist(itemEl) {
+      state.tasks = reorderFromDOM(state.tasks, itemEl.classList.contains("task") ? "#taskList > .task" : "#taskList .prod-row");
+      db.save();
+    }
+  });
+
   // Clics et saisies sur les cartes projet : mêmes handlers pour le Kanban et la liste des terminés
   kanban.addEventListener("click", onProjectBoardClick);
   kanban.addEventListener("keydown", onProjectBoardKeydown);
@@ -4915,6 +4995,15 @@ function bindEvents() {
     state.contactSearch = e.target.value;
     renderContacts();   // on ne redessine que la liste (le champ garde le focus)
   });
+  // Entrée dans le champ : crée un contact portant le texte saisi (puis on vide le champ).
+  $("contactSearch").addEventListener("keydown", e => {
+    if (e.key !== "Enter") return;
+    const name = e.target.value.trim();
+    if (!name) return;
+    db.addContact({ id: uid(), name, birthday: null, phones: [], emails: [], icon: null });
+    e.target.value = ""; state.contactSearch = "";
+    render();
+  });
   // + Contact : on crée une fiche vierge et on l'ouvre directement (plus de prompt)
   $("contactAdd").addEventListener("click", () => {
     const c = { id: uid(), name: "", birthday: null, phones: [], emails: [] };
@@ -4927,7 +5016,7 @@ function bindEvents() {
     if (!state.giftPickContact) { alert("Choisis d'abord une personne."); return; }
     if (!$("giftInput").value.trim()) return;
     addGift(state.giftPickContact, $("giftInput").value);
-    state.expandedGifts.add(state.giftPickContact);   // déplie la carte pour voir l'idée ajoutée
+    // On NE déplie PAS automatiquement : la carte garde son état (fermée reste fermée).
     $("giftInput").value = "";
     render();
   };
@@ -4935,6 +5024,13 @@ function bindEvents() {
   $("giftInput").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); submitTopGift(); } });
   // Cadeaux : recherche d'une personne (re-rend la liste, le champ garde le focus).
   $("giftSearch").addEventListener("input", e => { state.giftSearch = e.target.value; renderCadeaux(); });
+  // Cadeaux : changer le tri (anniversaire / nom).
+  $("giftSort").addEventListener("click", e => {
+    const btn = e.target.closest("[data-giftsort]");
+    if (!btn) return;
+    state.giftSort = btn.dataset.giftsort;
+    renderCadeaux();
+  });
 
   // Cadeaux : déplier/replier une carte, cocher « offert » / supprimer une idée (délégation).
   $("cadeauxView").addEventListener("click", e => {
@@ -4983,6 +5079,16 @@ function bindEvents() {
 
   // ----- Fiche contact (modale) -----
   $("contactClose").addEventListener("click", closeContactEditor);
+  // Fiche contact : choix de l'icône (genre). Recliquer l'icône active l'enlève.
+  $("ceIcons").addEventListener("click", e => {
+    const btn = e.target.closest(".ce-icon");
+    if (!btn) return;
+    const c = getContact(state.editingContactId);
+    if (!c) return;
+    c.icon = (c.icon === btn.dataset.icon) ? null : btn.dataset.icon;
+    document.querySelectorAll("#ceIcons .ce-icon").forEach(b => b.classList.toggle("active", b.dataset.icon === c.icon));
+    db.save();
+  });
   $("contactOverlay").addEventListener("click", e => {
     if (e.target.id === "contactOverlay") { closeContactEditor(); return; }   // clic en dehors = enregistrer + fermer
     const del = e.target.closest(".ce-row-del");
@@ -5100,6 +5206,7 @@ function openContactEditor(id) {
   if (!c) return;
   state.editingContactId = id;
   $("ceName").value = c.name || "";
+  document.querySelectorAll("#ceIcons .ce-icon").forEach(b => b.classList.toggle("active", b.dataset.icon === c.icon));
   $("ceBday").value = c.birthday ? c.birthday.split("-").reverse().join("/") : "";
   $("cePhones").innerHTML = (c.phones || []).map(p => contactRowHtml(p, "Numéro")).join("");
   $("ceEmails").innerHTML = (c.emails || []).map(p => contactRowHtml(p, "Adresse e-mail")).join("");
