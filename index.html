@@ -161,8 +161,14 @@
   }
   .gift-idea:hover .gift-del { opacity: 1; }
   .gift-del:hover { color: var(--alert); }
-  .gift-addrow { display: flex; align-items: center; gap: 6px; margin-top: 8px; color: var(--muted); }
-  .gift-add-input { flex: 1; font-family: inherit; font-size: 14px; border: none; background: none; color: var(--text); padding: 4px 0; }
+  /* Ligne d'ajout = champ clairement éditable (bordure + surbrillance au focus) */
+  .gift-addrow {
+    display: flex; align-items: center; gap: 6px; margin-top: 10px; color: var(--muted);
+    border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; transition: border-color .15s;
+  }
+  .gift-addrow:hover { border-color: var(--accent); }
+  .gift-addrow:focus-within { border-color: var(--accent); }
+  .gift-add-input { flex: 1; font-family: inherit; font-size: 14px; border: none; background: none; color: var(--text); padding: 2px 0; }
   .gift-add-input:focus { outline: none; }
   .gift-add-input::placeholder { color: var(--muted); }
 
