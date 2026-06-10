@@ -673,12 +673,12 @@
   .vac-hint { color: var(--muted); font-size: 14px; padding: 16px 0; }
   .vac-next {
     border-radius: var(--radius); padding: 14px 16px; margin-bottom: 14px;
-    border: 1px solid var(--border); border-left: 4px solid var(--muted); background: var(--card); box-shadow: var(--shadow);
+    border: 1px solid var(--border); background: var(--card); box-shadow: var(--shadow);
   }
-  .vac-next.vac-ok { border-left-color: var(--success); }
-  .vac-next.vac-soon { border-left-color: var(--warning); }
-  .vac-next.vac-overdue { border-left-color: var(--alert); }
-  .vac-next-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  /* État « à jour » (vert) : carte neutre, sans liseré. Liseré gardé seulement pour les vrais signaux : rappel bientôt / en retard. */
+  .vac-next.vac-soon { border-left: 4px solid var(--warning); }
+  .vac-next.vac-overdue { border-left: 4px solid var(--alert); }
+  .vac-next-label { font-size: 12px; color: var(--muted); }
   .vac-next-main { font-size: 18px; margin-top: 2px; }
   .vac-next-status { font-size: 13px; color: var(--muted); margin-top: 2px; }
   .vac-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); }
@@ -2279,7 +2279,7 @@ function render() {
     projects: { t: "Projets", s: "" },
     contacts: { t: "Contacts", s: "Tes contacts et leurs projets délégués" },
     week: { t: "Prochainement", s: "" },
-    vaccins: { t: "Vaccins", s: "Tes rappels de vaccins (calendrier français)" },
+    vaccins: { t: "Vaccins", s: "" },
     cadeaux: { t: "Cadeaux", s: "" },
     labels: { t: "Étiquettes", s: "" }
   };
