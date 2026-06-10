@@ -15,7 +15,7 @@
     --success: #2D936C;
     --alert: #E07A5F;
     --warning: #F2CC8F;
-    --muted: #888;
+    --muted: #6b7280;        /* gris secondaire — assombri pour passer AA 4,5:1 (était #888 ≈ 3,3:1) */
     --card: #fff;
     --border: #ececec;
     --hover: #fcfcfc;
@@ -43,7 +43,7 @@
     --bg: #0b1120;
     --text: #e2e8f0;
     --card: #131b2e;
-    --muted: #64748b;
+    --muted: #94a3b8;        /* gris secondaire (nuit) — éclairci pour passer AA 4,5:1 (était #64748b ≈ 3,6:1) */
     --border: #1e293b;
     --hover: #1a2438;
     --shadow: 0 1px 3px rgba(0,0,0,.4);
@@ -438,6 +438,28 @@
     outline: 2px dashed var(--accent); outline-offset: -2px;
   }
   body.is-dragging { cursor: grabbing; user-select: none; touch-action: none; overflow: hidden; }
+
+  /* ===== TOAST « ANNULER » (filet anti-suppression, au-dessus de tout) ===== */
+  /* Surface sombre fixe dans les deux thèmes -> contraste garanti du bouton d'action. */
+  .undo-toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
+    z-index: 400; display: flex; align-items: center; gap: 12px;
+    background: #2b3445; color: #f4f6fb;
+    border-radius: 12px; padding: 10px 10px 10px 16px;
+    box-shadow: 0 12px 34px rgba(0,0,0,.30);
+    font-size: 14px; max-width: calc(100vw - 32px);
+    animation: undoIn .22s cubic-bezier(.22,1,.36,1);
+  }
+  .undo-toast[hidden] { display: none; }
+  .undo-msg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .undo-btn {
+    font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
+    background: none; border: none; color: #ffd27a;
+    padding: 6px 12px; border-radius: 8px; flex-shrink: 0; white-space: nowrap;
+  }
+  .undo-btn:hover { background: rgba(255,255,255,.12); }
+  @keyframes undoIn { from { opacity: 0; transform: translate(-50%, 14px); } to { opacity: 1; transform: translate(-50%, 0); } }
+  @media (prefers-reduced-motion: reduce) { .undo-toast { animation: none; } }
 
   /* ===== KANBAN PROJETS ===== */
   .kanban-board { display: none; gap: 14px; align-items: flex-start; overflow-x: auto; padding-bottom: 8px; }
@@ -1469,6 +1491,12 @@
   </div>
 </div>
 
+<!-- Toast « Annuler » : filet de sécurité après une suppression -->
+<div class="undo-toast" id="undoToast" role="status" aria-live="polite" hidden>
+  <span class="undo-msg"></span>
+  <button class="undo-btn" type="button" id="undoBtn">Annuler</button>
+</div>
+
 <script>
 "use strict";
 
@@ -1662,6 +1690,18 @@ function onEnter(el, fn) {
   el.addEventListener("keydown", e => {
     if (e.key === "Enter") { e.preventDefault(); fn(e); }
   });
+}
+// Filet anti-suppression : affiche un toast « Annuler » pendant quelques secondes.
+// `restore` est rejoué tel quel si l'utilisateur clique Annuler (un seul endroit pour tout le monde).
+let _undoTimer = null;
+function showUndo(message, restore) {
+  const toast = $("undoToast"), btn = $("undoBtn");
+  if (!toast || !btn) return;
+  clearTimeout(_undoTimer);
+  toast.querySelector(".undo-msg").textContent = message;
+  btn.onclick = () => { clearTimeout(_undoTimer); toast.hidden = true; btn.onclick = null; restore(); };
+  toast.hidden = false;
+  _undoTimer = setTimeout(() => { toast.hidden = true; btn.onclick = null; }, 6000);
 }
 
 // Accès à un élément par son id dans chaque collection
@@ -3744,13 +3784,23 @@ function addSubtask(parentId, raw) {
 function deleteTask(id) {
   const t = getTask(id);
   const parentId = t ? t.parentTaskId : null;
+  const label = (t && t.title) ? t.title : "Élément";
   const toRemove = new Set([id]);
   const collect = pid => childTasks(pid).forEach(c => { toRemove.add(c.id); collect(c.id); });
   collect(id);
+  // Snapshot (position d'origine + objet) pour tout réinsérer si l'utilisateur annule.
+  const removed = [];
+  state.tasks.forEach((tk, i) => { if (toRemove.has(tk.id)) removed.push({ index: i, task: tk }); });
   state.tasks = state.tasks.filter(t => !toRemove.has(t.id));
   if (parentId) refreshCompletionUpwards(parentId);
   db.save();
   render();
+  showUndo(`« ${label} » supprimé`, () => {
+    removed.forEach(({ index, task }) => state.tasks.splice(Math.min(index, state.tasks.length), 0, task));
+    if (parentId) refreshCompletionUpwards(parentId);
+    db.save();
+    render();
+  });
 }
 
 /* ---- Modal d'édition ---- */
@@ -5023,7 +5073,17 @@ function bindEvents() {
     const gift = contactGifts(contact).find(g => g.id === giftEl.dataset.gift);
     if (!gift) return;
     if (action === "gift-toggle") { gift.done = !gift.done; db.save(); render(); }
-    else if (action === "gift-del") { contact.gifts = contactGifts(contact).filter(g => g.id !== gift.id); db.save(); render(); }
+    else if (action === "gift-del") {
+      const gifts = contactGifts(contact);
+      const idx = gifts.findIndex(g => g.id === gift.id);
+      if (idx === -1) return;
+      const [removed] = gifts.splice(idx, 1);
+      db.save(); render();
+      showUndo(`« ${removed.title || "Idée"} » supprimée`, () => {
+        contactGifts(contact).splice(Math.min(idx, contactGifts(contact).length), 0, removed);
+        db.save(); render();
+      });
+    }
   });
   // Cadeaux : ajout inline d'une idée dans la carte d'une personne (Entrée), puis on refocalise.
   $("cadeauxView").addEventListener("keydown", e => {
