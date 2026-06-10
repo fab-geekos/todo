@@ -579,7 +579,8 @@
 
   /* ===== VUE CONTACTS ===== */
   .contacts-view { display: none; }
-  .contacts-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 20px; }
+  .contacts-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+  .contacts-search { margin-bottom: 20px; }
   .search-box { flex: 1; position: relative; display: flex; align-items: center; }
   .search-icon { position: absolute; left: 12px; font-size: 14px; opacity: .6; pointer-events: none; }
   .search-input {
@@ -616,14 +617,6 @@
   /* ===== FICHE CONTACT (modale) ===== */
   .contact-editor { max-width: 520px; }
   .contact-editor-main { padding: 4px 24px 22px; overflow-y: auto; }
-  .ce-icons { display: flex; gap: 8px; }
-  .ce-icon {
-    width: 44px; height: 44px; font-size: 22px; cursor: pointer;
-    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
-    display: grid; place-items: center; transition: all .15s;
-  }
-  .ce-icon:hover { border-color: var(--accent); }
-  .ce-icon.active { border-color: var(--accent); background: rgba(74,111,165,.1); }
   .ce-section { margin-top: 18px; }
   .ce-label { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 8px; }
   .ce-rows { display: flex; flex-direction: column; gap: 8px; }
@@ -745,6 +738,13 @@
     font-size: 22px; line-height: 1; padding: 4px 8px; border-radius: 8px; transition: background .15s;
   }
   .editor-close:hover { background: var(--hover); }
+  /* Éditeur d'affaire (vue-liste flat) : fenêtre compacte — plus de bandeau du haut,
+     la croix vient s'aligner sur la ligne du titre */
+  .editor.affaire-mode { position: relative; }
+  .editor.affaire-mode .editor-top { position: absolute; top: 18px; right: 12px; padding: 0; border-bottom: none; }
+  .editor.affaire-mode .editor-title { padding-right: 44px; }
+  /* Le fil d'Ariane (toujours vide pour une affaire racine) garderait sa marge : on le retire */
+  .editor.affaire-mode .editor-breadcrumb { display: none; }
   .editor-cols { display: flex; min-height: 0; overflow: hidden; }
   .editor-main { flex: 1; padding: 22px 24px; overflow-y: auto; min-width: 0; }
   .editor-breadcrumb {
@@ -1312,11 +1312,12 @@
 
     <div class="contacts-view" id="contactsView">
       <div class="contacts-bar">
-        <div class="search-box">
-          <span class="search-icon">🔍</span>
-          <input class="search-input" id="contactSearch" type="text" placeholder="Rechercher un contact…" autocomplete="off">
-        </div>
+        <input class="quick-input" id="contactAddInput" type="text" placeholder="Nom du nouveau contact…" autocomplete="off">
         <button class="quick-submit" id="contactAdd">+ Contact</button>
+      </div>
+      <div class="search-box contacts-search">
+        <span class="search-icon">🔍</span>
+        <input class="search-input" id="contactSearch" type="text" placeholder="Rechercher un contact…" autocomplete="off">
       </div>
       <ul class="contact-list" id="contactList"></ul>
     </div>
@@ -1345,9 +1346,11 @@
         <span class="search-icon">🔍</span>
         <input class="search-input" id="giftSearch" type="text" placeholder="Rechercher une personne…" autocomplete="off">
       </div>
-      <div class="todo-tabs gift-sort" id="giftSort" style="display:flex">
-        <button class="subview-btn" type="button" data-giftsort="bday">🎂 Anniversaire</button>
-        <button class="subview-btn" type="button" data-giftsort="name">🔤 Nom</button>
+      <div class="toolbar">
+        <select class="sort-select" id="giftSort">
+          <option value="bday">Trier par date</option>
+          <option value="name">Trier par nom</option>
+        </select>
       </div>
       <ul class="cadeaux-list" id="cadeauxList"></ul>
     </div>
@@ -1427,7 +1430,6 @@
         </div>
         <!-- Éditeur d'affaire (vue-liste flat) : gérer ses sous-onglets d'appartenance -->
         <div class="editor-affaire-tabs" id="editAffaireTabs" hidden>
-          <div class="editor-subtasks-head">Dans quels onglets ?</div>
           <div class="affaire-chips" id="editAffaireChips"></div>
         </div>
       </div>
@@ -1469,15 +1471,6 @@
     </div>
     <div class="contact-editor-main">
       <input class="editor-title" id="ceName" placeholder="Nom du contact">
-      <div class="ce-section">
-        <div class="ce-label">Icône</div>
-        <div class="ce-icons" id="ceIcons">
-          <button class="ce-icon" type="button" data-icon="👨">👨</button>
-          <button class="ce-icon" type="button" data-icon="👩">👩</button>
-          <button class="ce-icon" type="button" data-icon="👦">👦</button>
-          <button class="ce-icon" type="button" data-icon="👧">👧</button>
-        </div>
-      </div>
       <div class="ce-section">
         <div class="ce-label">🎂 Anniversaire</div>
         <input class="ce-bday-input" id="ceBday" type="text" inputmode="numeric" maxlength="5" placeholder="JJ/MM" autocomplete="off">
@@ -1735,7 +1728,8 @@ const LIST_VIEWS = {
     itemWordPlural: "Éléments", addItemPlaceholder: "Nouvel élément…",
     emptyIcon: "🗂️", emptyText: "Rien encore. Note une idée ci-dessus (tu pourras y ajouter des sous-éléments à cocher).",
     persistChecks: true, subTabs: null, reset: false,
-    sortDone: true   // mode "tree" (comme Courses) + sous-éléments cochés envoyés en bas
+    sortDone: true,      // mode "tree" (comme Courses) + sous-éléments cochés envoyés en bas
+    reorderItems: true   // drag-and-drop des sous-éléments dans leur note
   }
 };
 const listConfig = view => LIST_VIEWS[view] || null;           // config d'une vue-liste (ou null)
@@ -2953,7 +2947,7 @@ function contactCard(contact) {
 
   li.innerHTML = `
     <div class="contact-head">
-      <span class="contact-name">${contact.icon ? esc(contact.icon) + " " : ""}${esc(contact.name || "Sans nom")}</span>
+      <span class="contact-name">${esc(contact.name || "Sans nom")}</span>
       ${bday ? `<span class="contact-bday-show">🎂 ${esc(bday)}</span>` : ""}
       <button class="contact-del" type="button" data-action="del" aria-label="Supprimer">×</button>
     </div>
@@ -3250,7 +3244,7 @@ function giftCard(contact) {
   li.innerHTML = `
     <div class="gift-head" data-action="gift-expand">
       <button class="task-chevron" data-action="gift-expand" aria-label="Déplier">${expanded ? "▾" : "▸"}</button>
-      <span class="gift-name">${contact.icon ? esc(contact.icon) + " " : ""}${esc(contact.name || "Sans nom")}</span>
+      <span class="gift-name">${esc(contact.name || "Sans nom")}</span>
       ${bday ? `<span class="gift-bday">${esc(bday)}</span>` : ""}
     </div>
     ${expanded ? `
@@ -3273,9 +3267,8 @@ function renderCadeaux() {
     onSelect(id) { state.giftPickContact = id; }
   });
 
-  // Bouton de tri actif (anniversaire / nom)
-  document.querySelectorAll("#giftSort .subview-btn").forEach(b =>
-    b.classList.toggle("active", b.dataset.giftsort === state.giftSort));
+  // Menu déroulant de tri (anniversaire / nom) calé sur l'état
+  $("giftSort").value = state.giftSort;
 
   // Personnes ayant au moins une idée, triées selon state.giftSort.
   const q = (state.giftSearch || "").trim().toLowerCase();
@@ -4016,6 +4009,8 @@ function openEditor(id) {
   const flatAffaire = affaireEditable(t);
   $("editSubtasks").style.display = flatAffaire ? "none" : "";
   $("editAffaireTabs").hidden = !flatAffaire;
+  // Fenêtre compacte pour une affaire : la croix rejoint la ligne du titre (voir .affaire-mode)
+  $("overlay").querySelector(".editor").classList.toggle("affaire-mode", flatAffaire);
   if (flatAffaire) renderEditorAffaireTabs(t);
 
   renderEditorSubtasks(t);
@@ -4681,6 +4676,8 @@ function bindEvents() {
     else if (action === "toggle-children") toggleChildren(id);
     else if (action === "add-sub") openSubtaskInput(id);
     else if (action === "edit") openEditor(id);
+    // Clic ailleurs sur la ligne : si elle porte un chevron, il (dé)plie (toute la ligne = cible).
+    else if (!action && row.querySelector(".task-chevron")) toggleChildren(id);
   });
 
   // Recherche de produits dans un rayon déplié (courses) : filtre en direct sans re-render
@@ -4995,20 +4992,17 @@ function bindEvents() {
     state.contactSearch = e.target.value;
     renderContacts();   // on ne redessine que la liste (le champ garde le focus)
   });
-  // Entrée dans le champ : crée un contact portant le texte saisi (puis on vide le champ).
-  $("contactSearch").addEventListener("keydown", e => {
-    if (e.key !== "Enter") return;
-    const name = e.target.value.trim();
-    if (!name) return;
-    db.addContact({ id: uid(), name, birthday: null, phones: [], emails: [], icon: null });
-    e.target.value = ""; state.contactSearch = "";
-    render();
-  });
-  // + Contact : on crée une fiche vierge et on l'ouvre directement (plus de prompt)
-  $("contactAdd").addEventListener("click", () => {
-    const c = { id: uid(), name: "", birthday: null, phones: [], emails: [] };
+  // Ajout d'un contact : champ dédié (Entrée ou bouton). Sans nom saisi, on ouvre une fiche vierge.
+  const submitContactAdd = () => {
+    const name = $("contactAddInput").value.trim();
+    $("contactAddInput").value = "";
+    const c = { id: uid(), name, birthday: null, phones: [], emails: [] };
     db.addContact(c);
-    openContactEditor(c.id);
+    if (name) render(); else openContactEditor(c.id);
+  };
+  $("contactAdd").addEventListener("click", submitContactAdd);
+  $("contactAddInput").addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); submitContactAdd(); }
   });
 
   // Cadeaux : ajout depuis le haut (personne choisie + idée).
@@ -5024,11 +5018,9 @@ function bindEvents() {
   $("giftInput").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); submitTopGift(); } });
   // Cadeaux : recherche d'une personne (re-rend la liste, le champ garde le focus).
   $("giftSearch").addEventListener("input", e => { state.giftSearch = e.target.value; renderCadeaux(); });
-  // Cadeaux : changer le tri (anniversaire / nom).
-  $("giftSort").addEventListener("click", e => {
-    const btn = e.target.closest("[data-giftsort]");
-    if (!btn) return;
-    state.giftSort = btn.dataset.giftsort;
+  // Cadeaux : changer le tri (anniversaire / nom), même menu déroulant que la vue Todo.
+  $("giftSort").addEventListener("change", e => {
+    state.giftSort = e.target.value;
     renderCadeaux();
   });
 
@@ -5079,16 +5071,6 @@ function bindEvents() {
 
   // ----- Fiche contact (modale) -----
   $("contactClose").addEventListener("click", closeContactEditor);
-  // Fiche contact : choix de l'icône (genre). Recliquer l'icône active l'enlève.
-  $("ceIcons").addEventListener("click", e => {
-    const btn = e.target.closest(".ce-icon");
-    if (!btn) return;
-    const c = getContact(state.editingContactId);
-    if (!c) return;
-    c.icon = (c.icon === btn.dataset.icon) ? null : btn.dataset.icon;
-    document.querySelectorAll("#ceIcons .ce-icon").forEach(b => b.classList.toggle("active", b.dataset.icon === c.icon));
-    db.save();
-  });
   $("contactOverlay").addEventListener("click", e => {
     if (e.target.id === "contactOverlay") { closeContactEditor(); return; }   // clic en dehors = enregistrer + fermer
     const del = e.target.closest(".ce-row-del");
@@ -5206,7 +5188,6 @@ function openContactEditor(id) {
   if (!c) return;
   state.editingContactId = id;
   $("ceName").value = c.name || "";
-  document.querySelectorAll("#ceIcons .ce-icon").forEach(b => b.classList.toggle("active", b.dataset.icon === c.icon));
   $("ceBday").value = c.birthday ? c.birthday.split("-").reverse().join("/") : "";
   $("cePhones").innerHTML = (c.phones || []).map(p => contactRowHtml(p, "Numéro")).join("");
   $("ceEmails").innerHTML = (c.emails || []).map(p => contactRowHtml(p, "Adresse e-mail")).join("");
