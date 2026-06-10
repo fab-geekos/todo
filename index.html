@@ -678,7 +678,6 @@
   /* État « à jour » (vert) : carte neutre, sans liseré. Liseré gardé seulement pour les vrais signaux : rappel bientôt / en retard. */
   .vac-next.vac-soon { border-left: 4px solid var(--warning); }
   .vac-next.vac-overdue { border-left: 4px solid var(--alert); }
-  .vac-next-label { font-size: 12px; color: var(--muted); }
   .vac-next-main { font-size: 18px; margin-top: 2px; }
   .vac-next-status { font-size: 13px; color: var(--muted); margin-top: 2px; }
   .vac-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); }
@@ -3374,7 +3373,7 @@ function vaccineStatus(ts) {
   const days = Math.round((ts - today) / DAY_MS);
   if (days < 0) return { cls: "overdue", icon: "⚠️", label: `en retard (depuis ${durationLabel(-days)})` };
   if (days <= VACCINE_LEAD_DAYS) return { cls: "soon", icon: "⏳", label: `bientôt — dans ${durationLabel(days)}` };
-  return { cls: "ok", icon: "✅", label: `à jour — prochain dans ${durationLabel(days)}` };
+  return { cls: "ok", icon: "✅", label: `À jour · Prochain rappel dans ${vaccineCountdown(days)}` };
 }
 // Durée approchée lisible (ans / mois / semaines / jours)
 function durationLabel(days) {
@@ -3382,6 +3381,12 @@ function durationLabel(days) {
   if (days >= 60) return Math.round(days / 30) + " mois";
   if (days >= 14) return Math.round(days / 7) + " semaines";
   return days <= 0 ? "aujourd'hui" : days + (days > 1 ? " jours" : " jour");
+}
+// Compte à rebours du prochain rappel vaccinal : ans si ≥ 1 an, sinon mois, sinon jours (pas de semaines).
+function vaccineCountdown(days) {
+  if (days >= 365) { const y = Math.round(days / 365); return y + (y > 1 ? " ans" : " an"); }
+  if (days >= 30) return Math.round(days / 30) + " mois";
+  return days + (days > 1 ? " jours" : " jour");
 }
 function formatLongDate(ts) {
   const d = new Date(ts);
@@ -3433,7 +3438,6 @@ function renderVaccines() {
     const nextHtml = next
       ? (() => { const st = vaccineStatus(next.ts);
           return `<div class="vac-next vac-${st.cls}">
-            <div class="vac-next-label">Prochain rappel</div>
             <div class="vac-next-main">${st.icon} <strong>${next.age} ans</strong> · ${formatLongDate(next.ts)}</div>
             <div class="vac-next-status">${esc(st.label)}</div>
           </div>`; })()
