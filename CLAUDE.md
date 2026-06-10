@@ -146,7 +146,8 @@ Le moteur a DEUX formes (`shape`) :
   triés non-cochés en haut / cochés rayés en bas ; `resetListTab` décoche les racines.
   Saisie rapide = sélecteur multi-onglets `#listAddTabs` (« Ajouter dans : ») → crée l'affaire
   dans tous les sous-onglets cochés d'un coup (au moins l'onglet actif). Chips = `.list-add-chip`.
-`isShoppingRoot`=`isListRoot` (exclusions Todo) ; comportement « catégorie » via `isListCategory`.
+Exclusions Todo/compteurs via `isListRoot` ; comportement « catégorie » via `isListCategory`.
+(Les anciens alias `isShoppingRoot`/`isShoppingTask` ont été supprimés au lot 5 — un seul nom par helper.)
 
 Lot 1bis (retours user) : Affaires/Voyages passée en mode `flat` (affaires, pas catégories)
 + multi-onglets à l'ajout. FAIT + commité (b53ab3f).
@@ -232,6 +233,23 @@ Lot 1ter (retours user) — FAIT, commité :
   que si aucun `data-action` ne matche → l'ouverture d'éditeur (task-body `data-action="edit"`)
   et le drag (clic immobile < 6px = clic ; après drag, garde `lastDragEnd`) sont préservés.
   Cadeaux : déjà le cas (`.gift-head` porte `data-action="gift-expand"`).
+
+## Nettoyage (lot 5 — chasse aux résidus/redondances, fait)
+Audit systématique (fonctions/CSS/ids/variables définis vs utilisés) puis purge prudente —
+en cas de doute (usage dynamique, ex. `var(--st-${status})`, classes `q-*`), on NE touche PAS.
+- **Supprimé (mort)** : fonction `formatDue` ; CSS `.field`/`.btn`/`.btn-primary`/`.btn-ghost`/
+  `.btn-danger`/`.muted-soon` + règle dark associée ; ids orphelins `espaceSwitch`/`giftSearchBox`/
+  `weekAddFlags` ; variable `ok` inutilisée ; `MONTH_LONG` (doublon exact de `MONTH_LABELS`).
+- **Alias supprimés** : `isShoppingRoot`→`isListRoot`, `isShoppingTask`→`isListTask` (remplacés
+  à tous les call-sites).
+- **Helpers UI ajoutés** (à côté de `$`) : `setActiveTab(container,key,value)` (surbrillance
+  d'onglet, 3 sites), `setOverlay(id,open)` (modales + overflow body, 6 sites),
+  `onEnter(el,fn)` (Entrée = valider, 3 sites).
+- **2 bugs latents corrigés** : listener `.subview-btn` global → scopé `.proj-subviews`
+  (un clic sur un onglet Todo/Projets écrasait `state.projSub`) ; suppression d'une tâche
+  depuis l'éditeur ne rétablissait pas le scroll (`overflow` restait `hidden`).
+- NB : `db.save(); render();` (6 sites) laissé tel quel — idiome clair, l'envelopper
+  n'apporterait rien. `state.notes` conservé exprès (relecture d'anciennes données).
 
 ## Règles de collaboration
 - **Committer + pusher systématiquement à la fin de chaque lot de modifs** (demande permanente

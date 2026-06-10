@@ -48,8 +48,6 @@
     --hover: #1a2438;
     --shadow: 0 1px 3px rgba(0,0,0,.4);
   }
-  body.dark .field input, body.dark .field textarea { background: var(--card); }
-
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
@@ -817,7 +815,6 @@
 
   /* Sections du panneau de droite */
   .side-section { margin-bottom: 18px; }
-  .side-section.muted-soon { opacity: .5; pointer-events: none; }
   .side-label { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 6px; display: flex; justify-content: space-between; }
   .side-label .soon-tag { font-size: 11px; font-weight: 400; color: var(--muted); font-style: italic; }
   .side-date-input {
@@ -885,24 +882,6 @@
   .picker-option.selected { background: var(--hover); }
   .picker-option .check { margin-left: auto; color: var(--success); }
   .picker-empty { padding: 10px; color: var(--muted); font-size: 13px; text-align: center; }
-
-  .field { margin-bottom: 14px; }
-  .field label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 5px; }
-  .field input, .field textarea {
-    width: 100%; font-family: inherit; font-size: 15px; color: var(--text);
-    border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px;
-    outline: none; transition: border-color .2s;
-  }
-  .field input:focus, .field textarea:focus { border-color: var(--accent); }
-  .field textarea { resize: vertical; min-height: 60px; }
-  .btn {
-    font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer;
-    border-radius: var(--radius); padding: 10px 18px; border: none; transition: opacity .2s;
-  }
-  .btn:hover { opacity: .9; }
-  .btn-primary { background: var(--accent); color: #fff; flex: 1; }
-  .btn-ghost { background: none; color: var(--muted); border: 1px solid var(--border); }
-  .btn-danger { background: none; color: var(--alert); border: 1px solid var(--alert); }
 
   /* ===== BURGER MOBILE ===== */
   .scrim { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.3); z-index: 30; }
@@ -1155,7 +1134,7 @@
 <div class="app">
   <aside class="sidebar" id="sidebar">
     <div class="side-greeting">Bonjour Fabien</div>
-    <div class="espace-switch" id="espaceSwitch" role="group" aria-label="Espace pro / perso">
+    <div class="espace-switch" role="group" aria-label="Espace pro / perso">
       <button class="espace-opt" type="button" data-espace="perso">Perso</button>
       <button class="espace-opt" type="button" data-espace="pro">Pro</button>
     </div>
@@ -1342,7 +1321,7 @@
         <input class="quick-input" id="giftInput" type="text" placeholder="Une idée de cadeau…" autocomplete="off">
         <button class="quick-submit" id="giftAdd">Ajouter</button>
       </div>
-      <div class="search-box list-search" id="giftSearchBox">
+      <div class="search-box list-search">
         <span class="search-icon">🔍</span>
         <input class="search-input" id="giftSearch" type="text" placeholder="Rechercher une personne…" autocomplete="off">
       </div>
@@ -1361,7 +1340,7 @@
       <div class="week-modal" role="dialog" aria-label="Ajouter une tâche">
         <input class="week-modal-input" id="weekAddInput" type="text" placeholder="Nom de la tâche…" autocomplete="off">
         <button class="week-modal-day" id="weekAddDayLabel" type="button"></button>
-        <div class="flags" id="weekAddFlags">
+        <div class="flags">
           <button class="flag" data-flag="important"><span class="star">★</span> Important</button>
           <button class="flag" data-flag="urgent">⚡ Urgent</button>
         </div>
@@ -1667,6 +1646,24 @@ function uid() {
 
 const $ = id => document.getElementById(id);
 
+/* ---- Helpers UI réutilisables (un seul endroit pour chaque motif répété) ---- */
+// Surligne le bouton actif d'une barre d'onglets (.subview-btn portant data-<key>)
+function setActiveTab(container, key, value) {
+  container.querySelectorAll(".subview-btn").forEach(b =>
+    b.classList.toggle("active", b.dataset[key] === value));
+}
+// Ouvre/ferme une modale plein écran (fige le scroll de l'arrière-plan)
+function setOverlay(id, open) {
+  $(id).classList.toggle("open", open);
+  document.body.style.overflow = open ? "hidden" : "";
+}
+// Entrée dans un champ = valider (formulaire d'une ligne)
+function onEnter(el, fn) {
+  el.addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); fn(e); }
+  });
+}
+
 // Accès à un élément par son id dans chaque collection
 const getTask = id => state.tasks.find(t => t.id === id);
 const getProject = id => state.projects.find(p => p.id === id);
@@ -1764,10 +1761,6 @@ const affaireGroup = t => t.group || t.id;
 // vue flat qui gère le multi-onglets (Affaires/Voyages). Pas dans une vue "removeOnCheck" (Médiathèque).
 const affaireEditable = t => isListRoot(t) && listShape(t.list) === "flat" && !!(listConfig(t.list) && listConfig(t.list).multiAdd);
 
-// Compat : isShoppingRoot = « racine de vue-liste » (sert aux exclusions Todo/Eisenhower/compteurs).
-// Pour le comportement « catégorie » (pas de case, coche tout, sous-tâches) → isListCategory.
-const isShoppingRoot = isListRoot;
-const isShoppingTask = isListTask;
 
 function startOfDay(d) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
 function todayTs() { return startOfDay(new Date()).getTime(); }   // aujourd'hui à minuit, en ms
@@ -2035,8 +2028,6 @@ function formatDueTs(ts, dueTime) {
   if (dueTime) label += " " + dueTime;
   return { label, cls };
 }
-function formatDue(task) { return formatDueTs(task.dueDate, task.dueTime); }
-
 // Date héritée : remonte la chaîne des parents et renvoie la 1re date d'ancêtre trouvée (sinon null).
 function nearestAncestorDue(task) {
   let cur = task.parentTaskId ? getTask(task.parentTaskId) : null;
@@ -2069,7 +2060,7 @@ function visibleTasks() {
     return agendaSort(list);
   } else {
     // Todo : seulement les racines (hors rayons de la liste de courses) ; les sous-tâches s'affichent en dépliant
-    list = list.filter(t => isRoot(t) && !isShoppingRoot(t));
+    list = list.filter(t => isRoot(t) && !isListRoot(t));
     // Onglet "Récurrentes" : ne garder que les tâches ayant une récurrence
     if (state.todoTab === "recur") list = list.filter(t => t.recurrence);
     state.flatList = false;
@@ -2158,7 +2149,7 @@ function taskRowHtml(task, depth, ancestorContinues = [], isLast = false) {
     : `<span class="task-chevron-spacer"></span>`;
   // Racine : barre de progression complète. Sous-tâche : petit badge X/Y à côté du titre.
   // Exception : les rayons de la liste de courses restent épurés (ni barre, ni "X/Y fait").
-  const progressHtml = (depth === 0 && total > 0 && !isShoppingRoot(task)) ? progressBarHtml(done, total) : "";
+  const progressHtml = (depth === 0 && total > 0 && !isListRoot(task)) ? progressBarHtml(done, total) : "";
   const subCountBadge = (depth > 0 && total > 0) ? `<span class="count-badge">${done}/${total}</span>` : "";
   // Vue-liste en arbre : seule une catégorie peut recevoir des items (2 niveaux). En mode "flat",
   // une affaire est une feuille (pas d'ajout d'enfant). Hors vue-liste : profondeur max classique.
@@ -2284,8 +2275,7 @@ function render() {
   const todoView = state.view === "todo";
   $("todoTabs").style.display = todoView ? "flex" : "none";
   if (todoView) {
-    $("todoTabs").querySelectorAll(".subview-btn").forEach(b =>
-      b.classList.toggle("active", b.dataset.todotab === state.todoTab));
+    setActiveTab($("todoTabs"), "todotab", state.todoTab);
     const recur = state.todoTab === "recur";
     const bday = state.todoTab === "bday";
     // Onglet Récurrentes : pas de tri par création (on bascule sur échéance le cas échéant)
@@ -2298,7 +2288,7 @@ function render() {
 
   // Compteurs : Todo compte les racines (cohérent avec l'affichage) ; Aujourd'hui compte toute échéance du jour
   const active = state.tasks.filter(t => !t.completed);
-  $("count-todo").textContent = active.filter(t => isRoot(t) && !isShoppingRoot(t)).length || "";
+  $("count-todo").textContent = active.filter(t => isRoot(t) && !isListRoot(t)).length || "";
   $("count-today").textContent = active.filter(isDueToday).length || "";
 
   // Nav active (la page projet garde "Projets" en surbrillance)
@@ -2324,8 +2314,7 @@ function render() {
     // onglet actif
     const doneCount = state.projects.filter(p => p.status === "termine").length;
     tabsEl.querySelector('[data-ptab="done"]').textContent = "Archive" + (doneCount ? ` (${doneCount})` : "");
-    tabsEl.querySelectorAll(".subview-btn").forEach(b =>
-      b.classList.toggle("active", b.dataset.ptab === state.projectsTab));
+    setActiveTab(tabsEl, "ptab", state.projectsTab);
     if (state.projectsTab === "done") {
       doneEl.style.display = "flex";
       renderProjectsDone();
@@ -2562,7 +2551,7 @@ function renderEisenhowerInto(board, tasks, opts = {}) {
 }
 
 function renderEisenhower() {
-  renderEisenhowerInto($("eisenGrid"), state.tasks.filter(t => !isShoppingRoot(t)));
+  renderEisenhowerInto($("eisenGrid"), state.tasks.filter(t => !isListRoot(t)));
 }
 
 // Synthèse : tâches des projets En cours et Délégué, classées par priorité.
@@ -2621,7 +2610,7 @@ function refreshCompletionUpwards(taskId) {
   if (!task) return;
   const kids = childTasks(taskId);
   // Les rayons de la liste de courses ne se cochent jamais automatiquement (ils restent visibles).
-  if (kids.length > 0 && !isShoppingRoot(task)) {
+  if (kids.length > 0 && !isListRoot(task)) {
     const allDone = kids.every(k => k.completed);
     task.completed = allDone;
     task.completedAt = allDone ? Date.now() : null;
@@ -2900,8 +2889,7 @@ function renderProjectView() {
   sel.value = p.status;
 
   // Bouton de sous-vue actif
-  document.querySelectorAll(".subview-btn").forEach(b =>
-    b.classList.toggle("active", b.dataset.sub === state.projSub));
+  setActiveTab(document.querySelector(".proj-subviews"), "sub", state.projSub);
 
   const tasks = state.tasks.filter(t => t.projectId === p.id);
   const listWrap = $("projListWrap");
@@ -2919,14 +2907,12 @@ function renderProjectView() {
   }
 }
 
-const MONTH_LONG = ["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
-
 // Affiche un anniversaire stocké "MM-JJ" en texte lisible ("14 juillet")
 function formatBirthday(bday) {
   if (!bday) return null;
   const [m, d] = bday.split("-").map(Number);
   if (!m || !d) return null;
-  return d + " " + MONTH_LONG[m - 1];
+  return d + " " + MONTH_LABELS[m - 1];
 }
 
 function contactCard(contact) {
@@ -3989,7 +3975,7 @@ function openEditor(id) {
 
   // Mode liste de courses : éditeur épuré (ni paramètres latéraux, ni description, ni trait),
   // on passe directement aux produits ; recherche disponible sur un rayon.
-  const shop = isShoppingTask(t);
+  const shop = isListTask(t);
   document.querySelector(".editor-side").style.display = shop ? "none" : "";
   // Labels : uniquement sur les tâches racines (pas les sous-tâches ni la liste de courses)
   const showLabels = isRoot(t) && !shop;
@@ -3997,12 +3983,12 @@ function openEditor(id) {
   if (showLabels) renderEditorLabels(t);
   $("editNote").style.display = shop ? "none" : "";             // pas de description en mode courses
   $("editSubHead").style.display = shop ? "none" : "";          // pas d'entête "Produits X/Y"
-  $("editCheckbox").style.display = isShoppingRoot(t) ? "none" : "";  // un rayon ne se coche pas
+  $("editCheckbox").style.display = isListRoot(t) ? "none" : "";  // un rayon ne se coche pas
   $("editSubtasks").classList.toggle("courses-mode", shop);     // retire le trait horizontal au-dessus
   state.editSubFilter = "";
   const subSearch = $("editSubSearch");
   subSearch.value = "";
-  subSearch.hidden = !isShoppingRoot(t);          // recherche seulement sur un rayon (pas un produit)
+  subSearch.hidden = !isListRoot(t);          // recherche seulement sur un rayon (pas un produit)
   $("editAddSubInput").placeholder = isListRoot(t) ? (listConfig(t.list).addItemPlaceholder || "Nouvel élément…") : "Nouvelle sous-tâche…";
 
   // Mode "affaire" (vue-liste flat multi-onglets) : titre + onglets d'appartenance, pas de sous-tâches.
@@ -4018,8 +4004,7 @@ function openEditor(id) {
 
   $("editAddSubInput").hidden = true;
   $("editAddSubBtn").hidden = false;
-  $("overlay").classList.add("open");
-  document.body.style.overflow = "hidden";   // fige l'arrière-plan
+  setOverlay("overlay", true);
 }
 
 // Sélecteur de projet de la tâche en cours d'édition (réutilise createPicker)
@@ -4220,7 +4205,7 @@ function defaultNthWeek(d) {
 function renderEditorSubtasks(task) {
   const kids = childTasks(task.id);
   // Liste de courses : seul un rayon peut ajouter des produits (pas de 3e niveau).
-  const canAdd = isShoppingTask(task) ? isShoppingRoot(task) : (taskDepth(task) < MAX_TASK_DEPTH);
+  const canAdd = isListTask(task) ? isListRoot(task) : (taskDepth(task) < MAX_TASK_DEPTH);
   const { done, total } = subtaskProgress(task.id);
   const word = isListRoot(task) ? (listConfig(task.list).itemWordPlural || "Éléments") : "Sous-tâches";
   $("editSubHead").textContent = total > 0 ? `${word}  ${done}/${total}` : word;
@@ -4229,7 +4214,7 @@ function renderEditorSubtasks(task) {
   const shown = filter ? kids.filter(k => k.title.toLowerCase().includes(filter)) : kids;
   const ul = $("editSubList");
   ul.innerHTML = "";
-  const openable = !isShoppingRoot(task);   // les produits d'un rayon ne s'ouvrent pas
+  const openable = !isListRoot(task);   // les produits d'un rayon ne s'ouvrent pas
   shown.forEach(k => {
     const li = document.createElement("li");
     li.className = "editor-sub" + (k.completed ? " done" : "");
@@ -4276,8 +4261,7 @@ function autoGrowDesc() {
 
 function closeEditor() {
   saveEditorFields();             // sauvegarde titre/description/date avant de fermer
-  $("overlay").classList.remove("open");
-  document.body.style.overflow = "";   // rétablit le scroll de l'arrière-plan
+  setOverlay("overlay", false);
   state.editingId = null;
   render();
 }
@@ -4736,7 +4720,7 @@ function bindEvents() {
     if (crumb) openEditor(crumb.dataset.id);   // remonter à la tâche parente
   });
   $("editDelete").addEventListener("click", () => {
-    if (state.editingId) { const id = state.editingId; $("overlay").classList.remove("open"); state.editingId = null; deleteTask(id); }
+    if (state.editingId) { const id = state.editingId; setOverlay("overlay", false); state.editingId = null; deleteTask(id); }
   });
   $("overlay").addEventListener("click", e => { if (e.target.id === "overlay") closeEditor(); });
 
@@ -4976,16 +4960,15 @@ function bindEvents() {
   });
   $("projStatus").addEventListener("change", e => {
     if (!state.projectId) return;
-    const ok = setProjectStatus(state.projectId, e.target.value);
+    setProjectStatus(state.projectId, e.target.value);
     render();   // resynchronise le sélecteur (utile si l'assignation a été annulée)
   });
-  document.querySelectorAll(".subview-btn").forEach(b => {
+  // Scopé à la vue projet : les autres barres d'onglets utilisent aussi .subview-btn
+  document.querySelectorAll(".proj-subviews .subview-btn").forEach(b => {
     b.addEventListener("click", () => { state.projSub = b.dataset.sub; render(); });
   });
   $("projTaskSubmit").addEventListener("click", addProjectTaskFromInput);
-  $("projTaskInput").addEventListener("keydown", e => {
-    if (e.key === "Enter") { e.preventDefault(); addProjectTaskFromInput(); }
-  });
+  onEnter($("projTaskInput"), addProjectTaskFromInput);
 
   // Vue Contacts
   $("contactSearch").addEventListener("input", e => {
@@ -5001,9 +4984,7 @@ function bindEvents() {
     if (name) render(); else openContactEditor(c.id);
   };
   $("contactAdd").addEventListener("click", submitContactAdd);
-  $("contactAddInput").addEventListener("keydown", e => {
-    if (e.key === "Enter") { e.preventDefault(); submitContactAdd(); }
-  });
+  onEnter($("contactAddInput"), submitContactAdd);
 
   // Cadeaux : ajout depuis le haut (personne choisie + idée).
   const submitTopGift = () => {
@@ -5015,7 +4996,7 @@ function bindEvents() {
     render();
   };
   $("giftAdd").addEventListener("click", submitTopGift);
-  $("giftInput").addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); submitTopGift(); } });
+  onEnter($("giftInput"), submitTopGift);
   // Cadeaux : recherche d'une personne (re-rend la liste, le champ garde le focus).
   $("giftSearch").addEventListener("input", e => { state.giftSearch = e.target.value; renderCadeaux(); });
   // Cadeaux : changer le tri (anniversaire / nom), même menu déroulant que la vue Todo.
@@ -5093,8 +5074,7 @@ function bindEvents() {
   $("ceDelete").addEventListener("click", () => {
     const id = state.editingContactId;
     state.editingContactId = null;
-    $("contactOverlay").classList.remove("open");
-    document.body.style.overflow = "";
+    setOverlay("contactOverlay", false);
     deleteContact(id);   // confirm + suppression + render
   });
 
@@ -5191,8 +5171,7 @@ function openContactEditor(id) {
   $("ceBday").value = c.birthday ? c.birthday.split("-").reverse().join("/") : "";
   $("cePhones").innerHTML = (c.phones || []).map(p => contactRowHtml(p, "Numéro")).join("");
   $("ceEmails").innerHTML = (c.emails || []).map(p => contactRowHtml(p, "Adresse e-mail")).join("");
-  $("contactOverlay").classList.add("open");
-  document.body.style.overflow = "hidden";
+  setOverlay("contactOverlay", true);
   $("ceName").focus();
 }
 // Enregistre les champs de la fiche dans le contact (lignes vides ignorées)
@@ -5214,8 +5193,7 @@ function closeContactEditor() {
     db.removeContact(c.id);
   }
   state.editingContactId = null;
-  $("contactOverlay").classList.remove("open");
-  document.body.style.overflow = "";
+  setOverlay("contactOverlay", false);
   render();
 }
 
