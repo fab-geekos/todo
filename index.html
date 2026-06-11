@@ -1145,6 +1145,31 @@
   body.embed .sidebar, body.embed #sidebarToggle, body.embed .scrim { display: none !important; }
   body.embed .main { padding: 24px 20px; max-width: 100%; }
   body.embed .view-title { font-size: 22px; }
+
+  /* ===== Porte d'authentification (connexion Google, sync en ligne) ===== */
+  .auth-gate {
+    position: fixed; inset: 0; z-index: 200; padding: 24px;
+    display: flex; align-items: center; justify-content: center; background: var(--bg);
+  }
+  .auth-gate[hidden] { display: none; }
+  .auth-card { text-align: center; max-width: 340px; width: 100%; }
+  .auth-logo { font-size: 52px; line-height: 1; margin-bottom: 14px; }
+  .auth-title { font-size: 28px; font-weight: 700; color: var(--text); margin: 0 0 6px; }
+  .auth-sub { color: var(--muted); margin: 0 0 26px; font-size: 15px; }
+  .auth-btn {
+    display: inline-flex; align-items: center; gap: 10px; cursor: pointer; font: inherit;
+    font-weight: 600; font-size: 15px; padding: 12px 20px; border-radius: 10px;
+    border: 1px solid var(--border); background: var(--card); color: var(--text);
+    box-shadow: var(--shadow); transition: background .15s, box-shadow .15s;
+  }
+  .auth-btn:hover { background: var(--hover); box-shadow: 0 2px 10px rgba(0,0,0,.12); }
+  .auth-btn:disabled { opacity: .6; cursor: default; }
+  .auth-g {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border-radius: 50%; background: #fff; color: #4285F4;
+    font-weight: 700; border: 1px solid #e0e0e0;
+  }
+  .auth-err { color: #d14343; font-size: 13px; margin: 18px 0 0; }
 </style>
 </head>
 <body>
@@ -1220,6 +1245,7 @@
           <div class="kebab-menu" id="dataMenu" hidden>
             <button type="button" id="exportBtn">⬇️ Exporter (JSON)</button>
             <button type="button" id="importBtn">⬆️ Importer (JSON)</button>
+            <button type="button" id="signOutBtn">🚪 Se déconnecter</button>
           </div>
         </div>
         <input type="file" id="importFile" accept="application/json,.json" hidden>
@@ -1496,6 +1522,22 @@
   <button class="undo-btn" type="button" id="undoBtn">Annuler</button>
 </div>
 
+<!-- Porte d'authentification : connexion Google (sync en ligne) -->
+<div class="auth-gate" id="authGate" hidden>
+  <div class="auth-card">
+    <div class="auth-logo">✅</div>
+    <h1 class="auth-title">Ma Todo</h1>
+    <p class="auth-sub">Connecte-toi pour synchroniser tes données.</p>
+    <button class="auth-btn" id="authSignIn" type="button"><span class="auth-g">G</span> Se connecter avec Google</button>
+    <p class="auth-err" id="authErr" hidden></p>
+  </div>
+</div>
+
+<!-- SDK Firebase (compat) : expose un global `firebase` au script classique ci-dessous (un seul index.html, pas de build) -->
+<script src="https://www.gstatic.com/firebasejs/11.10.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/11.10.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore-compat.js"></script>
+
 <script>
 "use strict";
 
@@ -1517,6 +1559,33 @@ const THEME_KEY = "todo_theme";
 // Vues masquées selon l'espace (outil perso : certaines vues n'ont pas de sens côté pro).
 const ESPACE_HIDDEN_VIEWS = { pro: ["courses", "bagages", "mediatheque", "cadeaux", "vaccins"] };
 const isViewHidden = view => (ESPACE_HIDDEN_VIEWS[ESPACE] || []).includes(view);
+
+/* =========================================================
+   FIREBASE — sync en ligne + auth Google
+   Modèle validé : document-blob par espace → users/{uid}/spaces/{espace}.
+   La clé apiKey est publique par design (sécurité = règles Firestore + domaines autorisés).
+   ========================================================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyD6zGzK6Swl_DvgqQX882pWWT9YFnguGaE",
+  authDomain: "fabien---todo.firebaseapp.com",
+  projectId: "fabien---todo",
+  storageBucket: "fabien---todo.firebasestorage.app",
+  messagingSenderId: "907521248599",
+  appId: "1:907521248599:web:62333edf0b3cd04c5c4212"
+};
+firebase.initializeApp(firebaseConfig);
+const fbAuth = firebase.auth();
+const fbStore = firebase.firestore();
+// Cache hors-ligne : l'app reste instantanée et marche sans réseau (sync au retour).
+fbStore.enablePersistence({ synchronizeTabs: true }).catch(() => {});
+const googleProvider = new firebase.auth.GoogleAuthProvider();
+
+let fbUser = null;        // utilisateur connecté (null = porte de login affichée)
+let spaceRef = null;      // doc Firestore de l'espace courant (null tant que non connecté)
+let _spaceUnsub = null;   // fonction de désabonnement onSnapshot
+let _saveTimer = null;    // debounce des écritures réseau
+let _lastSync = null;     // dernier blob (stable-stringifié) poussé/appliqué — anti-écho/anti-clobber
+let _seeded = false;      // garde le seed initial à un seul passage par session
 const DAY_MS = 86400000;                 // millisecondes dans une journée
 const DEFAULT_PROJECT_ICON = "📁";       // icône par défaut d'un nouveau projet
 
@@ -1606,34 +1675,57 @@ function normalizeData(raw) {
   return { tasks: [], projects: [], contacts: [], birthDate: null, vaccineDone: null, labels: [], notes: [] };
 }
 
+// Sérialisation stable (clés triées) : compare 2 blobs indépendamment de l'ordre des clés.
+function stableStr(v) {
+  if (Array.isArray(v)) return "[" + v.map(stableStr).join(",") + "]";
+  if (v && typeof v === "object")
+    return "{" + Object.keys(v).sort().map(k => JSON.stringify(k) + ":" + stableStr(v[k])).join(",") + "}";
+  return JSON.stringify(v === undefined ? null : v);
+}
+// Le blob persisté (mêmes 7 champs qu'avant : la "forme" des données ne change pas).
+function currentBlob() {
+  return {
+    tasks: state.tasks, projects: state.projects, contacts: state.contacts,
+    birthDate: state.birthDate, vaccineDone: state.vaccineDone, labels: state.labels, notes: state.notes
+  };
+}
+// Recopie un blob normalisé dans le state.
+function applyData(data) {
+  state.tasks = data.tasks;     state.projects = data.projects; state.contacts = data.contacts;
+  state.birthDate = data.birthDate; state.vaccineDone = data.vaccineDone;
+  state.labels = data.labels;   state.notes = data.notes;
+}
+// Lit le blob local brut (localStorage) ; adoption douce de l'ancienne clé unique pour "perso".
+function readLocalRaw() {
+  let raw = null;
+  try { raw = JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch {}
+  if (raw == null && ESPACE === "perso") {
+    try { const legacy = JSON.parse(localStorage.getItem(LEGACY_KEY)); if (legacy != null) raw = legacy; } catch {}
+  }
+  return raw;
+}
+// Un blob est-il vide (rien à semer / à sauvegarder) ?
+function isEmptyData(d) {
+  return !d || (!(d.tasks || []).length && !(d.projects || []).length && !(d.contacts || []).length
+    && !(d.labels || []).length && !(d.notes || []).length && !d.birthDate && !d.vaccineDone);
+}
+
 const db = {
-  load() {
-    let raw = null, adopted = false;
-    try { raw = JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch {}
-    // Migration douce : 1er passage sur l'espace "perso" sans données propres
-    // → on adopte l'ancienne clé unique (les données historiques sont perso).
-    if (raw == null && ESPACE === "perso") {
-      try {
-        const legacy = JSON.parse(localStorage.getItem(LEGACY_KEY));
-        if (legacy != null) { raw = legacy; adopted = true; }
-      } catch {}
-    }
-    const data = normalizeData(raw);
-    state.tasks = data.tasks;
-    state.projects = data.projects;
-    state.contacts = data.contacts;
-    state.birthDate = data.birthDate;
-    state.vaccineDone = data.vaccineDone;
-    state.labels = data.labels;
-    state.notes = data.notes;
-    if (adopted) this.save();   // recopie l'historique dans la clé d'espace
-  },
+  // Repli local instantané (avant que Firestore/Auth ne répondent). Le vrai chargement
+  // réactif est piloté par l'auth (bootFirebase → onSnapshot).
+  load() { applyData(normalizeData(readLocalRaw())); },
   save() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      tasks: state.tasks, projects: state.projects, contacts: state.contacts,
-      birthDate: state.birthDate, vaccineDone: state.vaccineDone, labels: state.labels,
-      notes: state.notes
-    }));
+    const blob = currentBlob();
+    // 1) cache local immédiat : instantané + filet hors-ligne, même non connecté.
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(blob)); } catch {}
+    // 2) écriture Firestore débouncée (uniquement si connecté).
+    if (!spaceRef) return;
+    _lastSync = stableStr(blob);                 // ce qu'on s'apprête à pousser → ignore l'écho
+    clearTimeout(_saveTimer);
+    _saveTimer = setTimeout(() => {
+      spaceRef.set({ ...blob, _v: 1, _updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+        .catch(e => console.warn("[firebase] échec écriture :", e));
+    }, 600);
   },
   // --- Tâches ---
   add(task) { state.tasks.push(task); this.save(); },
@@ -5455,16 +5547,81 @@ function bindDataMenu() {
   });
 }
 
+/* =========================================================
+   BOOT — auth Google + sync live (Firebase)
+   ========================================================= */
+function showAuthGate(show) {
+  $("authGate").hidden = !show;
+  document.body.style.overflow = show ? "hidden" : "";
+}
+
+function bindAuth() {
+  $("authSignIn").addEventListener("click", () => {
+    $("authErr").hidden = true;
+    fbAuth.signInWithPopup(googleProvider).catch(err => {
+      const el = $("authErr");
+      el.textContent = "Connexion impossible : " + (err.code || err.message);
+      el.hidden = false;
+    });
+  });
+  $("signOutBtn").addEventListener("click", () => { $("dataMenu").hidden = true; fbAuth.signOut(); });
+}
+
+// Abonne l'espace courant au live Firestore. 1er passage : sème depuis le local si le doc est absent.
+function attachSpace(uid) {
+  detachSpace();
+  spaceRef = fbStore.doc(`users/${uid}/spaces/${ESPACE}`);
+  _seeded = false;
+  // includeMetadataChanges : indispensable pour distinguer "absent en cache" de "absent confirmé serveur".
+  _spaceUnsub = spaceRef.onSnapshot({ includeMetadataChanges: true }, snap => {
+    if (snap.metadata.hasPendingWrites) return;          // ignore l'écho de nos propres écritures
+    if (snap.exists) {
+      const data = normalizeData(snap.data());
+      const incoming = stableStr(data);
+      if (incoming === _lastSync) return;                // identique → ne pas réécraser l'UI
+      _lastSync = incoming;
+      applyData(data);
+      migrateNotesToAutres();                            // no-op si pas d'anciennes notes
+      render();
+    } else {
+      // Doc absent. On attend la confirmation SERVEUR (pas le cache) avant de semer, sinon on
+      // risquerait d'écraser un doc existant sur un 2e appareil au cache vide. Et on NE crée
+      // jamais de doc vide (évite la pollution depuis un origin de test).
+      if (_seeded || snap.metadata.fromCache) return;
+      _seeded = true;
+      applyData(normalizeData(readLocalRaw()));
+      migrateNotesToAutres();
+      if (!isEmptyData(currentBlob())) db.save();        // sème Firestore depuis le cache local
+      render();
+    }
+  }, err => console.warn("[firebase] snapshot :", err));
+}
+
+function detachSpace() {
+  if (_spaceUnsub) { _spaceUnsub(); _spaceUnsub = null; }
+  spaceRef = null;
+}
+
+function bootFirebase() {
+  fbAuth.onAuthStateChanged(user => {
+    fbUser = user;
+    if (user) { showAuthGate(false); attachSpace(user.uid); }
+    else { detachSpace(); showAuthGate(true); }
+  });
+}
+
 function init() {
-  db.load();
-  migrateNotesToAutres();   // anciennes notes (vue séparée) → racines de « Idées / Notes / Autres »
+  db.load();                 // affichage instantané depuis le cache local
+  migrateNotesToAutres();    // anciennes notes (vue séparée) → racines de « Idées / Notes / Autres »
   applyMode();
   bindEvents();
   initEspaceSwitch();
   bindDataMenu();
   applyEspaceViews();
   initTheme();
+  bindAuth();
   render();
+  bootFirebase();            // auth Google + sync live (affiche la porte de login si déconnecté)
 }
 init();
 </script>
