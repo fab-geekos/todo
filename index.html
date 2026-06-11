@@ -252,6 +252,16 @@
     transition: border-color .2s, box-shadow .2s;
   }
   .quick-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(74,111,165,.12); }
+  /* Encadré MIT (Most Important Thing) — vue Aujourd'hui, espace pro */
+  .mit-box {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 16px;
+    padding: 11px 14px; background: var(--card); border: 1px solid var(--border);
+    border-left: 3px solid var(--accent); border-radius: var(--radius);
+  }
+  .mit-box[hidden] { display: none; }
+  .mit-label { font-size: 12px; font-weight: 700; letter-spacing: .06em; color: var(--accent); flex-shrink: 0; }
+  .mit-input { flex: 1; font-family: inherit; font-size: 15px; color: var(--text); border: none; background: none; outline: none; }
+  .mit-input::placeholder { color: var(--muted); }
   .quick-submit {
     font-family: inherit; font-size: 15px; font-weight: 600; color: #fff;
     background: var(--accent); border: none; border-radius: var(--radius);
@@ -722,10 +732,10 @@
   .label-list { display: flex; flex-direction: column; gap: 2px; }
   .label-row { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-radius: 10px; cursor: pointer; transition: background .15s; }
   .label-row:hover { background: var(--hover); }
-  .label-row-name { flex: 1; font-weight: 500; word-break: break-word; }
+  .label-row-name { font-weight: 500; word-break: break-word; }
   .label-row-count { color: var(--muted); font-size: 13px; }
   .label-row-del {
-    opacity: 0; background: none; border: none; cursor: pointer;
+    opacity: 0; margin-left: auto; background: none; border: none; cursor: pointer;
     color: var(--muted); font-size: 18px; line-height: 1; padding: 0 2px;
     flex-shrink: 0; transition: opacity .2s, color .2s;
   }
@@ -1259,6 +1269,12 @@
       </div>
     </div>
 
+    <!-- MIT du jour (espace pro, vue Aujourd'hui) : texte libre, remis à zéro chaque jour -->
+    <div class="mit-box" id="mitBox" hidden>
+      <span class="mit-label">MIT</span>
+      <input class="mit-input" id="mitInput" type="text" placeholder="Ta priorité du jour…" autocomplete="off" maxlength="200">
+    </div>
+
     <div class="quick-add">
       <div class="quick-add-row">
         <input class="quick-input" id="quickInput" type="text"
@@ -1631,7 +1647,7 @@ let state = {
   tasks: [],
   projects: [],
   contacts: [],
-  view: "todo",
+  view: "today",
   sort: "due",
   todoTab: "all",         // onglet de la vue Todo : "all" (toutes) ou "recur" (récurrentes)
   editingId: null,
@@ -1640,6 +1656,7 @@ let state = {
   vaccineDone: null,      // [âges des rappels faits] ; null = pas encore initialisé
   labels: [],             // étiquettes : [{ id, name, color }]
   notes: [],              // idées / notes : [{ id, text, createdAt }] (vue Idées/notes)
+  mit: { text: "", date: null },  // MIT du jour (espace pro) : { text, date "AAAA-MM-JJ" } ; vidé à chaque nouveau jour
   labelFilter: null,      // étiquette sélectionnée dans la vue Étiquettes (null = liste)
   quickAddLabels: [],     // étiquettes pré-sélectionnées pour la prochaine tâche du quick-add
   projectId: null,        // projet actuellement ouvert (vue détaillée)
@@ -1669,7 +1686,8 @@ let state = {
 // Transforme des données brutes (localStorage OU futur Firebase) en {tasks, projects}.
 // Gère l'ancien format (simple tableau de tâches) pour ne rien perdre.
 function normalizeData(raw) {
-  if (Array.isArray(raw)) return { tasks: raw, projects: [], contacts: [], birthDate: null, vaccineDone: null, labels: [], notes: [] };
+  const emptyMit = { text: "", date: null };
+  if (Array.isArray(raw)) return { tasks: raw, projects: [], contacts: [], birthDate: null, vaccineDone: null, labels: [], notes: [], mit: emptyMit };
   if (raw && typeof raw === "object") return {
     tasks: raw.tasks || [],
     projects: raw.projects || [],
@@ -1677,9 +1695,10 @@ function normalizeData(raw) {
     birthDate: raw.birthDate || null,
     vaccineDone: raw.vaccineDone || null,
     labels: raw.labels || [],
-    notes: raw.notes || []
+    notes: raw.notes || [],
+    mit: raw.mit || emptyMit
   };
-  return { tasks: [], projects: [], contacts: [], birthDate: null, vaccineDone: null, labels: [], notes: [] };
+  return { tasks: [], projects: [], contacts: [], birthDate: null, vaccineDone: null, labels: [], notes: [], mit: emptyMit };
 }
 
 // Sérialisation stable (clés triées) : compare 2 blobs indépendamment de l'ordre des clés.
@@ -1693,14 +1712,15 @@ function stableStr(v) {
 function currentBlob() {
   return {
     tasks: state.tasks, projects: state.projects, contacts: state.contacts,
-    birthDate: state.birthDate, vaccineDone: state.vaccineDone, labels: state.labels, notes: state.notes
+    birthDate: state.birthDate, vaccineDone: state.vaccineDone, labels: state.labels, notes: state.notes,
+    mit: state.mit
   };
 }
 // Recopie un blob normalisé dans le state.
 function applyData(data) {
   state.tasks = data.tasks;     state.projects = data.projects; state.contacts = data.contacts;
   state.birthDate = data.birthDate; state.vaccineDone = data.vaccineDone;
-  state.labels = data.labels;   state.notes = data.notes;
+  state.labels = data.labels;   state.notes = data.notes;   state.mit = data.mit;
 }
 // Lit le blob local brut (localStorage) ; adoption douce de l'ancienne clé unique pour "perso".
 function readLocalRaw() {
@@ -2032,7 +2052,15 @@ const NUM_WORDS = {
 };
 
 function parseInput(raw) {
-  let text = " " + raw.trim() + " ";
+  // Texte entre guillemets = littéral : protégé du parsing (les guillemets sont retirés à l'affichage).
+  // Chaque segment "…" devient un jeton neutre qu'aucune règle de date ne reconnaît, restauré à la fin.
+  const literals = [];
+  const TOK = "";
+  const protectedText = raw.trim().replace(/"([^"]*)"/g, (_, inner) => {
+    literals.push(inner);
+    return TOK + (literals.length - 1) + TOK;
+  });
+  let text = " " + protectedText + " ";
   let date = null;     // objet Date (jour) ou null
   let time = null;     // "HH:MM" ou null
   let urgent = false, important = false;
@@ -2133,7 +2161,9 @@ function parseInput(raw) {
   consume(/\burgente?s?\b/i, () => { urgent = true; });
   consume(/\bimportante?s?\b/i, () => { important = true; });
 
-  const title = text.replace(/\s+/g, " ").trim();
+  let title = text.replace(/\s+/g, " ").trim();
+  // Restaure les segments littéraux protégés (guillemets déjà retirés).
+  title = title.replace(new RegExp(TOK + "(\\d+)" + TOK, "g"), (_, i) => literals[+i]);
   return {
     title: title || raw.trim(),
     dueDate: date ? date.getTime() : null,
@@ -2367,6 +2397,21 @@ function taskCard(task, withChildren = true) {
   return li;
 }
 
+// Clé de jour locale "AAAA-MM-JJ" (sert au reset quotidien du MIT).
+function todayKey() {
+  const d = new Date();
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+// Encadré MIT : visible en vue Aujourd'hui + espace pro ; affiche vide si le texte date d'un autre jour.
+function renderMit() {
+  const box = $("mitBox"), input = $("mitInput");
+  const show = state.view === "today" && ESPACE === "pro";
+  box.hidden = !show;
+  if (!show) return;
+  const fresh = (state.mit && state.mit.date === todayKey()) ? state.mit.text : "";
+  if (document.activeElement !== input) input.value = fresh;   // ne pas écraser pendant la frappe
+}
+
 function render() {
   initVaccineDoneIfNeeded();   // jalons "déjà passés" marqués faits (utile à l'agenda comme à la vue Vaccins)
   // Titre + sous-titre (la page projet a son propre en-tête, donc titre vide)
@@ -2393,6 +2438,7 @@ function render() {
   const tasksView = state.view === "todo" || state.view === "today" || listView;
   $("toolbar").style.display = state.view === "todo" ? "flex" : "none";
   document.querySelector(".quick-add").style.display = tasksView ? "block" : "none";
+  renderMit();   // encadré MIT (vue Aujourd'hui + espace pro)
   // En vue-liste : la saisie rapide crée une CATÉGORIE/rayon (placeholder dédié, pas de priorité)
   document.body.classList.toggle("view-list", listView);
   $("quickInput").placeholder = listView ? lcfg.addRootPlaceholder : "Nouvelle tâche";
@@ -4680,6 +4726,12 @@ function bindEvents() {
     if (e.key === "Enter") { e.preventDefault(); addTask(); }
   });
 
+  // MIT du jour (espace pro) : sauvegarde à la frappe, datée du jour (vidée le lendemain par renderMit).
+  $("mitInput").addEventListener("input", e => {
+    state.mit = { text: e.target.value, date: todayKey() };
+    db.save();
+  });
+
   // Boutons de priorité (saisie rapide + vue Liste d'un projet) : toggle générique.
   // Les cartes projet du Kanban sont gérées séparément par onProjectBoardClick.
   document.querySelectorAll(".quick-add").forEach(zone => {
@@ -5520,7 +5572,7 @@ function exportData() {
     _app: "todo", _version: 1, _espace: ESPACE, _exportedAt: new Date().toISOString(),
     tasks: state.tasks, projects: state.projects, contacts: state.contacts,
     birthDate: state.birthDate, vaccineDone: state.vaccineDone, labels: state.labels,
-    notes: state.notes
+    notes: state.notes, mit: state.mit
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
@@ -5546,7 +5598,7 @@ function importData(file) {
     if (!confirm(msg)) return;
     state.tasks = data.tasks; state.projects = data.projects; state.contacts = data.contacts;
     state.birthDate = data.birthDate; state.vaccineDone = data.vaccineDone; state.labels = data.labels;
-    state.notes = data.notes;
+    state.notes = data.notes; state.mit = data.mit;
     db.save();
     migrateNotesToAutres();   // d'éventuelles notes importées (ancien format) deviennent des racines "autres"
     render();
