@@ -724,6 +724,13 @@
   .label-row:hover { background: var(--hover); }
   .label-row-name { flex: 1; font-weight: 500; word-break: break-word; }
   .label-row-count { color: var(--muted); font-size: 13px; }
+  .label-row-del {
+    opacity: 0; background: none; border: none; cursor: pointer;
+    color: var(--muted); font-size: 18px; line-height: 1; padding: 0 2px;
+    flex-shrink: 0; transition: opacity .2s, color .2s;
+  }
+  .label-row:hover .label-row-del { opacity: 1; }
+  .label-row-del:hover { color: var(--alert); }
   .label-empty { color: var(--muted); font-style: italic; padding: 20px 0; }
   .label-detail-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
   .label-edit { display: flex; flex-direction: column; gap: 14px; align-items: flex-start; margin-bottom: 22px; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
@@ -3616,6 +3623,21 @@ function deleteLabel(id) {
   if (state.labelFilter === id) state.labelFilter = null;
   db.save();
 }
+// Suppression avec filet « Annuler » : restaure l'étiquette (à sa place) ET ses affectations aux tâches.
+function deleteLabelWithUndo(id) {
+  const label = getLabel(id);
+  if (!label) return;
+  const index = state.labels.indexOf(label);
+  const taggedIds = state.tasks.filter(t => (t.labels || []).includes(id)).map(t => t.id);
+  deleteLabel(id);
+  render();
+  showUndo(`« ${label.name} » supprimée`, () => {
+    state.labels.splice(Math.min(index, state.labels.length), 0, label);
+    taggedIds.forEach(tid => { const t = getTask(tid); if (t) (t.labels = t.labels || []).push(id); });
+    db.save();
+    render();
+  });
+}
 function toggleTaskLabel(taskId, labelId) {
   const t = getTask(taskId);
   if (!t) return;
@@ -3792,6 +3814,7 @@ function renderLabels() {
           ${labelTagIcon(l.color, 15)}
           <span class="label-row-name">${esc(l.name)}</span>
           <span class="label-row-count">${count}</span>
+          <button class="label-row-del" type="button" aria-label="Supprimer l'étiquette">×</button>
         </div>`;
       }).join("")
     : `<div class="label-empty">Aucune étiquette. Crée-en une ci-dessus.</div>`;
@@ -5265,6 +5288,8 @@ function bindEvents() {
     if (e.target.closest("#labelDelete")) { if (confirm("Supprimer cette étiquette ?")) { deleteLabel(state.labelFilter); render(); } return; }
     const sw = e.target.closest(".label-swatch");
     if (sw) { const l = getLabel(state.labelFilter); if (l) { l.color = sw.dataset.color; db.save(); render(); } return; }
+    const del = e.target.closest(".label-row-del");
+    if (del) { e.stopPropagation(); deleteLabelWithUndo(del.closest(".label-row").dataset.label); return; }
     const row = e.target.closest(".label-row");
     if (row) { state.labelFilter = row.dataset.label; render(); return; }
     // (les clics sur les cartes de tâches sont gérés par la délégation .main)
