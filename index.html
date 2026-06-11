@@ -14,6 +14,7 @@
     --accent: #4A6FA5;
     --success: #2D936C;
     --alert: #E07A5F;
+    --mit-red: #D62828;      /* rouge plus appuyé, propre au MIT (label + liseré) */
     --warning: #F2CC8F;
     --muted: #6b7280;        /* gris secondaire — assombri pour passer AA 4,5:1 (était #888 ≈ 3,3:1) */
     --card: #fff;
@@ -46,6 +47,7 @@
     --muted: #94a3b8;        /* gris secondaire (nuit) — éclairci pour passer AA 4,5:1 (était #64748b ≈ 3,6:1) */
     --border: #1e293b;
     --hover: #1a2438;
+    --mit-red: #F26D6D;      /* MIT : rouge éclairci pour rester lisible sur fond sombre */
     --shadow: 0 1px 3px rgba(0,0,0,.4);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -256,11 +258,11 @@
   .mit-box {
     display: flex; align-items: center; gap: 10px; margin-bottom: 16px;
     padding: 11px 14px; background: var(--card); border: 1px solid var(--border);
-    border-left: 3px solid var(--alert); border-radius: var(--radius);
+    border-left: 3px solid var(--mit-red); border-radius: var(--radius);
   }
   .mit-box[hidden] { display: none; }
-  .mit-label { font-size: 12px; font-weight: 700; letter-spacing: .06em; color: var(--alert); flex-shrink: 0; }
-  .mit-input { flex: 1; font-family: inherit; font-size: 15px; font-weight: 500; color: var(--alert); border: none; background: none; outline: none; }
+  .mit-label { font-size: 12px; font-weight: 700; letter-spacing: .06em; color: var(--mit-red); flex-shrink: 0; }
+  .mit-input { flex: 1; font-family: inherit; font-size: 15px; font-weight: 500; color: var(--text); border: none; background: none; outline: none; }
   .mit-input::placeholder { color: var(--muted); font-weight: 400; }
   .quick-submit {
     font-family: inherit; font-size: 15px; font-weight: 600; color: #fff;
