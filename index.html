@@ -390,6 +390,15 @@
   }
   .task-row:hover .task-del { opacity: 1; }
   .task-del:hover { color: var(--alert); }
+  /* Bouton « renommer » (vues-listes : produits, rayons, notes…) — même style hover que la croix */
+  .task-edit {
+    opacity: 0; background: none; border: none; cursor: pointer;
+    color: var(--muted); font-size: 14px; padding: 0 4px; align-self: center;
+    transition: opacity .2s, color .2s;
+  }
+  .task-row:hover .task-edit { opacity: 1; }
+  .task-edit:hover { color: var(--accent); }
+  .task-title[contenteditable="true"] { outline: none; cursor: text; border-bottom: 1px dashed var(--accent); }
 
   .empty {
     text-align: center; color: var(--muted); padding: 60px 20px; font-size: 15px;
@@ -2352,6 +2361,7 @@ function taskRowHtml(task, depth, ancestorContinues = [], isLast = false) {
         ${progressHtml}
       </div>
       ${canAddChild ? `<button class="task-addsub" data-action="add-sub" aria-label="Ajouter une sous-tâche"><span class="plus-sm">+</span></button>` : ""}
+      ${!canOpen ? `<button class="task-edit" data-action="list-rename" aria-label="Renommer" title="Renommer">✎</button>` : ""}
       <button class="task-del" data-action="delete" aria-label="Supprimer">×</button>
     </div>
     <div class="task-addsub-zone" data-id="${task.id}" hidden>
@@ -2402,6 +2412,38 @@ function taskCard(task, withChildren = true) {
   li.dataset.id = task.id;
   li.innerHTML = withChildren ? taskTreeRows(task, 0) : taskRowHtml(task, 0);
   return li;
+}
+
+// Renommage inline d'un libellé de vue-liste (produit, rayon, note…) : le titre devient éditable.
+// Entrée ou perte de focus = enregistre ; Échap = annule.
+function startListRename(row) {
+  const id = row.dataset.id;
+  const span = row.querySelector(".task-title");
+  if (!span || span.isContentEditable) return;
+  const t0 = getTask(id);
+  const original = t0 ? t0.title : span.textContent;
+  span.contentEditable = "true";
+  span.focus();
+  const sel = window.getSelection(), range = document.createRange();
+  range.selectNodeContents(span); sel.removeAllRanges(); sel.addRange(range);
+  let done = false;
+  const finish = save => {
+    if (done) return; done = true;
+    span.removeEventListener("keydown", onKey);
+    span.removeEventListener("blur", onBlur);
+    span.contentEditable = "false";
+    const v = span.textContent.trim();
+    const t = getTask(id);
+    if (save && t && v && v !== original) db.update(id, { title: v });
+    render();
+  };
+  const onKey = e => {
+    if (e.key === "Enter") { e.preventDefault(); finish(true); }
+    else if (e.key === "Escape") { e.preventDefault(); finish(false); }
+  };
+  const onBlur = () => finish(true);
+  span.addEventListener("keydown", onKey);
+  span.addEventListener("blur", onBlur);
 }
 
 // Clé de jour locale "AAAA-MM-JJ" (sert au reset quotidien du MIT).
@@ -4898,8 +4940,16 @@ function bindEvents() {
     else if (action === "toggle-children") toggleChildren(id);
     else if (action === "add-sub") openSubtaskInput(id);
     else if (action === "edit") openEditor(id);
+    else if (action === "list-rename") startListRename(row);
     // Clic ailleurs sur la ligne : si elle porte un chevron, il (dé)plie (toute la ligne = cible).
     else if (!action && row.querySelector(".task-chevron")) toggleChildren(id);
+  });
+
+  // Double-clic sur un libellé de vue-liste (non ouvrable) = renommer (raccourci en plus du crayon).
+  document.querySelector(".main").addEventListener("dblclick", e => {
+    const span = e.target.closest(".task-title");
+    const row = span && span.closest(".task-row.no-open");
+    if (row) startListRename(row);
   });
 
   // Recherche de produits dans un rayon déplié (courses) : filtre en direct sans re-render
