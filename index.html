@@ -399,6 +399,7 @@
   .task-row:hover .task-edit { opacity: 1; }
   .task-edit:hover { color: var(--accent); }
   .task-title[contenteditable="true"] { outline: none; cursor: text; border-bottom: 1px dashed var(--accent); }
+  .rayon-count { color: var(--muted); font-size: 13px; font-weight: 400; flex-shrink: 0; }
 
   .empty {
     text-align: center; color: var(--muted); padding: 60px 20px; font-size: 15px;
@@ -1857,7 +1858,8 @@ const LIST_VIEWS = {
     persistChecks: true, subTabs: null, reset: false,
     itemSearch: true,    // recherche de produits sous le nom du rayon (déplié)
     sortDone: true,      // produits : non cochés en haut, cochés en bas (le + récemment coché en tête des cochés)
-    reorderItems: true   // drag-and-drop des produits dans un rayon
+    reorderItems: true,  // drag-and-drop des produits dans un rayon
+    categoryCount: true  // compteur de produits NON cochés à côté du nom du rayon
   },
   bagages: {
     icon: "🧳", title: "Affaires / Voyages", sub: "",
@@ -2354,14 +2356,13 @@ function taskRowHtml(task, depth, ancestorContinues = [], isLast = false) {
       ${chevronHtml}
       ${isListCategory(task) ? "" : `<button class="checkbox" data-action="toggle" aria-label="Terminer"></button>`}
       <div class="task-body"${canOpen ? ' data-action="edit"' : ''}>
-        <div class="task-titleline"><span class="task-title">${esc(task.title)}</span>${flagBadges(task)}${subCountBadge}</div>
+        <div class="task-titleline"><span class="task-title">${esc(task.title)}</span>${isListCategory(task) && listConfig(task.list)?.categoryCount ? `<span class="rayon-count">${childTasks(task.id).filter(c => !c.completed).length}</span>` : ""}${!canOpen ? `<button class="task-edit" data-action="list-rename" aria-label="Renommer" title="Renommer">✎</button>` : ""}${flagBadges(task)}${subCountBadge}</div>
         ${task.note ? `<div class="task-note">${esc(task.note)}</div>` : ""}
         ${depth === 0 && (task.labels || []).length ? `<div class="task-labels">${labelChipsHtml(task)}</div>` : ""}
         ${metaHtml}
         ${progressHtml}
       </div>
       ${canAddChild ? `<button class="task-addsub" data-action="add-sub" aria-label="Ajouter une sous-tâche"><span class="plus-sm">+</span></button>` : ""}
-      ${!canOpen ? `<button class="task-edit" data-action="list-rename" aria-label="Renommer" title="Renommer">✎</button>` : ""}
       <button class="task-del" data-action="delete" aria-label="Supprimer">×</button>
     </div>
     <div class="task-addsub-zone" data-id="${task.id}" hidden>
