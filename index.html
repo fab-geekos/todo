@@ -256,12 +256,12 @@
   .mit-box {
     display: flex; align-items: center; gap: 10px; margin-bottom: 16px;
     padding: 11px 14px; background: var(--card); border: 1px solid var(--border);
-    border-left: 3px solid var(--accent); border-radius: var(--radius);
+    border-left: 3px solid var(--alert); border-radius: var(--radius);
   }
   .mit-box[hidden] { display: none; }
-  .mit-label { font-size: 12px; font-weight: 700; letter-spacing: .06em; color: var(--accent); flex-shrink: 0; }
-  .mit-input { flex: 1; font-family: inherit; font-size: 15px; color: var(--text); border: none; background: none; outline: none; }
-  .mit-input::placeholder { color: var(--muted); }
+  .mit-label { font-size: 12px; font-weight: 700; letter-spacing: .06em; color: var(--alert); flex-shrink: 0; }
+  .mit-input { flex: 1; font-family: inherit; font-size: 15px; font-weight: 500; color: var(--alert); border: none; background: none; outline: none; }
+  .mit-input::placeholder { color: var(--muted); font-weight: 400; }
   .quick-submit {
     font-family: inherit; font-size: 15px; font-weight: 600; color: #fff;
     background: var(--accent); border: none; border-radius: var(--radius);
@@ -2051,6 +2051,11 @@ const NUM_WORDS = {
   six:6, sept:7, huit:8, neuf:9, dix:10
 };
 
+// Retire les guillemets de protection littérale (même nettoyage qu'à l'ajout, sans parser de date) — utilisé à l'édition.
+function stripLiteralQuotes(s) {
+  return (s || "").replace(/"([^"]*)"/g, "$1");
+}
+
 function parseInput(raw) {
   // Texte entre guillemets = littéral : protégé du parsing (les guillemets sont retirés à l'affichage).
   // Chaque segment "…" devient un jeton neutre qu'aucune règle de date ne reconnaît, restauré à la fin.
@@ -2409,7 +2414,10 @@ function renderMit() {
   box.hidden = !show;
   if (!show) return;
   const fresh = (state.mit && state.mit.date === todayKey()) ? state.mit.text : "";
-  if (document.activeElement !== input) input.value = fresh;   // ne pas écraser pendant la frappe
+  if (document.activeElement !== input) {
+    input.value = fresh;
+    input.readOnly = fresh.length > 0;   // texte validé = verrouillé (lecture) ; reclic pour rééditer
+  }
 }
 
 function render() {
@@ -4487,9 +4495,11 @@ function saveEditorFields() {
   if (!id) return;
   const t = getTask(id);
   if (!t) return;
-  const title = $("editTitle").value.trim();
+  const title = stripLiteralQuotes($("editTitle").value).trim();   // guillemets de protection retirés (comme à l'ajout)
   if (title) {
     t.title = title;     // on n'efface pas un titre par mégarde
+    $("editTitle").value = title;   // reflète le nettoyage dans le champ
+
     // Affaire (vue-liste flat) : renomme toutes les copies du groupe (tous les onglets).
     if (isListRoot(t) && listShape(t.list) === "flat") {
       const key = affaireGroup(t);
@@ -4731,6 +4741,11 @@ function bindEvents() {
     state.mit = { text: e.target.value, date: todayKey() };
     db.save();
   });
+  // Entrée = valider (verrouille la saisie en lecture) ; reclic = rééditer (le clic place le curseur).
+  $("mitInput").addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); e.target.readOnly = true; e.target.blur(); }
+  });
+  $("mitInput").addEventListener("mousedown", e => { if (e.target.readOnly) e.target.readOnly = false; });
 
   // Boutons de priorité (saisie rapide + vue Liste d'un projet) : toggle générique.
   // Les cartes projet du Kanban sont gérées séparément par onProjectBoardClick.
