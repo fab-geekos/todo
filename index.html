@@ -1074,6 +1074,19 @@
   }
   .side-date-btn:hover { border-color: var(--accent); }
   .side-date-btn.empty { color: var(--muted); }
+  /* Dupliquer une tâche (date unique ou N jours consécutifs) */
+  .dup-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .dup-btn {
+    font-family: inherit; font-size: 14px; padding: 9px 12px; cursor: pointer;
+    border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--text);
+    transition: border-color .15s;
+  }
+  .dup-btn:hover { border-color: var(--accent); }
+  .dup-days { font-size: 14px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+  .dup-days input {
+    width: 48px; font-family: inherit; font-size: 14px; text-align: center; padding: 6px 8px;
+    border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text);
+  }
 
   /* Calendrier réutilisable (sélecteur de date + heure) */
   .cal-scrim {
@@ -1518,6 +1531,13 @@
           <div class="side-label">Étiquettes</div>
           <div id="editLabels" class="picker"></div>
         </div>
+        <div class="side-section">
+          <div class="side-label">Dupliquer</div>
+          <div class="dup-row">
+            <button class="dup-btn" id="editDuplicate" type="button">📑 Choisir la date…</button>
+            <label class="dup-days">sur <input type="number" id="editDupDays" min="1" max="60" value="1"> j</label>
+          </div>
+        </div>
         <button class="editor-delete" id="editDelete">🗑 Supprimer la tâche</button>
       </div>
     </div>
@@ -1609,11 +1629,17 @@ const firebaseConfig = {
   appId: "1:907521248599:web:62333edf0b3cd04c5c4212"
 };
 firebase.initializeApp(firebaseConfig);
-const fbAuth = firebase.auth();
 const fbStore = firebase.firestore();
 // Cache hors-ligne : l'app reste instantanée et marche sans réseau (sync au retour).
 fbStore.enablePersistence({ synchronizeTabs: true }).catch(() => {});
-const googleProvider = new firebase.auth.GoogleAuthProvider();
+
+// Embed Notion = iframe : le navigateur masque le stockage 1ʳᵉ partie, donc la session Firebase
+// devient invisible et on se reconnecte à chaque ouverture. Parade : DIFFÉRER l'init de l'auth
+// jusqu'à avoir l'accès au stockage (Storage Access API, déclenché par un geste utilisateur).
+const inIframe = (() => { try { return window.self !== window.top; } catch { return true; } })();
+let fbAuth = null;                 // créé par startAuth() (immédiat hors iframe)
+let googleProvider = null;
+let _pendingIframeAuth = false;    // true = on attend le clic qui débloque le stockage puis démarre l'auth
 
 let fbUser = null;        // utilisateur connecté (null = porte de login affichée)
 let spaceRef = null;      // doc Firestore de l'espace courant (null tant que non connecté)
@@ -3034,6 +3060,35 @@ function closeEisenAdd(input) {
   input.hidden = true;
   input.value = "";
   input.closest(".eisen-add").querySelector(".eisen-add-btn").hidden = false;
+}
+
+// Duplique une tâche en `days` copies indépendantes, une par jour consécutif à partir de `start` (ms).
+// Conserve titre, description, priorité, étiquettes et projet ; remet à zéro l'état (non cochée, sans récurrence).
+function duplicateTaskOnDays(src, start, time, days) {
+  const made = [];
+  for (let i = 0; i < days; i++) {
+    const copy = {
+      ...src,
+      id: uid(),
+      parentTaskId: null,                 // copie autonome (porte sa propre date)
+      completed: false, completedAt: null,
+      createdAt: Date.now(),
+      dueDate: start + i * DAY_MS,
+      dueTime: time,
+      recurrence: null,
+      labels: [...(src.labels || [])]
+    };
+    delete copy.group; delete copy.tab; delete copy.list;   // champs propres aux vues-listes : sans objet ici
+    state.tasks.push(copy);
+    made.push(copy.id);
+  }
+  db.save();
+  closeEditor();                          // ferme l'éditeur (sauvegarde + scroll rétabli)
+  render();
+  showUndo(days > 1 ? `${days} copies créées` : "Copie créée", () => {
+    state.tasks = state.tasks.filter(t => !made.includes(t.id));
+    db.save(); render();
+  });
 }
 
 /* ---- Projets ---- */
@@ -5059,6 +5114,21 @@ function bindEvents() {
     });
   });
 
+  // Dupliquer : choisir une date de départ → crée N copies sur N jours consécutifs (N = champ « sur … j »).
+  $("editDuplicate").addEventListener("click", () => {
+    saveEditorFields();                  // fige le titre/description en cours avant de copier
+    const t = getTask(state.editingId);
+    if (!t) return;
+    const days = Math.max(1, Math.min(60, parseInt($("editDupDays").value, 10) || 1));
+    openCalendar({
+      dueDate: t.dueDate || todayTs(), dueTime: t.dueTime || null, showTime: true,
+      onPick(date, time) {
+        if (date == null) return;        // « Aucune date » → pas de duplication
+        duplicateTaskOnDays(t, startOfDay(date).getTime(), time || null, days);
+      }
+    });
+  });
+
   // Contrôles du calendrier réutilisable
   $("calPrev").addEventListener("click", () => { cal.month.setMonth(cal.month.getMonth() - 1); renderCal(); });
   $("calNext").addEventListener("click", () => { cal.month.setMonth(cal.month.getMonth() + 1); renderCal(); });
@@ -5701,15 +5771,24 @@ function showAuthGate(show) {
 }
 
 function bindAuth() {
-  $("authSignIn").addEventListener("click", () => {
+  $("authSignIn").addEventListener("click", async () => {
     $("authErr").hidden = true;
+    // Embed iframe, 1er clic : débloquer le stockage 1ʳᵉ partie puis démarrer l'auth. Si une session
+    // existe déjà sur cet appareil (connecté ailleurs), l'app se charge SANS popup Google.
+    if (_pendingIframeAuth) {
+      _pendingIframeAuth = false;
+      try { await document.requestStorageAccess(); } catch {}
+      startAuth();   // onAuthStateChanged statuera : pas de session → la porte se réaffiche (2e clic = Google)
+      return;
+    }
+    if (!fbAuth) startAuth();
     fbAuth.signInWithPopup(googleProvider).catch(err => {
       const el = $("authErr");
       el.textContent = "Connexion impossible : " + (err.code || err.message);
       el.hidden = false;
     });
   });
-  $("signOutBtn").addEventListener("click", () => { $("dataMenu").hidden = true; fbAuth.signOut(); });
+  $("signOutBtn").addEventListener("click", () => { $("dataMenu").hidden = true; if (fbAuth) fbAuth.signOut(); });
 }
 
 // Abonne l'espace courant au live Firestore. 1er passage : sème depuis le local si le doc est absent.
@@ -5747,12 +5826,29 @@ function detachSpace() {
   spaceRef = null;
 }
 
-function bootFirebase() {
+// Crée l'auth Firebase et écoute l'état de connexion. En iframe, appelé seulement APRÈS avoir
+// obtenu l'accès au stockage (sinon la session persistée reste invisible → reconnexion forcée).
+function startAuth() {
+  if (fbAuth) return;
+  fbAuth = firebase.auth();
+  googleProvider = new firebase.auth.GoogleAuthProvider();
   fbAuth.onAuthStateChanged(user => {
     fbUser = user;
     if (user) { showAuthGate(false); attachSpace(user.uid); }
     else { detachSpace(); showAuthGate(true); }
   });
+}
+
+async function bootFirebase() {
+  // Hors iframe : démarrage immédiat (login persistant garanti, comportement habituel).
+  if (!inIframe) { startAuth(); return; }
+  // Iframe : si l'accès au stockage est déjà actif (ou API absente), on lit la session tout de suite.
+  let hasAccess = false;
+  try { hasAccess = document.hasStorageAccess ? await document.hasStorageAccess() : false; } catch {}
+  if (hasAccess || !document.requestStorageAccess) { startAuth(); return; }
+  // Sinon : besoin d'un geste → on affiche la porte ; le clic débloquera le stockage puis startAuth().
+  _pendingIframeAuth = true;
+  showAuthGate(true);
 }
 
 function init() {
