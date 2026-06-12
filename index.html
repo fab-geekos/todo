@@ -1074,19 +1074,13 @@
   }
   .side-date-btn:hover { border-color: var(--accent); }
   .side-date-btn.empty { color: var(--muted); }
-  /* Dupliquer une tâche (date unique ou N jours consécutifs) */
-  .dup-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  /* Dupliquer une tâche : ouvre le calendrier en multi-sélection (plusieurs dates) */
   .dup-btn {
     font-family: inherit; font-size: 14px; padding: 9px 12px; cursor: pointer;
     border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--text);
     transition: border-color .15s;
   }
   .dup-btn:hover { border-color: var(--accent); }
-  .dup-days { font-size: 14px; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
-  .dup-days input {
-    width: 48px; font-family: inherit; font-size: 14px; text-align: center; padding: 6px 8px;
-    border: 1px solid var(--border); border-radius: 8px; background: var(--card); color: var(--text);
-  }
 
   /* Calendrier réutilisable (sélecteur de date + heure) */
   .cal-scrim {
@@ -1533,10 +1527,7 @@
         </div>
         <div class="side-section">
           <div class="side-label">Dupliquer</div>
-          <div class="dup-row">
-            <button class="dup-btn" id="editDuplicate" type="button">📑 Choisir la date…</button>
-            <label class="dup-days">sur <input type="number" id="editDupDays" min="1" max="60" value="1"> j</label>
-          </div>
+          <button class="dup-btn" id="editDuplicate" type="button">📑 Choisir les dates…</button>
         </div>
         <button class="editor-delete" id="editDelete">🗑 Supprimer la tâche</button>
       </div>
@@ -3062,18 +3053,18 @@ function closeEisenAdd(input) {
   input.closest(".eisen-add").querySelector(".eisen-add-btn").hidden = false;
 }
 
-// Duplique une tâche en `days` copies indépendantes, une par jour consécutif à partir de `start` (ms).
+// Duplique une tâche en une copie indépendante par date de `dates` (tableau de ts).
 // Conserve titre, description, priorité, étiquettes et projet ; remet à zéro l'état (non cochée, sans récurrence).
-function duplicateTaskOnDays(src, start, time, days) {
+function duplicateTaskOnDates(src, dates, time) {
   const made = [];
-  for (let i = 0; i < days; i++) {
+  dates.forEach(ts => {
     const copy = {
       ...src,
       id: uid(),
       parentTaskId: null,                 // copie autonome (porte sa propre date)
       completed: false, completedAt: null,
       createdAt: Date.now(),
-      dueDate: start + i * DAY_MS,
+      dueDate: startOfDay(ts).getTime(),
       dueTime: time,
       recurrence: null,
       labels: [...(src.labels || [])]
@@ -3081,11 +3072,12 @@ function duplicateTaskOnDays(src, start, time, days) {
     delete copy.group; delete copy.tab; delete copy.list;   // champs propres aux vues-listes : sans objet ici
     state.tasks.push(copy);
     made.push(copy.id);
-  }
+  });
   db.save();
   closeEditor();                          // ferme l'éditeur (sauvegarde + scroll rétabli)
   render();
-  showUndo(days > 1 ? `${days} copies créées` : "Copie créée", () => {
+  const n = made.length;
+  showUndo(n > 1 ? `${n} copies créées` : "Copie créée", () => {
     state.tasks = state.tasks.filter(t => !made.includes(t.id));
     db.save(); render();
   });
@@ -4164,6 +4156,8 @@ function openCalendar(opts) {
     showTime: opts.showTime !== false,
     showShortcuts: opts.showShortcuts !== false,   // raccourcis (Aujourd'hui, Demain…) visibles par défaut
     applyOnPick: opts.applyOnPick === true,         // true = cliquer un jour valide directement (sans OK/Entrée)
+    multi: opts.multi === true,                     // multi-sélection (duplication) : cocher plusieurs jours
+    dates: new Set(),                               // jours sélectionnés (ts minuit) en mode multi
     onPick: opts.onPick
   };
   $("calTimeRow").hidden = !cal.showTime;
@@ -4174,7 +4168,14 @@ function openCalendar(opts) {
 function closeCalendar() { $("calPopover").hidden = true; cal = null; }
 function applyCalendar() {
   if (!cal) return;
-  const onPick = cal.onPick, date = cal.date, time = cal.date ? cal.time : null;
+  const onPick = cal.onPick;
+  if (cal.multi) {                                  // duplication : on renvoie le tableau des dates cochées
+    const dates = [...cal.dates].sort((a, b) => a - b), time = cal.time;
+    closeCalendar();
+    onPick(dates, time);
+    return;
+  }
+  const date = cal.date, time = cal.date ? cal.time : null;
   closeCalendar();
   onPick(date, time);
 }
@@ -4197,10 +4198,11 @@ function renderCal() {
     const ts = new Date(first.getFullYear(), first.getMonth(), day).getTime();
     const cls = ["cal-day"];
     if (ts === today) cls.push("today");
-    if (ts === selTs) cls.push("selected");
+    if (cal.multi ? cal.dates.has(ts) : ts === selTs) cls.push("selected");
     cells += `<button type="button" class="${cls.join(" ")}" data-ts="${ts}">${day}</button>`;
   }
   $("calGrid").innerHTML = cells;
+  $("calOk").textContent = cal.multi ? (cal.dates.size ? `Dupliquer (${cal.dates.size})` : "Dupliquer") : "OK";
   renderCalTimeField();
 }
 
@@ -5114,17 +5116,17 @@ function bindEvents() {
     });
   });
 
-  // Dupliquer : choisir une date de départ → crée N copies sur N jours consécutifs (N = champ « sur … j »).
+  // Dupliquer : ouvre le calendrier en multi-sélection → une copie par date cochée (valider via OK/Entrée).
   $("editDuplicate").addEventListener("click", () => {
     saveEditorFields();                  // fige le titre/description en cours avant de copier
     const t = getTask(state.editingId);
     if (!t) return;
-    const days = Math.max(1, Math.min(60, parseInt($("editDupDays").value, 10) || 1));
     openCalendar({
       dueDate: t.dueDate || todayTs(), dueTime: t.dueTime || null, showTime: true,
-      onPick(date, time) {
-        if (date == null) return;        // « Aucune date » → pas de duplication
-        duplicateTaskOnDays(t, startOfDay(date).getTime(), time || null, days);
+      showShortcuts: false, multi: true,
+      onPick(dates, time) {
+        if (!dates || !dates.length) return;
+        duplicateTaskOnDates(t, dates, time || null);
       }
     });
   });
@@ -5135,7 +5137,13 @@ function bindEvents() {
   $("calGrid").addEventListener("click", e => {
     const b = e.target.closest(".cal-day");
     if (!b) return;
-    cal.date = Number(b.dataset.ts);
+    const ts = Number(b.dataset.ts);
+    if (cal.multi) {                        // duplication : on coche/décoche plusieurs jours
+      if (cal.dates.has(ts)) cal.dates.delete(ts); else cal.dates.add(ts);
+      renderCal();
+      return;
+    }
+    cal.date = ts;
     if (cal.applyOnPick) applyCalendar();   // navigation (mois) : valider direct au clic
     else renderCal();                       // tâche : on attend OK/Entrée
   });
@@ -5164,9 +5172,16 @@ function bindEvents() {
   });
   // À la sortie du champ : on normalise (menu + champ alignés sur cal.time)
   $("calTimeText").addEventListener("blur", () => { if (cal) renderCalTimeField(); });
-  $("calClear").addEventListener("click", () => { cal.date = null; cal.time = null; applyCalendar(); });
+  $("calClear").addEventListener("click", () => {
+    if (cal && cal.multi) { cal.dates.clear(); renderCal(); return; }   // multi : Effacer = tout désélectionner
+    cal.date = null; cal.time = null; applyCalendar();
+  });
   $("calOk").addEventListener("click", applyCalendar);
-  $("calPopover").addEventListener("click", e => { if (e.target === $("calPopover")) applyCalendar(); }); // clic en dehors = appliquer
+  $("calPopover").addEventListener("click", e => {
+    if (e.target !== $("calPopover")) return;
+    if (cal && cal.multi) { closeCalendar(); return; }   // multi : clic dehors = annuler (validation via OK/Entrée)
+    applyCalendar();                                      // date simple : clic dehors = appliquer
+  });
 
   // Touche Entrée : valide et ferme la "page" ouverte, niveau par niveau.
   //  1) calendrier (date/heure) ouvert -> on applique et on revient à l'éditeur ;
