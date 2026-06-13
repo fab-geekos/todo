@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Ma Todo</title>
+<!-- Favicon : coche blanche sur carré bleu (SVG inline, aucune ressource externe) -->
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%234A6FA5'/%3E%3Cpath d='M8.5 16.5l5 5 10-11' fill='none' stroke='white' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -1158,9 +1160,14 @@
   @media (max-width: 720px) {
     .sidebar {
       position: fixed; left: 0; top: 0; z-index: 35;
+      /* 100dvh = hauteur RÉELLEMENT visible (hors barres du navigateur mobile) :
+         sinon le bas du menu — Idées/Notes/Autres, Vaccins — passe sous la barre d'adresse. */
+      height: 100dvh;
       transform: translateX(-100%); transition: transform .25s ease;
       box-shadow: 2px 0 12px rgba(0,0,0,.1);
     }
+    /* Marge basse pour que la dernière vue ne colle pas au bord de l'écran */
+    .nav-scroll { padding-bottom: 12px; }
     .sidebar.open { transform: translateX(0); }
     .scrim.open { display: block; }
     .main { padding: 70px 18px 40px; }
@@ -2482,7 +2489,17 @@ function renderMit() {
   }
 }
 
+// Re-render différé et coalescé : plusieurs appels rapprochés (ex. cocher plein de cases
+// d'affilée) ne déclenchent qu'UN seul render à la frame suivante. Le retour visuel immédiat
+// (classe .done posée à la main) reste peint tout de suite ; le tri/compteurs suivent à la frame.
+let _renderRAF = 0;
+function scheduleRender() {
+  if (_renderRAF) return;
+  _renderRAF = requestAnimationFrame(() => { _renderRAF = 0; render(); });
+}
+
 function render() {
+  if (_renderRAF) { cancelAnimationFrame(_renderRAF); _renderRAF = 0; }  // un render direct annule un render planifié
   initVaccineDoneIfNeeded();   // jalons "déjà passés" marqués faits (utile à l'agenda comme à la vue Vaccins)
   // Titre + sous-titre (la page projet a son propre en-tête, donc titre vide)
   const titles = {
@@ -4006,8 +4023,18 @@ function toggleTask(id) {
   t.completedAt = done ? Date.now() : null;
   setCompletedDeep(id, done);            // (2) cascade : coche/décoche toute la descendance
   if (t.parentTaskId) refreshCompletionUpwards(t.parentTaskId);  // (c) remontée auto vers les parents
+  markRowsDone(id, done);                // retour visuel IMMÉDIAT (coche peinte avant le re-render)
   db.save();
-  render();
+  scheduleRender();                      // tri/compteurs/parents recalculés à la frame suivante (coalescé)
+}
+
+// Bascule tout de suite la classe .done de la ligne et de sa descendance dans le DOM courant,
+// pour que la coche apparaisse instantanément sans attendre le render complet (cf. scheduleRender).
+function markRowsDone(rootId, done) {
+  const ids = [rootId];
+  (function collect(pid) { childTasks(pid).forEach(c => { ids.push(c.id); collect(c.id); }); })(rootId);
+  ids.forEach(cid => document.querySelectorAll(`.task-row[data-id="${cid}"]`)
+    .forEach(r => r.classList.toggle("done", done)));
 }
 
 // Replie / déplie les sous-tâches d'une tâche
