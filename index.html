@@ -1398,6 +1398,7 @@
         <input class="quick-input" id="contactAddInput" type="text" placeholder="Nom du nouveau contact…" autocomplete="off">
         <button class="quick-submit" id="contactAdd">+ Contact</button>
         <button class="contacts-import-btn" id="contactImport" type="button" title="Importer des contacts depuis un fichier CSV (export Google Contacts ou compatible)">⬆ Importer un CSV</button>
+        <button class="contacts-import-btn" id="contactExport" type="button" title="Exporter tous les contacts dans un fichier CSV (réimportable ici ou dans Google Contacts)">⬇ Exporter un CSV</button>
         <input type="file" id="contactCsvInput" accept=".csv,text/csv" hidden>
       </div>
       <div class="search-box contacts-search">
@@ -5397,6 +5398,8 @@ function bindEvents() {
   $("contactAdd").addEventListener("click", submitContactAdd);
   onEnter($("contactAddInput"), submitContactAdd);
 
+  // Export CSV : télécharge tous les contacts (format Google Contacts, réimportable).
+  $("contactExport").addEventListener("click", exportContactsCSV);
   // Import CSV : le bouton déclenche le sélecteur de fichier ; à la sélection, on lit puis on ajoute.
   $("contactImport").addEventListener("click", () => $("contactCsvInput").click());
   $("contactCsvInput").addEventListener("change", e => {
@@ -5707,6 +5710,39 @@ function importContactsFromCSV(text) {
   }
   if (added) db.save();
   return { added, skipped, total: rows.length - 1 };
+}
+// Exporte tous les contacts au format CSV « Google Contacts » (réimportable ici comme dans Google).
+// Le nombre de colonnes Phone/E-mail s'adapte au contact qui en a le plus.
+function exportContactsCSV() {
+  const cs = state.contacts || [];
+  if (!cs.length) { alert("Aucun contact à exporter."); return; }
+  const maxPhones = Math.max(0, ...cs.map(c => (c.phones || []).length));
+  const maxEmails = Math.max(0, ...cs.map(c => (c.emails || []).length));
+  const headers = ["First Name", "Middle Name", "Last Name", "Organization Name", "Birthday"];
+  for (let i = 1; i <= maxEmails; i++) headers.push(`E-mail ${i} - Label`, `E-mail ${i} - Value`);
+  for (let i = 1; i <= maxPhones; i++) headers.push(`Phone ${i} - Label`, `Phone ${i} - Value`);
+  // Échappement CSV : on entoure de guillemets si la cellule contient « , » « " » ou un retour ligne.
+  const csvEsc = v => {
+    const s = String(v == null ? "" : v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const lines = [headers.join(",")];
+  cs.forEach(c => {
+    // Le modèle n'a qu'un champ « name » → on le met dans First Name (relu tel quel à l'import).
+    // Anniversaire « MM-JJ » → « --MM-JJ » (format Google sans année, relu par csvBirthday).
+    const row = [c.name || "", "", "", "", c.birthday ? "--" + c.birthday : ""];
+    for (let i = 0; i < maxEmails; i++) { const e = (c.emails || [])[i] || {}; row.push(e.label || "", e.value || ""); }
+    for (let i = 0; i < maxPhones; i++) { const p = (c.phones || [])[i] || {}; row.push(p.label || "", p.value || ""); }
+    lines.push(row.map(csvEsc).join(","));
+  });
+  // BOM UTF-8 + CRLF : ouverture correcte des accents dans Excel, compatible Google Contacts.
+  const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `contacts-${ESPACE}-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
 }
 
 // Câble une matrice Eisenhower (drag + ajout inline par case). getProjectId rattache
