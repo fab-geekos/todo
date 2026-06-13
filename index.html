@@ -623,7 +623,15 @@
 
   /* ===== VUE CONTACTS ===== */
   .contacts-view { display: none; }
-  .contacts-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+  .contacts-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
+  /* Bouton secondaire (contour) — import CSV, à côté de « + Contact » */
+  .contacts-import-btn {
+    flex-shrink: 0; font-family: inherit; font-size: 14px; cursor: pointer; white-space: nowrap;
+    padding: 12px 16px; border-radius: var(--radius);
+    border: 1px solid var(--border); background: var(--card); color: var(--muted);
+    transition: background .15s, color .15s, border-color .15s;
+  }
+  .contacts-import-btn:hover { background: var(--hover); color: var(--text); border-color: var(--accent); }
   .contacts-search { margin-bottom: 20px; }
   .search-box { flex: 1; position: relative; display: flex; align-items: center; }
   .search-icon { position: absolute; left: 12px; font-size: 14px; opacity: .6; pointer-events: none; }
@@ -1389,6 +1397,8 @@
       <div class="contacts-bar">
         <input class="quick-input" id="contactAddInput" type="text" placeholder="Nom du nouveau contact…" autocomplete="off">
         <button class="quick-submit" id="contactAdd">+ Contact</button>
+        <button class="contacts-import-btn" id="contactImport" type="button" title="Importer des contacts depuis un fichier CSV (export Google Contacts ou compatible)">⬆ Importer un CSV</button>
+        <input type="file" id="contactCsvInput" accept=".csv,text/csv" hidden>
       </div>
       <div class="search-box contacts-search">
         <span class="search-icon">🔍</span>
@@ -5387,6 +5397,26 @@ function bindEvents() {
   $("contactAdd").addEventListener("click", submitContactAdd);
   onEnter($("contactAddInput"), submitContactAdd);
 
+  // Import CSV : le bouton déclenche le sélecteur de fichier ; à la sélection, on lit puis on ajoute.
+  $("contactImport").addEventListener("click", () => $("contactCsvInput").click());
+  $("contactCsvInput").addEventListener("change", e => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      let res;
+      try { res = importContactsFromCSV(String(reader.result)); }
+      catch (err) { alert("Import impossible : fichier CSV illisible.\n(" + err.message + ")"); return; }
+      render();
+      const parts = [`${res.added} contact(s) importé(s)`];
+      if (res.skipped) parts.push(`${res.skipped} ignoré(s) (doublon ou ligne sans nom)`);
+      alert(parts.join("\n") + `.\nSur ${res.total} ligne(s) lue(s) dans le fichier.`);
+    };
+    reader.onerror = () => alert("Lecture du fichier impossible.");
+    reader.readAsText(file, "utf-8");
+    e.target.value = "";   // réinitialise pour pouvoir réimporter le même fichier
+  });
+
   // Cadeaux : ajout depuis le haut (personne choisie + idée).
   const submitTopGift = () => {
     if (!state.giftPickContact) { alert("Choisis d'abord une personne."); return; }
@@ -5608,6 +5638,75 @@ function closeContactEditor() {
   state.editingContactId = null;
   setOverlay("contactOverlay", false);
   render();
+}
+
+// ===== Import de contacts depuis un CSV (export Google Contacts & compatibles) =====
+// Parseur CSV générique : gère guillemets, virgules et retours à la ligne DANS les champs,
+// le BOM en tête et les fins de ligne CRLF/CR. Retourne un tableau de lignes (tableaux de cellules).
+function parseCSV(text) {
+  text = text.replace(/^﻿/, "").replace(/\r\n?/g, "\n");   // BOM + fins de ligne normalisées
+  const rows = []; let row = [], field = "", inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQuotes = false; }   // "" = guillemet littéral
+      else field += ch;
+    } else if (ch === '"') inQuotes = true;
+    else if (ch === ',') { row.push(field); field = ""; }
+    else if (ch === '\n') { row.push(field); rows.push(row); row = []; field = ""; }
+    else field += ch;
+  }
+  if (field !== "" || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+// Libellés Google courants -> français (sinon on garde le libellé tel quel)
+const CSV_LABELS = { home: "Maison", work: "Pro", mobile: "Mobile", main: "Principal", other: "Autre" };
+function csvLabel(raw) {
+  const s = (raw || "").trim().replace(/^\*\s*/, "");   // Google préfixe parfois d'un « * »
+  return CSV_LABELS[s.toLowerCase()] || s;
+}
+// Anniversaire Google ("AAAA-MM-JJ" ou "--MM-JJ") -> "MM-JJ" interne (ou null)
+function csvBirthday(raw) {
+  const s = (raw || "").trim();
+  const m = s.match(/^--(\d{2})-(\d{2})$/) || s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const mon = +m[m.length - 2], day = +m[m.length - 1];
+  if (mon < 1 || mon > 12 || day < 1 || day > 31) return null;
+  return pad2(mon) + "-" + pad2(day);
+}
+// Lit le CSV et AJOUTE les contacts à l'espace courant (dédoublonnage par nom, rien n'est écrasé).
+function importContactsFromCSV(text) {
+  const rows = parseCSV(text).filter(r => r.some(c => c.trim() !== ""));
+  if (rows.length < 2) return { added: 0, skipped: 0, total: 0 };
+  const headers = rows[0].map(h => h.trim());
+  const col = name => headers.indexOf(name);
+  // Paires Label/Value numérotées (« Phone 1 - Value », « E-mail 2 - Value »…) — quel qu'en soit le nombre.
+  const pairs = kind => headers
+    .map((h, i) => ({ h, i }))
+    .filter(o => new RegExp("^" + kind + " \\d+ - Value$").test(o.h))
+    .map(o => ({ value: o.i, label: headers.indexOf(o.h.replace(/Value$/, "Label")) }));
+  const phoneCols = pairs("Phone"), emailCols = pairs("E-mail");
+  const fi = col("First Name"), mi = col("Middle Name"), li = col("Last Name"),
+        org = col("Organization Name"), nick = col("Nickname"), bday = col("Birthday");
+
+  const seen = new Set(state.contacts.map(c => (c.name || "").trim().toLowerCase()));
+  let added = 0, skipped = 0;
+  for (let r = 1; r < rows.length; r++) {
+    const row = rows[r];
+    const get = i => (i >= 0 && row[i] != null) ? row[i].trim() : "";
+    const collect = cols => cols.map(c => ({ label: csvLabel(get(c.label)), value: get(c.value) })).filter(e => e.value);
+    const phones = collect(phoneCols), emails = collect(emailCols);
+    let name = [get(fi), get(mi), get(li)].filter(Boolean).join(" ").trim();
+    if (!name) name = get(org) || get(nick) || (emails[0] || {}).value || (phones[0] || {}).value || "";
+    if (!name) { skipped++; continue; }                        // ligne sans rien d'exploitable
+    const key = name.toLowerCase();
+    if (seen.has(key)) { skipped++; continue; }                // déjà présent (existant ou doublon du fichier)
+    seen.add(key);
+    state.contacts.push({ id: uid(), name, birthday: csvBirthday(get(bday)), phones, emails });
+    added++;
+  }
+  if (added) db.save();
+  return { added, skipped, total: rows.length - 1 };
 }
 
 // Câble une matrice Eisenhower (drag + ajout inline par case). getProjectId rattache
