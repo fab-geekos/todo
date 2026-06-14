@@ -1620,6 +1620,9 @@ const ESPACE = getEspace();
 const LEGACY_KEY = "todo_app_v1";                 // ancienne clé unique (avant les espaces)
 const STORAGE_KEY = LEGACY_KEY + "__" + ESPACE;   // ex. todo_app_v1__perso
 const THEME_KEY = "todo_theme";
+// Dernière vue affichée — en sessionStorage (par espace) : survit au F5/rafraîchissement DANS
+// l'onglet, mais un NOUVEL onglet repart vide → vue par défaut "today" (Aujourd'hui).
+const VIEW_KEY = "todo_lastview__" + ESPACE;
 // Vues masquées selon l'espace (outil perso : certaines vues n'ont pas de sens côté pro).
 const ESPACE_HIDDEN_VIEWS = { pro: ["courses", "bagages", "mediatheque", "cadeaux", "vaccins"] };
 const isViewHidden = view => (ESPACE_HIDDEN_VIEWS[ESPACE] || []).includes(view);
@@ -2531,6 +2534,7 @@ function scheduleRender() {
 
 function render() {
   if (_renderRAF) { cancelAnimationFrame(_renderRAF); _renderRAF = 0; }  // un render direct annule un render planifié
+  rememberView();              // mémorise la vue courante (restaurée au F5, oubliée en nouvel onglet)
   initVaccineDoneIfNeeded();   // jalons "déjà passés" marqués faits (utile à l'agenda comme à la vue Vaccins)
   // Titre + sous-titre (la page projet a son propre en-tête, donc titre vide)
   const titles = {
@@ -4692,6 +4696,25 @@ function navigate(view) {
   render();
 }
 
+// Mémorise la vue courante dans sessionStorage (cf. VIEW_KEY) : conservée au F5 dans l'onglet,
+// oubliée dans un nouvel onglet. Appelée à chaque render (seule source = la vue réellement affichée).
+function rememberView() {
+  if (document.body.classList.contains("embed")) return;   // l'embed Notion impose sa vue
+  try { sessionStorage.setItem(VIEW_KEY, JSON.stringify({ view: state.view, projectId: state.projectId || null })); } catch {}
+}
+// Restaure la dernière vue (au chargement, AVANT applyEspaceViews qui redirige si la vue est masquée).
+function restoreView() {
+  if (document.body.classList.contains("embed")) return;   // embed : on ne touche pas à la vue forcée
+  let saved = null;
+  try { saved = JSON.parse(sessionStorage.getItem(VIEW_KEY)); } catch {}
+  if (!saved || !saved.view) return;                        // nouvel onglet → on garde le défaut "today"
+  if (saved.view === "project") {                           // page projet : seulement si le projet existe encore
+    if (saved.projectId && getProject(saved.projectId)) { state.view = "project"; state.projectId = saved.projectId; state.projSub = "eisen"; }
+    return;
+  }
+  if (document.querySelector(`.nav-item[data-view="${saved.view}"]`)) state.view = saved.view;   // vue de nav valide
+}
+
 // Masque, pour l'espace courant, les vues non pertinentes (bouton de nav + repli si on y est).
 function applyEspaceViews() {
   (ESPACE_HIDDEN_VIEWS[ESPACE] || []).forEach(v => {
@@ -6058,6 +6081,7 @@ function init() {
   db.load();                 // affichage instantané depuis le cache local
   migrateNotesToAutres();    // anciennes notes (vue séparée) → racines de « Idées / Notes / Autres »
   applyMode();
+  restoreView();             // reprend la dernière vue de l'onglet (F5) ; nouvel onglet → défaut "today"
   bindEvents();
   initEspaceSwitch();
   bindDataMenu();
