@@ -5999,7 +5999,13 @@ function attachSpace(uid) {
     if (snap.exists) {
       const data = normalizeData(snap.data());
       const incoming = stableStr(data);
-      if (incoming === _lastSync) return;                // identique → ne pas réécraser l'UI
+      if (incoming === _lastSync) return;                // écho de notre propre écriture → rien à faire
+      if (incoming === stableStr(currentBlob())) return; // déjà identique au state local → ne pas re-rendre
+      // ⚠️ Anti-régression (bug « coche instable ») : si une écriture locale est en attente (debounce
+      // 600 ms), notre état local est PLUS RÉCENT qu'une confirmation serveur d'une écriture antérieure.
+      // L'appliquer « décocherait » un item tout juste coché. On laisse notre flush pousser la version
+      // à jour. (Mono-appareil : toujours juste. Multi-appareils : réconciliation par date = suivi non fait.)
+      if (_pendingWrite) return;
       _lastSync = incoming;
       applyData(data);
       migrateNotesToAutres();                            // no-op si pas d'anciennes notes
