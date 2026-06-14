@@ -1,15 +1,21 @@
 # Projet Todo — Mémoire & feuille de route
 
 App perso de gestion de tâches. **Un seul fichier `index.html`** (HTML/CSS/JS inline),
-versionné sur GitHub (`fab-geekos/todo`). Stockage actuel : `localStorage`.
+versionné sur GitHub (`fab-geekos/todo`). **Stockage : Firebase/Firestore** (login Google +
+sync live `onSnapshot`), avec un **cache `localStorage`** immédiat et hors-ligne par-dessus.
 
 ## Architecture actuelle (à connaître)
-- Toute la persistance passe par le module `db.*` (~ligne 1375). **Seules `db.load()` /
-  `db.save()` sont à réécrire** pour la migration Firebase ; le reste de l'app ne bouge pas.
-- `STORAGE_KEY` = clé localStorage unique aujourd'hui.
+- Toute la persistance passe par le module `db.*`. **`db.save()` = écriture localStorage
+  immédiate + écriture Firestore débouncée (600 ms) si connecté ; `db.load()` = repli local
+  instantané, puis `onSnapshot` pilote la sync live.** Le reste de l'app n'appelle que `db.*`.
+- ⚠️ **`flushFirestore()`** force l'envoi cloud en attente sur `visibilitychange`/`pagehide`
+  (sinon une modif faite juste avant fermeture était perdue ; cf. section « Persistance »).
+- `STORAGE_KEY` = clé localStorage par espace (cache) ; la source de vérité est le doc Firestore
+  `users/{uid}/spaces/{pro|perso}` (blob unique, modèle validé — cf. mémoire `firestore-data-model`).
 - Vues = boutons `.nav-item[data-view="..."]` : todo, today, week, eisenhower, projects,
-  contacts, labels, courses, vaccins.
-- État global `state` : `{ tasks, projects, contacts, birthDate, vaccineDone, labels }`.
+  contacts, labels, courses, mediatheque, bagages, cadeaux, autres, vaccins.
+- État global `state` (champs persistés) : `{ tasks, projects, contacts, birthDate, vaccineDone,
+  labels, notes, mit }`.
 
 ## Décisions validées (NE PAS reremettre en question sans accord)
 
@@ -22,13 +28,15 @@ versionné sur GitHub (`fab-geekos/todo`). Stockage actuel : `localStorage`.
 - **Vues personnalisables par espace** via `settings.enabledViews` (ex. pro sans
   courses ni vaccins). La nav ne dessine que les vues activées.
 
-### 2. Sécurité = Firebase Auth (login Google), PAS de mot de passe en dur
+### 2. Sécurité = Firebase Auth (login Google), PAS de mot de passe en dur — ✅ FAIT
 - Mot de passe dans le JS = fausse sécurité (visible au source). Refusé.
 - Firebase Auth + security rules verrouillées sur `uid` = vraie protection.
 - Un seul compte Google, session persistante par appareil → garde le « zéro clic ».
 - ⚠️ Penser à ajouter le domaine d'hébergement dans Firebase → Auth → Authorized domains.
+- **En place** : porte de login Google (`#authGate`), `onAuthStateChanged` → `attachSpace`,
+  gestion spéciale de l'embed Notion (Storage Access API avant l'auth).
 
-### 3. Accès de Claude = script local (Firebase Admin SDK)
+### 3. Accès de Claude = script local (Firebase Admin SDK) — ⏳ reste à faire
 - Petit script `node todo.js add "..."` lancé à la demande → écrit dans Firestore.
 - L'app écoute `onSnapshot` → mise à jour live sans recharger.
 - ⚠️ La clé de service Firebase reste **locale**, jamais commitée (`.gitignore` déjà en place).
@@ -41,12 +49,12 @@ versionné sur GitHub (`fab-geekos/todo`). Stockage actuel : `localStorage`.
 - **Multi-appareils** : OK via Firestore + onSnapshot (dernière écriture gagne au champ).
 
 ## Ordre de travail convenu
-1. **MAINTENANT (avant migration)** : finir TOUTES les vues + tout ce qui touche à la
-   *forme* des données (nouveaux champs/collections). On fige le schéma avant de migrer.
-2. Migration Firebase (réécrire `db.load`/`db.save` + Auth).
-3. Ajouter le paramètre d'espace pro/perso + vues personnalisables.
-4. Brancher le script Claude local.
-- Le polish purement visuel peut se faire de chaque côté (plus rapide à itérer maintenant).
+1. ✅ Finir TOUTES les vues + figer la *forme* des données avant de migrer.
+2. ✅ Migration Firebase (`db.load`/`db.save` réécrits + Auth Google + `onSnapshot`).
+3. ✅ Paramètre d'espace pro/perso (URL `?espace=` + sélecteur) + vues masquées par espace
+   (`ESPACE_HIDDEN_VIEWS`).
+4. ⏳ Brancher le script Claude local (Firebase Admin SDK) — **seul point restant**.
+- Le polish purement visuel peut se faire à tout moment (rapide à itérer).
 
 ## Choix de design à valider ensemble (priorité avant migration)
 - **Modèle de données Firestore** (1er choix structurant) : viser robustesse, sécurité,
@@ -125,8 +133,24 @@ Ordre du menu (perso, validé) : Todo · Aujourd'hui · Prochainement · Eisenho
 Étiquettes · Contacts · Liste de courses · Multimédia · Affaires/Voyages · Cadeaux ·
 Idées/Notes/Autres · Vaccins.
 
-**Toutes les vues prévues sont faites.** Reste : la **migration Firebase** (réécrire
-`db.load`/`db.save` + Auth) puis le paramètre d'espace côté Firebase et le script Claude local.
+**Toutes les vues prévues sont faites, ET la migration Firebase est faite** (login Google +
+Firestore `onSnapshot` + cache hors-ligne `enablePersistence`, doc-blob par espace
+`users/{uid}/spaces/{pro|perso}`). **Reste :** le **script Claude local** (Firebase Admin SDK,
+décision #3) et, si un jour usage multi-appareils, la **réconciliation par date** au chargement
+(empêcher une copie cloud plus ancienne d'écraser une copie locale plus récente — cf. ci-dessous).
+
+## Persistance Firebase (FAIT — à connaître absolument)
+- `db.save()` : 1) `localStorage` tout de suite ; 2) `spaceRef.set(...)` **débouncé 600 ms**.
+- **Filet anti-perte** : `flushFirestore()` pousse l'écriture en attente **immédiatement** sur
+  `visibilitychange` (onglet masqué) et `pagehide` (fermeture/navigation). Sans ça, une modif faite
+  dans la fenêtre de 600 ms avant fermeture n'atteignait jamais le cloud, puis `onSnapshot`
+  rechargeait la copie cloud plus ancienne et **écrasait** la copie locale → **perte de données**.
+  Flag `_pendingWrite` = pas de double écriture.
+- ⚠️ Au chargement, `onSnapshot` **écrase le state avec la copie cloud sans comparer les dates**
+  (le cloud gagne toujours). OK en mono-appareil grâce au flush ci-dessus ; en **multi-appareils**
+  il faudra une réconciliation par `_updatedAt` (suivi non fait).
+- `_lastSync` (stable-stringify) = anti-écho de nos propres écritures ; `enablePersistence` rejoue
+  une écriture déjà émise même si le réseau n'a pas répondu avant fermeture.
 
 Idée d'extension (non faite) : pastille 🎁 sur les cartes d'anniversaire (Today/Anniversaires)
 quand la personne a des idées de cadeaux.
