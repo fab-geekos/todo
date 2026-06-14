@@ -1654,6 +1654,7 @@ let fbUser = null;        // utilisateur connecté (null = porte de login affich
 let spaceRef = null;      // doc Firestore de l'espace courant (null tant que non connecté)
 let _spaceUnsub = null;   // fonction de désabonnement onSnapshot
 let _saveTimer = null;    // debounce des écritures réseau
+let _pendingWrite = false; // une écriture Firestore est en attente (debounce en cours) → à vider avant fermeture
 let _lastSync = null;     // dernier blob (stable-stringifié) poussé/appliqué — anti-écho/anti-clobber
 let _seeded = false;      // garde le seed initial à un seul passage par session
 const DAY_MS = 86400000;                 // millisecondes dans une journée
@@ -1792,14 +1793,13 @@ const db = {
     const blob = currentBlob();
     // 1) cache local immédiat : instantané + filet hors-ligne, même non connecté.
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(blob)); } catch {}
-    // 2) écriture Firestore débouncée (uniquement si connecté).
+    // 2) écriture Firestore débouncée (uniquement si connecté). Le flush réel est centralisé
+    //    dans flushFirestore() pour pouvoir le forcer à la fermeture de l'onglet (cf. listeners).
     if (!spaceRef) return;
     _lastSync = stableStr(blob);                 // ce qu'on s'apprête à pousser → ignore l'écho
+    _pendingWrite = true;
     clearTimeout(_saveTimer);
-    _saveTimer = setTimeout(() => {
-      spaceRef.set({ ...blob, _v: 1, _updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
-        .catch(e => console.warn("[firebase] échec écriture :", e));
-    }, 600);
+    _saveTimer = setTimeout(flushFirestore, 600);
   },
   // --- Tâches ---
   add(task) { state.tasks.push(task); this.save(); },
@@ -1832,6 +1832,26 @@ const db = {
     this.save();
   }
 };
+
+// Pousse TOUT DE SUITE l'écriture Firestore en attente (au lieu d'attendre la fin du debounce).
+// Sans ça, une modif faite juste avant de fermer/quitter l'onglet ne partait jamais vers le cloud,
+// et au rechargement la copie cloud (plus ancienne) réécrasait la copie locale (perte de données).
+function flushFirestore() {
+  clearTimeout(_saveTimer); _saveTimer = null;
+  if (!spaceRef || !_pendingWrite) return;
+  _pendingWrite = false;
+  const blob = currentBlob();
+  _lastSync = stableStr(blob);
+  // enablePersistence est actif : dès que set() est appelé, la modif est durable (IndexedDB) et
+  // rejouée au prochain lancement même si le réseau n'a pas répondu avant la fermeture.
+  spaceRef.set({ ...blob, _v: 1, _updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
+    .catch(e => console.warn("[firebase] échec écriture :", e));
+}
+// Filet anti-perte : on vide l'écriture en attente dès que l'onglet passe en arrière-plan
+// (changement d'onglet, verrouillage…) ou se ferme. visibilitychange est le signal le plus fiable ;
+// pagehide couvre la fermeture/navigation. Les deux sont sûrs (no-op si rien n'est en attente).
+document.addEventListener("visibilitychange", () => { if (document.hidden) flushFirestore(); });
+window.addEventListener("pagehide", flushFirestore);
 
 function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
