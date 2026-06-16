@@ -3082,6 +3082,9 @@ function addTask() {
     task.urgent = task.urgent || flags.urgent;
     task.important = task.important || flags.important;
     task.labels = [...state.quickAddLabels];        // étiquettes pré-sélectionnées
+    // Vue « Aujourd'hui » : la nouvelle tâche est datée d'aujourd'hui par défaut (sauf si le texte
+    // contenait déjà une date, ex. « demain »). La vue Todo, elle, reste sans date par défaut.
+    if (state.view === "today" && task.dueDate == null) task.dueDate = todayTs();
     db.add(task);
   }
 
