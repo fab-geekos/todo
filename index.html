@@ -2442,12 +2442,12 @@ function taskTreeRows(task, depth, ancestorContinues = [], isLast = false) {
       return 0;                                                             // non cochés : ordre manuel (drag), stable
     });
     // Recherche de produits sous le nom du rayon (config itemSearch, ex. courses).
+    // On rend TOUS les produits ; le filtrage est appliqué en DOM (applyRowSearch), au render
+    // comme à la frappe → la liste complète reste toujours présente (pas de désync à l'effacement).
     if (isListCategory(task) && lr && listConfig(lr.list).itemSearch) {
       const q = state.rowSearch[task.id] || "";
       html += `<div class="row-search" data-row="${task.id}" style="--depth:${depth + 1}">`
         + `<input class="row-search-input" type="text" placeholder="🔍 Rechercher un produit…" value="${esc(q)}" autocomplete="off"></div>`;
-      const ql = q.trim().toLowerCase();
-      if (ql) kids = kids.filter(k => k.title.toLowerCase().includes(ql));
     }
     // Lignée transmise aux enfants : on ajoute "le parent continue-t-il ?" (= il n'est pas le dernier).
     const childAnc = depth >= 1 ? [...ancestorContinues, !isLast] : [];
@@ -2772,6 +2772,27 @@ function renderListView() {
     ? `<div class="big">🔍</div>Rien ne correspond à « ${esc(state.listQuery.trim())} » dans cet onglet.`
     : `<div class="big">${bigIcon}</div>${esc(cfg.emptyText)}`;
   renderTasksInto($("taskList"), roots, emptyHtml, flat);
+  applyRowSearches();   // ré-applique le filtre « rechercher un produit » de chaque rayon déplié (courses)
+}
+
+// Filtre « rechercher un produit » d'un rayon (courses) : masque/affiche les lignes produits par
+// `display` (jamais de retrait du DOM) → effacer/raccourcir la recherche réaffiche toujours les
+// produits correspondants. Appliqué au render ET à chaque frappe (même mécanisme = pas de désync).
+function applyRowSearch(rayonId) {
+  const rs = document.querySelector(`#taskList .row-search[data-row="${rayonId}"]`);
+  if (!rs) return;
+  const card = rs.closest(".task");
+  if (!card) return;
+  const q = (state.rowSearch[rayonId] || "").trim().toLowerCase();
+  card.querySelectorAll(".task-row").forEach(r => {
+    const t = getTask(r.dataset.id);
+    if (t && t.parentTaskId === rayonId) {
+      r.style.display = (!q || t.title.toLowerCase().includes(q)) ? "" : "none";
+    }
+  });
+}
+function applyRowSearches() {
+  document.querySelectorAll("#taskList .row-search").forEach(rs => applyRowSearch(rs.dataset.row));
 }
 
 // Barre de sous-onglets d'une vue-liste (+ bouton « Tout décocher » si la vue le permet).
@@ -4078,9 +4099,36 @@ function markRowsDone(rootId, done) {
 // Replie / déplie les sous-tâches d'une tâche
 function toggleChildren(id) {
   const set = state.view === "week" ? state.expandedWeek : state.expandedTasks;
-  if (set.has(id)) set.delete(id);
-  else set.add(id);
+  const expanding = !set.has(id);
+  if (expanding) set.add(id);
+  else set.delete(id);
   render();
+  // Déplier un rayon (courses) : on place directement le curseur dans « Rechercher un produit ».
+  if (expanding) {
+    const t = getTask(id);
+    if (t && isListCategory(t) && listConfig(t.list).itemSearch) {
+      const inp = document.querySelector(`#taskList .row-search[data-row="${id}"] .row-search-input`);
+      if (inp) inp.focus();
+    }
+  }
+}
+
+// Différenciation clic simple / double-clic sur une catégorie de vue-liste (rayon, en-tête de note) :
+// un clic simple (dé)plie le chevron après un court délai ; un double-clic rapide renomme SANS (dé)plier.
+let _pendingCatClick = null;
+const CAT_DBLCLICK_MS = 250;
+function categoryRowClick(id) {
+  // 2e clic rapide sur la MÊME catégorie = double-clic → renommer (le (dé)pliage en attente est annulé).
+  if (_pendingCatClick && _pendingCatClick.id === id) {
+    clearTimeout(_pendingCatClick.timer);
+    _pendingCatClick = null;
+    const row = document.querySelector(`.task-row[data-id="${id}"]`);
+    if (row) startListRename(row);
+    return;
+  }
+  // Un (dé)pliage en attente sur une AUTRE catégorie : on l'exécute tout de suite (c'était un clic simple).
+  if (_pendingCatClick) { clearTimeout(_pendingCatClick.timer); const prevId = _pendingCatClick.id; _pendingCatClick = null; toggleChildren(prevId); }
+  _pendingCatClick = { id, timer: setTimeout(() => { _pendingCatClick = null; toggleChildren(id); }, CAT_DBLCLICK_MS) };
 }
 
 // Ouvre le champ d'ajout de sous-tâche d'une tâche (par id)
@@ -5079,19 +5127,22 @@ function bindEvents() {
     const action = e.target.closest("[data-action]")?.dataset.action;
     if (action === "toggle") toggleTask(id);
     else if (action === "delete") deleteTask(id);
-    else if (action === "toggle-children") toggleChildren(id);
+    // Catégorie de vue-liste (rayon…) : clic simple = (dé)plier (différé) ; double-clic rapide = renommer.
+    else if (action === "toggle-children") isListCategory(getTask(id)) ? categoryRowClick(id) : toggleChildren(id);
     else if (action === "add-sub") openSubtaskInput(id);
     else if (action === "edit") openEditor(id);
     else if (action === "list-rename") startListRename(row);
     // Clic ailleurs sur la ligne : si elle porte un chevron, il (dé)plie (toute la ligne = cible).
-    else if (!action && row.querySelector(".task-chevron")) toggleChildren(id);
+    else if (!action && row.querySelector(".task-chevron")) isListCategory(getTask(id)) ? categoryRowClick(id) : toggleChildren(id);
   });
 
   // Double-clic sur un libellé de vue-liste (non ouvrable) = renommer (raccourci en plus du crayon).
   document.querySelector(".main").addEventListener("dblclick", e => {
     const span = e.target.closest(".task-title");
     const row = span && span.closest(".task-row.no-open");
-    if (row) startListRename(row);
+    // Les catégories (rayons) sont gérées par categoryRowClick (clic simple/double différencié) :
+    // ici on ne traite que les items (produits, sous-éléments) qui n'ont pas de chevron à (dé)plier.
+    if (row && !isListCategory(getTask(row.dataset.id))) startListRename(row);
   });
 
   // Recherche de produits dans un rayon déplié (courses) : filtre en direct sans re-render
@@ -5101,15 +5152,7 @@ function bindEvents() {
     if (!inp) return;
     const rayonId = inp.closest(".row-search").dataset.row;
     state.rowSearch[rayonId] = inp.value;
-    const q = inp.value.trim().toLowerCase();
-    const card = inp.closest(".task");
-    if (!card) return;
-    card.querySelectorAll(".task-row").forEach(r => {
-      const t = getTask(r.dataset.id);
-      if (t && t.parentTaskId === rayonId) {
-        r.style.display = (!q || t.title.toLowerCase().includes(q)) ? "" : "none";
-      }
-    });
+    applyRowSearch(rayonId);   // filtre en DOM (pas de re-render → le champ garde le focus)
   });
 
   // Saisie d'une sous-tâche : Entrée valide, Échap referme (pas de priorité sur les sous-tâches)

@@ -211,8 +211,7 @@ Lot 1ter (retours user) — FAIT, commité :
 - **Catégories d'arbre (rayons, notes) ne s'ouvrent PLUS** (éditeur retiré) : `canOpen =
   !isListTask || affaireEditable`. Chevron **toujours** présent sur une catégorie (déplier même
   vide). Courses : **recherche de produits sous le nom du rayon** (config `itemSearch:true`,
-  `state.rowSearch[rayonId]`, filtrage live en DOM via listener `input` sur `.main`, pas de
-  re-render → focus gardé ; `taskTreeRows` filtre aussi au render). Idées/Notes/Autres : pas de
+  `state.rowSearch[rayonId]`, filtrage **100 % en DOM** — cf. lot 6). Idées/Notes/Autres : pas de
   recherche interne (pas de `itemSearch`). NB : plus de renommage de rayon/note via éditeur.
 - Sidebar : **« Bonjour Fabien »** (`.side-greeting`) sur la ligne du hamburger (sidebar
   `padding-top` 64→14px, `margin-left:50px` pour dégager le hamburger fixe), bord droit aligné
@@ -274,6 +273,23 @@ en cas de doute (usage dynamique, ex. `var(--st-${status})`, classes `q-*`), on 
   depuis l'éditeur ne rétablissait pas le scroll (`overflow` restait `hidden`).
 - NB : `db.save(); render();` (6 sites) laissé tel quel — idiome clair, l'envelopper
   n'apporterait rien. `state.notes` conservé exprès (relecture d'anciennes données).
+
+## Polissage (lot 6 — vue Courses : recherche produits + rayons, fait)
+- **Déplier un rayon = curseur direct dans « Rechercher un produit »** : `toggleChildren` focalise
+  le `.row-search-input` du rayon juste déplié (seulement si la catégorie a `itemSearch`, ex. courses).
+- **Recherche produits 100 % en DOM (fin de la désync)** : `taskTreeRows` rend **tous** les produits
+  (plus de `kids.filter` au render). Le filtrage masque/affiche par `display` via `applyRowSearch(rayonId)`,
+  appelé à la frappe (listener `input`) **ET** après chaque render (`applyRowSearches()` en fin de
+  `renderListView`). Comme la liste complète reste **toujours** dans le DOM, effacer/raccourcir la
+  recherche réaffiche les produits correspondants même si un render survient pendant la saisie
+  (avant : un render mid-recherche retirait les non-correspondants du DOM → ils ne revenaient qu'en
+  refermant/rouvrant le chevron).
+- **Rayon : clic simple vs double-clic** (`categoryRowClick`, état `_pendingCatClick`, `CAT_DBLCLICK_MS=250`) :
+  clic simple = (dé)plier **après un court délai** ; double-clic **rapide** = renommer le rayon **sans**
+  (dé)plier (le pliage en attente est annulé). Routé depuis la délégation `.click` pour les catégories
+  (`isListCategory(getTask(id)) ? categoryRowClick(id) : toggleChildren(id)`, 2 sites : chevron + corps).
+  Le `dblclick` natif est **réservé aux items** (produits, sous-éléments sans chevron) : il ignore
+  désormais les catégories (`!isListCategory(...)`).
 
 ## Règles de collaboration
 - **Committer + pusher systématiquement à la fin de chaque lot de modifs** (demande permanente
