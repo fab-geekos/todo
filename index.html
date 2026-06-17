@@ -4866,6 +4866,16 @@ function onDragPointerDown(e, board, config) {
   window.addEventListener("pointermove", onDragPointerMove);
   window.addEventListener("pointerup", onDragPointerUp);
   window.addEventListener("pointercancel", cancelDrag);
+  // Tactile : écouteur NON-PASSIF pour pouvoir bloquer le défilement natif une fois le drag actif.
+  // (preventDefault sur un événement *pointer* n'arrête pas le scroll ; il faut le touchmove.)
+  if (drag.isTouch) window.addEventListener("touchmove", onDragTouchMove, { passive: false });
+}
+
+// Une fois le glisser activé (appui long passé), on empêche la page/colonne de défiler — sinon le
+// navigateur s'approprie le geste, émet un pointercancel et la tâche « se désélectionne ».
+// Avant activation on ne fait rien : un simple swipe continue de faire défiler normalement.
+function onDragTouchMove(e) {
+  if (drag && drag.started && e.cancelable) e.preventDefault();
 }
 
 function startDrag() {
@@ -4958,6 +4968,7 @@ function cleanupDrag() {
   window.removeEventListener("pointermove", onDragPointerMove);
   window.removeEventListener("pointerup", onDragPointerUp);
   window.removeEventListener("pointercancel", cancelDrag);
+  window.removeEventListener("touchmove", onDragTouchMove);
   drag = null;
 }
 
