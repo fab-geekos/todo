@@ -291,6 +291,26 @@ en cas de doute (usage dynamique, ex. `var(--st-${status})`, classes `q-*`), on 
   Le `dblclick` natif est **réservé aux items** (produits, sous-éléments sans chevron) : il ignore
   désormais les catégories (`!isListCategory(...)`).
 
+## Hygiène du blob (lot 7 — purge des tâches terminées, fait)
+Objectif : empêcher l'accumulation infinie des tâches **cochées** dans le blob (seul vrai moteur de
+croissance vers la limite **1 Mio/document** Firestore ; les suppressions et les récurrences, elles,
+n'accumulent pas — `db.remove`/`deleteTask` filtrent vraiment, `advanceRecurrence` mute en place).
+- **`purgeCompletedTodos(maxAgeDays)`** (cœur) : supprime les **arbres de tâches todo terminés**.
+  Périmètre STRICT — `isRoot && completed && !isListTask && subtreeAllCompleted(id)` :
+  - racines **uniquement** → on retire l'**arbre entier** d'un coup (jamais une sous-tâche isolée = **zéro orphelin**) ;
+  - `subtreeAllCompleted` = garde-fou : on ne purge un arbre que s'il est terminé de fond en comble
+    (protège même si l'invariant « parent coché ⟹ enfants cochés » était cassé) ;
+  - **toutes les vues-listes épargnées** via `isListTask` (Courses, Affaires, Multimédia, Idées/Notes/Autres
+    gardent volontairement leurs items cochés). `maxAgeDays=null` → tout âge ; sinon filtre sur `completedAt`.
+- **Purge auto** `maybeAutoPurge()` : `AUTO_PURGE_DAYS = 90`, **1× par chargement** (`_autoPurgeDone`).
+  Une tâche terminée **sans `completedAt`** (donnée ancienne) est **épargnée** en auto (âge inconnu).
+  Branchée sur les **3 points d'entrée** de `onSnapshot` où l'état devient autoritatif (cloud identique
+  au cache → cf. early-return ligne « déjà identique », cloud différent, seed) — sinon elle ne tournerait
+  jamais sur le chemin mono-appareil courant (cloud == cache).
+- **Bouton manuel** `🧹 Vider les tâches terminées` (menu ⋯, `#purgeDoneBtn` → `purgeCompletedDoneNow`) :
+  purge **tout âge** après `confirm()` (action définitive, pas d'undo). `state.mit` = texte libre (pas
+  d'id) → aucune référence pendante à nettoyer.
+
 ## Règles de collaboration
 - **Committer + pusher systématiquement à la fin de chaque lot de modifs** (demande permanente
   du user, 10/06/2026) : il teste directement en ligne après chaque lot. Commit direct sur

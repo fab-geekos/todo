@@ -1296,6 +1296,7 @@
           <div class="kebab-menu" id="dataMenu" hidden>
             <button type="button" id="exportBtn">⬇️ Exporter (JSON)</button>
             <button type="button" id="importBtn">⬆️ Importer (JSON)</button>
+            <button type="button" id="purgeDoneBtn">🧹 Vider les tâches terminées</button>
             <button type="button" id="signOutBtn">🚪 Se déconnecter</button>
           </div>
         </div>
@@ -1660,6 +1661,7 @@ let _saveTimer = null;    // debounce des écritures réseau
 let _pendingWrite = false; // une écriture Firestore est en attente (debounce en cours) → à vider avant fermeture
 let _lastSync = null;     // dernier blob (stable-stringifié) poussé/appliqué — anti-écho/anti-clobber
 let _seeded = false;      // garde le seed initial à un seul passage par session
+let _autoPurgeDone = false; // purge auto des tâches terminées : un seul passage par chargement
 const DAY_MS = 86400000;                 // millisecondes dans une journée
 const DEFAULT_PROJECT_ICON = "📁";       // icône par défaut d'un nouveau projet
 
@@ -4181,6 +4183,70 @@ function deleteTask(id) {
   });
 }
 
+/* =========================================================
+   PURGE DES TÂCHES TERMINÉES (hygiène du blob Firestore — limite 1 Mio/document)
+   Périmètre STRICT pour ne jamais perdre de donnée utile :
+     • UNIQUEMENT des racines todo (parentTaskId == null) → on retire l'arbre ENTIER d'un coup,
+       jamais une sous-tâche isolée → zéro orphelin ;
+     • garde-fou subtreeAllCompleted : on ne purge un arbre que s'il est terminé de fond en
+       comble (même si l'invariant « parent coché ⟹ enfants cochés » était un jour cassé) ;
+     • on ÉPARGNE toutes les vues-listes (Courses, Affaires, Multimédia, Idées/Notes/Autres) via
+       isListTask : elles conservent volontairement leurs items cochés (sortDone / persistChecks).
+   ========================================================= */
+const AUTO_PURGE_DAYS = 90;   // âge minimal (jours) d'une tâche terminée pour la purge automatique
+
+// Vrai si TOUTE la descendance de `id` est terminée (récursif). Une feuille (sans enfant) → vrai.
+function subtreeAllCompleted(id) {
+  return childTasks(id).every(c => c.completed && subtreeAllCompleted(c.id));
+}
+
+// Supprime les arbres de tâches todo terminés. maxAgeDays = null → tout âge (bouton manuel) ;
+// sinon ne purge que si la racine a été terminée il y a plus de maxAgeDays (purge auto). En mode
+// auto, une tâche terminée SANS completedAt (donnée ancienne) est ÉPARGNÉE (âge inconnu) ; le
+// bouton manuel, lui, la supprime. Renvoie le nombre de racines (= d'arbres) purgées.
+function purgeCompletedTodos(maxAgeDays) {
+  const cutoff = (maxAgeDays == null) ? null : Date.now() - maxAgeDays * DAY_MS;
+  const roots = state.tasks.filter(t =>
+    isRoot(t) && t.completed && !isListTask(t) && subtreeAllCompleted(t.id) &&
+    (cutoff == null || (typeof t.completedAt === "number" && t.completedAt < cutoff))
+  );
+  if (!roots.length) return 0;
+  const toRemove = new Set();
+  const collect = id => { toRemove.add(id); childTasks(id).forEach(c => collect(c.id)); };
+  roots.forEach(r => collect(r.id));
+  state.tasks = state.tasks.filter(t => !toRemove.has(t.id));
+  return roots.length;
+}
+
+// Purge auto au 1er chargement de données autoritatives (cloud ou seed local). Une fois par session.
+// Renvoie le nombre purgé (l'appelant décide s'il doit re-render).
+function maybeAutoPurge() {
+  if (_autoPurgeDone) return 0;
+  _autoPurgeDone = true;
+  const n = purgeCompletedTodos(AUTO_PURGE_DAYS);
+  if (n > 0) { db.save(); console.info(`[purge] ${n} tâche(s) terminée(s) de plus de ${AUTO_PURGE_DAYS} jours supprimée(s).`); }
+  return n;
+}
+
+// Bouton « Vider les tâches terminées » (menu ⋯) : purge immédiate de TOUTES les tâches todo
+// terminées (tout âge), après confirmation. N'affecte aucune vue-liste.
+function purgeCompletedDoneNow() {
+  const count = state.tasks.filter(t => isRoot(t) && t.completed && !isListTask(t) && subtreeAllCompleted(t.id)).length;
+  if (!count) {
+    alert("Aucune tâche terminée à supprimer.\n(Les listes Courses, Affaires, Multimédia, Idées/Notes ne sont pas concernées.)");
+    return;
+  }
+  const msg = `Supprimer définitivement ${count} tâche(s) terminée(s) ?\n\n`
+    + `Concerne les tâches cochées des vues Todo / Aujourd'hui / Prochainement / Eisenhower / Projets.\n`
+    + `Les listes (Courses, Affaires, Multimédia, Idées/Notes/Autres) ne sont PAS touchées.\n\n`
+    + `⚠️ Action définitive (pas d'annulation).`;
+  if (!confirm(msg)) return;
+  purgeCompletedTodos(null);
+  db.save();
+  render();
+  alert(`${count} tâche(s) terminée(s) supprimée(s) ✅`);
+}
+
 /* ---- Modal d'édition ---- */
 /* =========================================================
    COMPOSANT DÉROULANT AVEC RECHERCHE (générique, réutilisable)
@@ -6032,6 +6098,7 @@ function bindDataMenu() {
   document.addEventListener("keydown", e => { if (e.key === "Escape") menu.hidden = true; });
   $("exportBtn").addEventListener("click", () => { menu.hidden = true; exportData(); });
   $("importBtn").addEventListener("click", () => { menu.hidden = true; $("importFile").click(); });
+  $("purgeDoneBtn").addEventListener("click", () => { menu.hidden = true; purgeCompletedDoneNow(); });
   $("importFile").addEventListener("change", e => {
     const f = e.target.files[0];
     if (f) importData(f);
@@ -6080,7 +6147,10 @@ function attachSpace(uid) {
       const data = normalizeData(snap.data());
       const incoming = stableStr(data);
       if (incoming === _lastSync) return;                // écho de notre propre écriture → rien à faire
-      if (incoming === stableStr(currentBlob())) return; // déjà identique au state local → ne pas re-rendre
+      if (incoming === stableStr(currentBlob())) {       // déjà identique au state local → ne pas re-rendre…
+        if (maybeAutoPurge()) render();                  // …mais c'est le bon moment pour la purge auto (1×/chargement)
+        return;
+      }
       // ⚠️ Anti-régression (bug « coche instable ») : si une écriture locale est en attente (debounce
       // 600 ms), notre état local est PLUS RÉCENT qu'une confirmation serveur d'une écriture antérieure.
       // L'appliquer « décocherait » un item tout juste coché. On laisse notre flush pousser la version
@@ -6089,6 +6159,7 @@ function attachSpace(uid) {
       _lastSync = incoming;
       applyData(data);
       migrateNotesToAutres();                            // no-op si pas d'anciennes notes
+      maybeAutoPurge();                                  // purge auto des tâches terminées (1× par chargement)
       render();
     } else {
       // Doc absent. On attend la confirmation SERVEUR (pas le cache) avant de semer, sinon on
@@ -6098,6 +6169,7 @@ function attachSpace(uid) {
       _seeded = true;
       applyData(normalizeData(readLocalRaw()));
       migrateNotesToAutres();
+      maybeAutoPurge();                                  // purge auto avant de semer le cloud
       if (!isEmptyData(currentBlob())) db.save();        // sème Firestore depuis le cache local
       render();
     }
