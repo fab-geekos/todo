@@ -49,7 +49,11 @@ sync live `onSnapshot`), avec un **cache `localStorage`** immédiat et hors-lign
 - « Claude chat » seulement si le besoin se confirme plus tard.
 
 ## Paramètres de contexte
-- **Hébergement** : local + GitHub uniquement. Pas d'autre déploiement pour l'instant.
+- **Hébergement** : **GitHub Pages** — URL en ligne **https://fab-geekos.github.io/todo/**
+  (vérifié 18/06/2026). **Auto-déploiement** à chaque push sur `main` via le builder natif
+  GitHub Pages (`pages-build-deployment`) → pas de `firebase deploy` ni de workflow `.github` à gérer.
+  ⚠️ `fabien---todo.firebaseapp.com` n'est **que** l'`authDomain` OAuth (poignée de main Google),
+  **pas** l'hébergement (les domaines Firebase Hosting `*.web.app`/`*.firebaseapp.com` renvoient 404).
 - **Cible** : version propre sur **ordinateur** (≈80 % de l'usage). **PWA/mobile : reporté.**
 - **Coût** : palier gratuit Firebase (Spark) suffisant.
 - **Multi-appareils** : OK via Firestore + onSnapshot (dernière écriture gagne au champ).
