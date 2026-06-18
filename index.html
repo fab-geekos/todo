@@ -1221,6 +1221,15 @@
     font-weight: 700; border: 1px solid #e0e0e0;
   }
   .auth-err { color: #d14343; font-size: 13px; margin: 18px 0 0; }
+  /* Navigateur intégré (Messenger, Instagram…) : Google bloque l'OAuth → on guide vers un vrai navigateur */
+  .auth-inapp {
+    margin-top: 22px; padding: 14px 16px; text-align: left;
+    border: 1px solid var(--border); border-radius: 12px; background: var(--card);
+  }
+  .auth-inapp[hidden] { display: none; }
+  .auth-inapp-title { font-weight: 700; color: var(--text); margin: 0 0 8px; font-size: 15px; }
+  .auth-inapp-text { color: var(--muted); font-size: 13.5px; line-height: 1.5; margin: 0 0 14px; }
+  .auth-copy { font-size: 14px; padding: 10px 16px; word-break: break-all; }
 </style>
 </head>
 <body>
@@ -1595,6 +1604,11 @@
     <p class="auth-sub">Connecte-toi pour synchroniser tes données.</p>
     <button class="auth-btn" id="authSignIn" type="button"><span class="auth-g">G</span> Se connecter avec Google</button>
     <p class="auth-err" id="authErr" hidden></p>
+    <div class="auth-inapp" id="authInApp" hidden>
+      <p class="auth-inapp-title">⚠️ Ouvre cette page dans ton navigateur</p>
+      <p class="auth-inapp-text">La connexion Google est bloquée dans le navigateur intégré de Messenger, Instagram, etc. Touche le menu <b>⋯</b> (en haut ou en bas de l'écran) puis « <b>Ouvrir dans le navigateur</b> » (Safari / Chrome) — ou copie ce lien et colle-le dans Safari/Chrome :</p>
+      <button class="auth-btn auth-copy" id="authCopyLink" type="button">📋 Copier le lien</button>
+    </div>
   </div>
 </div>
 
@@ -6114,6 +6128,13 @@ function showAuthGate(show) {
   document.body.style.overflow = show ? "hidden" : "";
 }
 
+// Détecte les navigateurs INTÉGRÉS (in-app webviews) où Google REFUSE l'OAuth (403 disallowed_useragent) :
+// Messenger / Facebook / Instagram / TikTok… ouvrent les liens dans une webview que Google bloque.
+function isInAppBrowser() {
+  const ua = navigator.userAgent || "";
+  return /(FBAN|FBAV|FB_IAB|Messenger|Instagram|MicroMessenger|WeChat|TikTok|musical_ly|Snapchat|LinkedInApp|WhatsApp)/i.test(ua);
+}
+
 function bindAuth() {
   $("authSignIn").addEventListener("click", async () => {
     $("authErr").hidden = true;
@@ -6133,6 +6154,18 @@ function bindAuth() {
     });
   });
   $("signOutBtn").addEventListener("click", () => { $("dataMenu").hidden = true; if (fbAuth) fbAuth.signOut(); });
+
+  // Navigateur intégré (Messenger, Instagram…) : le bouton Google est voué au 403 disallowed_useragent.
+  // On le masque et on affiche la marche à suivre (ouvrir dans Safari/Chrome) + un bouton « Copier le lien ».
+  if (isInAppBrowser()) {
+    $("authSignIn").hidden = true;
+    $("authInApp").hidden = false;
+    $("authCopyLink").addEventListener("click", async () => {
+      const btn = $("authCopyLink");
+      try { await navigator.clipboard.writeText(location.href); btn.textContent = "✅ Lien copié — colle-le dans Safari/Chrome"; }
+      catch { btn.textContent = location.href; }   // repli : affiche le lien à copier à la main
+    });
+  }
 }
 
 // Abonne l'espace courant au live Firestore. 1er passage : sème depuis le local si le doc est absent.

@@ -35,6 +35,12 @@ sync live `onSnapshot`), avec un **cache `localStorage`** immédiat et hors-lign
 - ⚠️ Penser à ajouter le domaine d'hébergement dans Firebase → Auth → Authorized domains.
 - **En place** : porte de login Google (`#authGate`), `onAuthStateChanged` → `attachSpace`,
   gestion spéciale de l'embed Notion (Storage Access API avant l'auth).
+- ⚠️ **Navigateurs intégrés (in-app webviews)** : Google REFUSE l'OAuth dans les webviews de
+  Messenger/Facebook/Instagram/TikTok… → **erreur 403 `disallowed_useragent`** (impossible à
+  contourner côté code, c'est une règle Google). `isInAppBrowser()` (UA) détecte ces cas et,
+  sur l'`#authGate`, masque le bouton Google (`#authSignIn`) au profit d'un bandeau `#authInApp`
+  (« ouvrir dans Safari/Chrome » + bouton « Copier le lien »). Indépendant du flux iframe Notion.
+  ➡️ Pour partager l'app : envoyer le lien hors messagerie, ou dire d'ouvrir dans un vrai navigateur.
 
 ### 3. Accès de Claude = script local (Firebase Admin SDK) — ⏳ reste à faire
 - Petit script `node todo.js add "..."` lancé à la demande → écrit dans Firestore.
