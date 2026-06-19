@@ -515,6 +515,13 @@
   .list-subtabs .subview-btn { font-size: 13px; padding: 5px 12px; }
   /* Compteur d'items sur un onglet de vue-liste */
   .tab-count { font-size: 12px; font-weight: 600; opacity: .65; margin-left: 3px; }
+  /* Sélecteur de genre sur une carte Multimédia (déplacer un titre d'un genre à l'autre) */
+  .genre-select {
+    font-family: inherit; font-size: 12px; color: var(--muted); flex-shrink: 0;
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 3px 6px; cursor: pointer; max-width: 130px; align-self: center;
+  }
+  .genre-select:hover { border-color: var(--accent); color: var(--text); }
   /* Bouton « Tout décocher » d'une vue-liste (poussé à droite de la barre de sous-onglets) */
   .list-reset {
     margin-left: auto; font-family: inherit; font-size: 13px; cursor: pointer;
@@ -2026,6 +2033,14 @@ function itemGenre(t) {
   if (!sub || !sub.subTabs) return null;
   return t.tab2 || sub.subTabs[0].id;
 }
+// Genres disponibles pour un item (selon son onglet principal), ou null s'il n'y en a pas
+// (ex. un titre « À lire » → Romans/BDs/Comics/Mangas ; un item Jeux de société → null).
+function taskGenres(t) {
+  const cfg = listConfig(t.list);
+  if (!isListRoot(t) || !cfg || !cfg.subTabs) return null;
+  const sub = cfg.subTabs.find(s => s.id === (t.tab || cfg.subTabs[0].id));
+  return (sub && sub.subTabs) ? sub.subTabs : null;
+}
 // Nombre d'items (non cochés) d'une vue-liste dans un sous-onglet, et éventuellement un genre.
 function listTabCount(view, tabId, genreId = null) {
   const cfg = listConfig(view), first = cfg.subTabs ? cfg.subTabs[0].id : null;
@@ -2474,6 +2489,15 @@ function taskRowHtml(task, depth, ancestorContinues = [], isLast = false) {
   const guideStyle = treeGuideStyle(depth, ancestorContinues);
   const lastCls = (depth >= 1 && isLast) ? " task-last" : "";
 
+  // Vue-liste "flat" à genres (Multimédia → À lire / À regarder) : petit menu pour déplacer le titre
+  // d'un genre à l'autre (corriger une erreur) sans drag. Présent uniquement sur ces items.
+  const genres = taskGenres(task);
+  const genreSelectHtml = genres
+    ? `<select class="genre-select" aria-label="Genre">`
+      + genres.map(g => `<option value="${g.id}"${g.id === itemGenre(task) ? " selected" : ""}>${esc(g.label)}</option>`).join("")
+      + `</select>`
+    : "";
+
   return `
     <div class="task-row${doneCls}${lastCls}${itemRowCls}${canOpen ? "" : " no-open"}" data-id="${task.id}" style="--depth:${depth};${guideStyle}">
       ${chevronHtml}
@@ -2486,6 +2510,7 @@ function taskRowHtml(task, depth, ancestorContinues = [], isLast = false) {
         ${progressHtml}
       </div>
       ${canAddChild ? `<button class="task-addsub" data-action="add-sub" aria-label="Ajouter une sous-tâche"><span class="plus-sm">+</span></button>` : ""}
+      ${genreSelectHtml}
       <button class="task-del" data-action="delete" aria-label="Supprimer">×</button>
     </div>
     <div class="task-addsub-zone" data-id="${task.id}" hidden>
@@ -5342,6 +5367,15 @@ function bindEvents() {
     applyRowSearch(rayonId);   // filtre en DOM (pas de re-render → le champ garde le focus)
   });
 
+  // Sélecteur de genre d'une carte Multimédia : déplace le titre dans le genre choisi (corriger
+  // une erreur). L'item quitte alors la vue du genre courant et le compteur du genre cible monte.
+  document.querySelector(".main").addEventListener("change", e => {
+    const sel = e.target.closest(".genre-select");
+    if (!sel) return;
+    const row = sel.closest(".task-row");
+    if (row) { db.update(row.dataset.id, { tab2: sel.value }); render(); }
+  });
+
   // Saisie d'une sous-tâche : Entrée valide, Échap referme (pas de priorité sur les sous-tâches)
   document.querySelector(".main").addEventListener("keydown", e => {
     // Champ « + » en bas d'une catégorie de vue-liste (courses, Idées/Notes/Autres…)
@@ -5607,7 +5641,7 @@ function bindEvents() {
   makeDraggable($("taskList"), {
     getItem(e) {
       if (!isListView(state.view)) return null;
-      if (e.target.closest("button, input, .checkbox, .task-del, .task-chevron, .task-addsub, .row-search, .list-additem")) return null;
+      if (e.target.closest("button, input, select, .checkbox, .task-del, .task-chevron, .task-addsub, .row-search, .list-additem")) return null;
       const row = e.target.closest(".task-row");
       if (!row) return null;
       const task = getTask(row.dataset.id);

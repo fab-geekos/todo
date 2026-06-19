@@ -345,6 +345,12 @@ n'accumulent pas — `db.remove`/`deleteTask` filtrent vraiment, `advanceRecurre
   `migrateNotesToAutres`) : anciens titres **À lire** sans `tab2` → **Romans**, **À regarder** →
   **Films** (idempotent, `db.save()` seulement si ça change). Le repli `itemGenre` couvre déjà
   l'affichage si la migration n'a pas encore tourné.
+- **Déplacer un titre entre genres** (corriger une erreur, ex. Films → Documentaires) : petit
+  `<select class="genre-select">` sur chaque carte concernée (helper `taskGenres(t)` → genres de
+  l'onglet de l'item, sinon rien). `change` (délégué sur `.main`) → `db.update(id,{tab2})` +
+  `render()` : l'item quitte la vue du genre courant, le compteur cible monte. **Pas de drag**
+  (chaque genre est une vue filtrée → il faudrait viser un onglet ; fragile au tactile). `select`
+  ajouté à l'exclusion `getItem` du drag pour ne pas déclencher un déplacement de carte.
 
 ## Règles de collaboration
 - **Committer + pusher systématiquement à la fin de chaque lot de modifs** (demande permanente
