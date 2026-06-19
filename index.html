@@ -510,6 +510,11 @@
   .projects-tabs { display: none; gap: 8px; margin-bottom: 18px; }
   /* Onglets de la vue Todo (Toutes / Récurrentes) : réutilisent le style .subview-btn */
   .todo-tabs { display: none; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  /* 2e niveau de sous-onglets (genres Multimédia) : un cran plus discret, collé sous la 1re rangée */
+  .list-subtabs { margin-top: -8px; }
+  .list-subtabs .subview-btn { font-size: 13px; padding: 5px 12px; }
+  /* Compteur d'items sur un onglet de vue-liste */
+  .tab-count { font-size: 12px; font-weight: 600; opacity: .65; margin-left: 3px; }
   /* Bouton « Tout décocher » d'une vue-liste (poussé à droite de la barre de sous-onglets) */
   .list-reset {
     margin-left: auto; font-family: inherit; font-size: 13px; cursor: pointer;
@@ -1342,6 +1347,8 @@
 
     <!-- Sous-onglets des vues-listes (ex. Affaires/Voyages), remplis dynamiquement -->
     <div class="todo-tabs" id="listTabs" style="display:none"></div>
+    <!-- 2e niveau (genres) du sous-onglet actif (ex. Multimédia → À lire → Romans/BDs…) -->
+    <div class="todo-tabs list-subtabs" id="listSubTabs" style="display:none"></div>
 
     <!-- Recherche dans une vue-liste (scopée au sous-onglet actif) -->
     <div class="search-box list-search" id="listSearch" style="display:none">
@@ -1735,6 +1742,7 @@ let state = {
   expandedWeek: new Set(),   // ids dépliés dans la vue Prochainement (indépendant du Todo)
   editSubFilter: "",         // texte de recherche des produits dans l'éditeur (liste de courses)
   listTab: {},               // sous-onglet actif par vue-liste (ex. { bagages: "famille" })
+  listTab2: {},              // genre (2e niveau) actif par "vue/onglet" (ex. { "mediatheque/read": "romans" })
   listQuery: "",             // recherche dans la vue-liste courante (scopée au sous-onglet actif)
   rowSearch: {},             // recherche de produits par rayon déplié (courses) : { [rayonId]: texte }
   giftPickContact: null,     // personne sélectionnée dans la saisie d'idée cadeau (vue Cadeaux)
@@ -1956,10 +1964,16 @@ const LIST_VIEWS = {
     removeOnCheck: true,                         // cocher = vu/lu/joué → l'item PART (supprimé)
     addRootPlaceholder: "Ajouter un titre",
     emptyIcon: "🎬", emptyText: "Rien ici pour l'instant. Ajoute un titre ci-dessus.",
-    persistChecks: false, reset: false,
+    persistChecks: false, reset: false, tabCount: true,   // compteur d'items sur chaque (sous-)onglet
     subTabs: [
-      { id: "read",       icon: "📚", label: "À lire" },
-      { id: "watch",      icon: "🎬", label: "À regarder" },
+      { id: "read",  icon: "📚", label: "À lire", subTabs: [
+        { id: "romans", label: "Romans" }, { id: "bd", label: "BDs" },
+        { id: "comics", label: "Comics" }, { id: "manga", label: "Mangas" }
+      ] },
+      { id: "watch", icon: "🎬", label: "À regarder", subTabs: [
+        { id: "films", label: "Films" }, { id: "anim", label: "Dessin animé" },
+        { id: "series", label: "Série" }, { id: "docs", label: "Documentaires" }
+      ] },
       { id: "boardgames", icon: "🎲", label: "Jeux de société" },
       { id: "ps4",        icon: "🎮", label: "PS4" }
     ]
@@ -1984,6 +1998,41 @@ function activeListTab(view) {
 }
 // Libellé d'un sous-onglet = son icône + son texte (centralisé : onglets, chips d'ajout, éditeur).
 const subTabLabel = s => (s.icon ? s.icon + " " : "") + s.label;
+// Objet du sous-onglet principal actif d'une vue-liste (ou null).
+function activeSubTab(view) {
+  const cfg = listConfig(view);
+  if (!cfg || !cfg.subTabs) return null;
+  const id = activeListTab(view);
+  return cfg.subTabs.find(s => s.id === id) || null;
+}
+// Genres (2e niveau) du sous-onglet principal actif (ex. Multimédia → À lire = Romans/BDs/…), ou null.
+function activeGenres(view) {
+  const sub = activeSubTab(view);
+  return (sub && sub.subTabs) ? sub.subTabs : null;
+}
+// Genre actif (2e niveau) ; défaut = 1er genre. Mémorisé par couple « vue/onglet principal ».
+function activeGenre(view) {
+  const sub = activeSubTab(view);
+  if (!sub || !sub.subTabs) return null;
+  const stored = state.listTab2[view + "/" + sub.id];
+  return (stored && sub.subTabs.some(g => g.id === stored)) ? stored : sub.subTabs[0].id;
+}
+// Genre EFFECTIF d'un item : son `tab2`, avec repli sur le 1er genre de son onglet principal pour les
+// items d'avant les genres (ex. anciens titres « À lire » → Romans, « À regarder » → Films).
+function itemGenre(t) {
+  const cfg = listConfig(t.list);
+  if (!cfg || !cfg.subTabs) return null;
+  const sub = cfg.subTabs.find(s => s.id === (t.tab || cfg.subTabs[0].id));
+  if (!sub || !sub.subTabs) return null;
+  return t.tab2 || sub.subTabs[0].id;
+}
+// Nombre d'items (non cochés) d'une vue-liste dans un sous-onglet, et éventuellement un genre.
+function listTabCount(view, tabId, genreId = null) {
+  const cfg = listConfig(view), first = cfg.subTabs ? cfg.subTabs[0].id : null;
+  return state.tasks.filter(t => isListRoot(t) && t.list === view && !t.completed
+    && (t.tab || first) === tabId
+    && (genreId == null || itemGenre(t) === genreId)).length;
+}
 // Racine d'une vue-liste = une catégorie/rayon (tâche sans parent dont `list` est connue).
 const isListRoot = t => t.parentTaskId == null && t.list != null && isListView(t.list);
 // Remonte à la racine de t ; la renvoie si c'est une racine de vue-liste, sinon null.
@@ -2586,9 +2635,10 @@ function render() {
   const flatMulti = listView && listShape(state.view) === "flat" && !!lcfg.subTabs && !!lcfg.multiAdd;
   $("listAddTabs").style.display = flatMulti ? "flex" : "none";
   if (flatMulti) renderListAddTabs(state.view);
-  // Sous-onglets éventuels de la vue-liste (ex. Affaires/Voyages)
-  $("listTabs").style.display = (listView && lcfg.subTabs) ? "flex" : "none";
-  if (listView && lcfg.subTabs) renderListTabs(state.view);
+  // Sous-onglets éventuels de la vue-liste (ex. Affaires/Voyages) + 2e niveau de genres (Multimédia)
+  const showTabs = listView && !!lcfg.subTabs;
+  $("listTabs").style.display = showTabs ? "flex" : "none";
+  if (showTabs) renderListTabs(state.view); else $("listSubTabs").style.display = "none";
   // Barre de recherche de la vue-liste (si activée dans la config) ; l'input garde sa valeur.
   $("listSearch").style.display = (listView && lcfg.search) ? "flex" : "none";
   if (listView && lcfg.search) $("listSearchInput").placeholder = lcfg.searchPlaceholder || "Rechercher…";
@@ -2774,7 +2824,12 @@ function markBirthdayDone(contactId, year) {
 function renderListView() {
   const view = state.view, cfg = listConfig(view), tab = activeListTab(view);
   let roots = state.tasks.filter(t => isListRoot(t) && t.list === view);
-  if (cfg.subTabs) roots = roots.filter(t => (t.tab || cfg.subTabs[0].id) === tab);
+  if (cfg.subTabs) {
+    roots = roots.filter(t => (t.tab || cfg.subTabs[0].id) === tab);
+    // 2e niveau : si l'onglet actif a des genres (ex. Multimédia → À lire), on scope au genre actif.
+    const genres = activeGenres(view);
+    if (genres) { const g = activeGenre(view); roots = roots.filter(t => itemGenre(t) === g); }
+  }
   // Recherche (la vue + le sous-onglet actif sont déjà filtrés au-dessus → scope respecté).
   const q = (state.listQuery || "").trim().toLowerCase();
   if (q) roots = roots.filter(t => t.title.toLowerCase().includes(q));
@@ -2811,16 +2866,34 @@ function applyRowSearches() {
   document.querySelectorAll("#taskList .row-search").forEach(rs => applyRowSearch(rs.dataset.row));
 }
 
+// Petit compteur d'items affiché dans un onglet (vide si 0).
+const tabCountBadge = n => n ? ` <span class="tab-count">${n}</span>` : "";
+
 // Barre de sous-onglets d'une vue-liste (+ bouton « Tout décocher » si la vue le permet).
 function renderListTabs(view) {
   const cfg = listConfig(view), active = activeListTab(view);
   const tabsHtml = cfg.subTabs.map(s =>
-    `<button class="subview-btn${s.id === active ? " active" : ""}" data-listtab="${s.id}">${esc(subTabLabel(s))}</button>`
+    `<button class="subview-btn${s.id === active ? " active" : ""}" data-listtab="${s.id}">`
+    + `${esc(subTabLabel(s))}${cfg.tabCount ? tabCountBadge(listTabCount(view, s.id)) : ""}</button>`
   ).join("");
   const resetHtml = cfg.reset
     ? `<button class="list-reset" type="button" data-action="list-reset" title="Décocher tout cet onglet">↺ Tout décocher</button>`
     : "";
   $("listTabs").innerHTML = tabsHtml + resetHtml;
+  renderListSubTabs(view);   // 2e niveau (genres) du sous-onglet principal actif
+}
+
+// 2e rangée d'onglets : les genres du sous-onglet principal actif (ex. Multimédia → À lire → Romans…).
+// Masquée si le sous-onglet actif n'a pas de genres (ex. Jeux de société, PS4).
+function renderListSubTabs(view) {
+  const el = $("listSubTabs"), genres = activeGenres(view);
+  if (!genres) { el.style.display = "none"; el.innerHTML = ""; return; }
+  const mainTab = activeListTab(view), activeG = activeGenre(view);
+  el.innerHTML = genres.map(g =>
+    `<button class="subview-btn${g.id === activeG ? " active" : ""}" data-listtab2="${g.id}">`
+    + `${esc(subTabLabel(g))}${tabCountBadge(listTabCount(view, mainTab, g.id))}</button>`
+  ).join("");
+  el.style.display = "flex";
 }
 
 // Sélecteur de la saisie rapide (vues-listes "flat" multi-onglets) : dans quels sous-onglets
@@ -3087,12 +3160,12 @@ function readFlags(container) {
 
 // Crée une catégorie (racine) d'une vue-liste : tâche racine `list:<vue>`, sans date ni priorité
 // (texte pris tel quel, pas de parsing). `tab` = sous-onglet si la vue en a, sinon null.
-function addListRoot(view, title, tab = null, group = null) {
+function addListRoot(view, title, tab = null, group = null, tab2 = null) {
   db.add({
     id: uid(), title: title.trim(), note: "",
     dueDate: null, dueTime: null, urgent: false, important: false,
     completed: false, createdAt: Date.now(),
-    projectId: null, parentTaskId: null, recurrence: null, list: view, tab, group: group || uid()
+    projectId: null, parentTaskId: null, recurrence: null, list: view, tab, tab2, group: group || uid()
   });
 }
 
@@ -3110,7 +3183,8 @@ function addTask() {
       const gid = uid();
       tabs.forEach(tab => addListRoot(state.view, raw, tab, gid));
     } else {
-      addListRoot(state.view, raw, activeListTab(state.view));   // crée une catégorie (mode arbre)
+      // Onglet actif = destination ; si l'onglet a des genres (Multimédia → À lire), on cible le genre actif.
+      addListRoot(state.view, raw, activeListTab(state.view), null, activeGenre(state.view));
     }
   } else {
     // makeTask déduit urgent/important du texte ; on y ajoute les boutons cliqués
@@ -3675,6 +3749,19 @@ function migrateNotesToAutres() {
   });
   state.notes = [];
   db.save();
+}
+
+// Multimédia d'avant les genres : les anciens titres « À lire » sans genre passent en Romans,
+// « À regarder » en Films (les autres onglets — Jeux de société, PS4 — n'ont pas de genres).
+function migrateMediaGenres() {
+  let changed = false;
+  state.tasks.forEach(t => {
+    if (t.list === "mediatheque" && t.parentTaskId == null && t.tab2 == null) {
+      if (t.tab === "read")  { t.tab2 = "romans"; changed = true; }
+      else if (t.tab === "watch") { t.tab2 = "films"; changed = true; }
+    }
+  });
+  if (changed) db.save();
 }
 
 /* =========================================================
@@ -5107,6 +5194,15 @@ function bindEvents() {
     render();
   });
 
+  // 2e rangée d'onglets (genres Multimédia) : mémorise le genre actif par « vue/onglet principal ».
+  $("listSubTabs").addEventListener("click", e => {
+    const btn = e.target.closest("[data-listtab2]");
+    if (!btn) return;
+    const sub = activeSubTab(state.view);
+    if (sub) state.listTab2[state.view + "/" + sub.id] = btn.dataset.listtab2;
+    render();
+  });
+
   // Sélecteur multi-onglets de la saisie rapide (vues-listes "flat") : (dé)cocher un onglet cible
   $("listAddTabs").addEventListener("click", e => {
     const chip = e.target.closest(".list-add-chip");
@@ -6096,6 +6192,7 @@ function importData(file) {
     state.notes = data.notes; state.mit = data.mit;
     db.save();
     migrateNotesToAutres();   // d'éventuelles notes importées (ancien format) deviennent des racines "autres"
+    migrateMediaGenres();     // titres Multimédia importés sans genre → Romans / Films
     render();
     alert("Import terminé ✅");
   };
@@ -6192,6 +6289,7 @@ function attachSpace(uid) {
       _lastSync = incoming;
       applyData(data);
       migrateNotesToAutres();                            // no-op si pas d'anciennes notes
+      migrateMediaGenres();                              // titres Multimédia sans genre → Romans / Films
       maybeAutoPurge();                                  // purge auto des tâches terminées (1× par chargement)
       render();
     } else {
@@ -6202,6 +6300,7 @@ function attachSpace(uid) {
       _seeded = true;
       applyData(normalizeData(readLocalRaw()));
       migrateNotesToAutres();
+      migrateMediaGenres();
       maybeAutoPurge();                                  // purge auto avant de semer le cloud
       if (!isEmptyData(currentBlob())) db.save();        // sème Firestore depuis le cache local
       render();
@@ -6242,6 +6341,7 @@ async function bootFirebase() {
 function init() {
   db.load();                 // affichage instantané depuis le cache local
   migrateNotesToAutres();    // anciennes notes (vue séparée) → racines de « Idées / Notes / Autres »
+  migrateMediaGenres();      // titres Multimédia sans genre → Romans (À lire) / Films (À regarder)
   applyMode();
   restoreView();             // reprend la dernière vue de l'onglet (F5) ; nouvel onglet → défaut "today"
   bindEvents();

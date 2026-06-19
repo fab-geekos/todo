@@ -124,7 +124,7 @@ Ordre de livraison (1 lot = commit + test en ligne) :
    l'item PART), `search:true`, **pas** de multi-onglets (config `multiAdd` propre à bagages),
    titres non ouvrables. Masquée aussi en pro. Icône nav double-emoji (`.icon-multi`).
    Sous-onglets = `{id, icon, label}` ; helper `subTabLabel` (icône+texte) ; état vide d'un
-   onglet = icône du sous-onglet actif.
+   onglet = icône du sous-onglet actif. **MAJ lot 8** : 2e niveau de genres + compteurs (cf. bas).
 3. ✅ **FAIT — 🎁 Cadeaux** : vue dédiée (PAS le moteur de listes). Idées stockées SUR le
    contact (`contact.gifts = [{id,title,done}]`, préservé par `normalizeData`). Vue triée par
    anniversaire le plus proche (`nextBirthdayOccurrence`), libellé « 🎂 date · dans X ».
@@ -320,6 +320,31 @@ n'accumulent pas — `db.remove`/`deleteTask` filtrent vraiment, `advanceRecurre
 - **Bouton manuel** `🧹 Vider les tâches terminées` (menu ⋯, `#purgeDoneBtn` → `purgeCompletedDoneNow`) :
   purge **tout âge** après `confirm()` (action définitive, pas d'undo). `state.mit` = texte libre (pas
   d'id) → aucune référence pendante à nettoyer.
+
+## Multimédia — genres (2e niveau) + compteurs (lot 8, fait)
+- **2 niveaux d'onglets** : un sous-onglet principal (`subTabs`) peut lui-même porter un tableau
+  `subTabs` (les « genres »). Multimédia → **À lire** = Romans / BDs / Comics / Mangas ;
+  **À regarder** = Films / Dessin animé / Série / Documentaires. **Jeux de société** et **PS4**
+  n'ont pas de genres (la 2e rangée se masque). Générique : n'importe quelle vue-liste à `subTabs`
+  peut activer des genres sur certains onglets — rien n'est codé en dur « mediatheque ».
+- **Donnée item** : champ `tab2` = genre (en plus de `tab` = onglet principal). `addListRoot`
+  accepte `tab2` ; la saisie rapide met `tab2 = activeGenre(view)` (l'onglet/genre **actif = la
+  destination**, comme le reste du moteur). `tab2` préservé tel quel par `normalizeData`.
+- **Helpers** (à côté de `activeListTab`) : `activeSubTab` (objet du sous-onglet actif),
+  `activeGenres` (ses genres ou null), `activeGenre` (genre actif, mémorisé par couple
+  `state.listTab2["{vue}/{onglet}"]`, défaut = 1er genre), `itemGenre(t)` (genre EFFECTIF d'un
+  item = `tab2` avec repli sur le 1er genre de son onglet → filet legacy), `listTabCount(view,
+  tab, genre?)` (nb d'items non cochés).
+- **UI** : 2e conteneur `#listSubTabs` (`.todo-tabs.list-subtabs`) sous `#listTabs`, rempli par
+  `renderListSubTabs` (appelé depuis `renderListTabs`). Clic `[data-listtab2]` → `state.listTab2`.
+  `render()` masque `#listSubTabs` hors vue-liste à onglets.
+- **Compteurs** : flag `tabCount:true` (mediatheque) → badge `.tab-count` sur chaque onglet
+  principal (total) ; les genres affichent **toujours** leur compteur. Filtrage de la liste
+  (`renderListView`) scopé `tab` **puis** genre actif via `itemGenre`.
+- **Migration** `migrateMediaGenres()` (init + import + onSnapshot apply + seed, à côté de
+  `migrateNotesToAutres`) : anciens titres **À lire** sans `tab2` → **Romans**, **À regarder** →
+  **Films** (idempotent, `db.save()` seulement si ça change). Le repli `itemGenre` couvre déjà
+  l'affichage si la migration n'a pas encore tourné.
 
 ## Règles de collaboration
 - **Committer + pusher systématiquement à la fin de chaque lot de modifs** (demande permanente
