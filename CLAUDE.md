@@ -367,6 +367,10 @@ n'accumulent pas — `db.remove`/`deleteTask` filtrent vraiment, `advanceRecurre
   garde `e.target.closest('[contenteditable="true"]')` en tête du handler clic `.main` + garde
   temporelle `lastRenameEnd` (300 ms, calquée sur `lastDragEnd`, posée dans `finish()`) pour que le
   clic qui clôt l'édition ne rouvre pas l'éditeur. Se lève seul à la fin (span non éditable + re-render).
+  ⚠️ **DÉCISION VALIDÉE (user, 22/06/2026) — À CONSERVER** : en pratique (mobile), taper une affaire
+  **ouvre quand même l'éditeur** (titre + chips sous-onglets, clavier actif), et le user **préfère
+  ça** (corriger le titre ET les sous-onglets d'un coup). Ne PAS chercher à bloquer davantage
+  l'ouverture. Les gardes ci-dessus restent (inoffensives ; utiles pour l'édition inline pure via ✎).
 - **Auto-défilement du drag (générique, toutes vues)** : `makeDraggable` enrichi. `onDragPointerMove`
   mémorise `drag.lastX/lastY` puis délègue à **`updateDragPosition(x,y)`** (extrait : fantôme +
   cible de dépôt). `startDrag` lance une boucle `requestAnimationFrame(autoScrollLoop)` ; près d'un
