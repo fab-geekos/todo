@@ -461,7 +461,9 @@
     background: rgba(74,111,165,.08);
     outline: 2px dashed var(--accent); outline-offset: -2px;
   }
-  body.is-dragging { cursor: grabbing; user-select: none; touch-action: none; overflow: hidden; }
+  /* NB : pas d'overflow:hidden ici — l'auto-défilement du drag a besoin de pouvoir scroller la fenêtre.
+     Le scroll natif au doigt est déjà bloqué pendant le drag par onDragTouchMove (preventDefault). */
+  body.is-dragging { cursor: grabbing; user-select: none; touch-action: none; }
 
   /* ===== TOAST « ANNULER » (filet anti-suppression, au-dessus de tout) ===== */
   /* Surface sombre fixe dans les deux thèmes -> contraste garanti du bouton d'action. */
@@ -1957,7 +1959,7 @@ const LIST_VIEWS = {
     multiAdd: true,                              // saisie rapide : ajouter dans plusieurs sous-onglets à la fois
     addRootPlaceholder: "Ajouter une affaire",
     emptyIcon: "🧳", emptyText: "Aucune affaire ici. Ajoute-en une ci-dessus (ex : Chargeur).",
-    persistChecks: true, reset: true,
+    persistChecks: true, reset: true, tabCount: true,   // compteur d'affaires NON cochées par sous-onglet
     subTabs: [
       { id: "famille",  icon: "👪",  label: "Retour famille" },
       { id: "vacances", icon: "🏖️", label: "Vacances" },
@@ -2503,7 +2505,7 @@ function taskRowHtml(task, depth, ancestorContinues = [], isLast = false) {
       ${chevronHtml}
       ${isListCategory(task) ? "" : `<button class="checkbox" data-action="toggle" aria-label="Terminer"></button>`}
       <div class="task-body"${canOpen ? ' data-action="edit"' : ''}>
-        <div class="task-titleline"><span class="task-title">${esc(task.title)}</span>${isListCategory(task) && listConfig(task.list)?.categoryCount ? `<span class="rayon-count">${childTasks(task.id).filter(c => !c.completed).length}</span>` : ""}${!canOpen ? `<button class="task-edit" data-action="list-rename" aria-label="Renommer" title="Renommer">✎</button>` : ""}${flagBadges(task)}${subCountBadge}</div>
+        <div class="task-titleline"><span class="task-title">${esc(task.title)}</span>${isListCategory(task) && listConfig(task.list)?.categoryCount ? `<span class="rayon-count">${childTasks(task.id).filter(c => !c.completed).length}</span>` : ""}${(!canOpen || affaireEditable(task)) ? `<button class="task-edit" data-action="list-rename" aria-label="Renommer" title="Renommer">✎</button>` : ""}${flagBadges(task)}${subCountBadge}</div>
         ${task.note ? `<div class="task-note">${esc(task.note)}</div>` : ""}
         ${depth === 0 && (task.labels || []).length ? `<div class="task-labels">${labelChipsHtml(task)}</div>` : ""}
         ${metaHtml}
@@ -2563,7 +2565,22 @@ function taskCard(task, withChildren = true) {
   return li;
 }
 
-// Renommage inline d'un libellé de vue-liste (produit, rayon, note…) : le titre devient éditable.
+// Renomme un libellé de vue-liste. Affaire multi-onglets (flat) → renomme TOUT le groupe (toutes les
+// copies dans les autres sous-onglets), exactement comme l'éditeur. Sinon (rayon, produit, note…) → la
+// seule tâche. Centralise la règle « renommer = renomme tout le groupe » pour l'inline ET le crayon.
+function renameListItem(id, title) {
+  const t = getTask(id);
+  if (!t || !title) return;
+  if (affaireEditable(t)) {
+    const key = affaireGroup(t);
+    state.tasks.forEach(x => { if (isListRoot(x) && x.list === t.list && affaireGroup(x) === key) x.title = title; });
+    db.save();
+  } else {
+    db.update(id, { title });
+  }
+}
+
+// Renommage inline d'un libellé de vue-liste (produit, rayon, note, affaire…) : le titre devient éditable.
 // Entrée ou perte de focus = enregistre ; Échap = annule.
 function startListRename(row) {
   const id = row.dataset.id;
@@ -2583,7 +2600,7 @@ function startListRename(row) {
     span.contentEditable = "false";
     const v = span.textContent.trim();
     const t = getTask(id);
-    if (save && t && v && v !== original) db.update(id, { title: v });
+    if (save && t && v && v !== original) renameListItem(id, v);   // affaire = renomme tout le groupe
     render();
   };
   const onKey = e => {
@@ -4259,6 +4276,22 @@ function categoryRowClick(id) {
   _pendingCatClick = { id, timer: setTimeout(() => { _pendingCatClick = null; toggleChildren(id); }, CAT_DBLCLICK_MS) };
 }
 
+// Même différenciation pour une AFFAIRE (vue-liste flat multi-onglets) : clic simple = ouvrir l'éditeur
+// (différé) ; double-clic rapide = renommer en place (raccourci, en plus du crayon ✎). Calqué sur categoryRowClick.
+let _pendingAffaireClick = null;
+function affaireRowClick(id) {
+  if (_pendingAffaireClick && _pendingAffaireClick.id === id) {     // 2e clic rapide → renommer
+    clearTimeout(_pendingAffaireClick.timer);
+    _pendingAffaireClick = null;
+    const row = document.querySelector(`#taskList .task-row[data-id="${id}"]`);
+    if (row) startListRename(row);
+    return;
+  }
+  // Ouverture en attente sur une AUTRE affaire : on l'exécute tout de suite (c'était un clic simple).
+  if (_pendingAffaireClick) { clearTimeout(_pendingAffaireClick.timer); const prevId = _pendingAffaireClick.id; _pendingAffaireClick = null; openEditor(prevId); }
+  _pendingAffaireClick = { id, timer: setTimeout(() => { _pendingAffaireClick = null; openEditor(id); }, CAT_DBLCLICK_MS) };
+}
+
 // Ouvre le champ d'ajout de sous-tâche d'une tâche (par id)
 function openSubtaskInput(taskId) {
   const wasCollapsed = !state.expandedTasks.has(taskId);
@@ -5088,11 +5121,15 @@ function startDrag() {
   drag.itemEl.classList.add("dragging");
   document.body.classList.add("is-dragging");
   if (navigator.vibrate) navigator.vibrate(15);
+
+  // Auto-défilement : on mémorise la position de départ et on repère un éventuel scroller horizontal.
+  drag.lastX = drag.startX; drag.lastY = drag.startY;
+  drag.hScroller = horizontalScroller(drag.itemEl);
+  drag.raf = requestAnimationFrame(autoScrollLoop);
 }
 
 function onDragPointerMove(e) {
   if (!drag) return;
-  const { config } = drag;
   const dx = Math.abs(e.clientX - drag.startX);
   const dy = Math.abs(e.clientY - drag.startY);
 
@@ -5106,18 +5143,27 @@ function onDragPointerMove(e) {
   }
 
   e.preventDefault();
-  drag.ghost.style.left = (e.clientX - drag.offsetX) + "px";
-  drag.ghost.style.top = (e.clientY - drag.offsetY) + "px";
+  drag.lastX = e.clientX; drag.lastY = e.clientY;   // mémorisé pour l'auto-défilement (rAF)
+  updateDragPosition(e.clientX, e.clientY);
+}
+
+// Repositionne le fantôme + recalcule la cible de dépôt pour une position pointeur donnée (coords
+// viewport). Appelé au pointermove ET par l'auto-défilement (le contenu sous le pointeur a bougé).
+function updateDragPosition(clientX, clientY) {
+  if (!drag || !drag.started) return;
+  const { config } = drag;
+  drag.ghost.style.left = (clientX - drag.offsetX) + "px";
+  drag.ghost.style.top = (clientY - drag.offsetY) + "px";
 
   // Mode libre (vues-listes) : on réordonne dans une seule liste (pas de colonnes).
   if (drag.free) {
-    const before = insertBeforeEl(drag.list, e.clientY, drag.itemSel);
+    const before = insertBeforeEl(drag.list, clientY, drag.itemSel);
     if (before) drag.list.insertBefore(drag.itemEl, before);
     else drag.list.appendChild(drag.itemEl);
     return;
   }
 
-  const col = columnUnderPoint(e.clientX, e.clientY, config.column);
+  const col = columnUnderPoint(clientX, clientY, config.column);
   drag.board.querySelectorAll(config.column).forEach(c => c.classList.toggle("drop-target", c === col));
 
   // Repositionne la carte à la place visée, dans la colonne survolée
@@ -5125,10 +5171,50 @@ function onDragPointerMove(e) {
     const list = col.querySelector(config.list);
     const emptyMark = list.querySelector(".col-empty");
     if (emptyMark) emptyMark.remove();
-    const before = insertBeforeEl(list, e.clientY, config.item);
+    const before = insertBeforeEl(list, clientY, config.item);
     if (before) list.insertBefore(drag.itemEl, before);
     else list.appendChild(drag.itemEl);
   }
+}
+
+/* AUTO-DÉFILEMENT pendant le glisser (générique = toutes les vues : agenda, semaine, Eisenhower,
+   Kanban, vues-listes). Près d'un bord, la zone défile toute seule → on peut déposer hors de
+   l'écran (pousser plus haut/bas, ou gauche/droite pour les vues à colonnes), en un seul geste. */
+const AUTOSCROLL_EDGE = 72;   // distance (px) au bord où le défilement s'enclenche
+const AUTOSCROLL_MAX = 18;    // vitesse max (px par frame), au ras du bord
+
+// Conteneur scrollable horizontalement le plus proche de el (semaine desktop, Kanban) ; sinon null.
+function horizontalScroller(el) {
+  for (let n = el; n && n !== document.body && n !== document.documentElement; n = n.parentElement) {
+    if (n.scrollWidth > n.clientWidth + 1) {
+      const ov = getComputedStyle(n).overflowX;
+      if (ov === "auto" || ov === "scroll") return n;
+    }
+  }
+  return null;
+}
+
+// Vitesse (signée) selon la proximité du pointeur aux bords [min,max] ; 0 si loin des deux bords.
+function edgeSpeed(pos, min, max) {
+  if (pos - min < AUTOSCROLL_EDGE) return -Math.ceil(AUTOSCROLL_MAX * (1 - Math.max(0, pos - min) / AUTOSCROLL_EDGE));
+  if (max - pos < AUTOSCROLL_EDGE) return  Math.ceil(AUTOSCROLL_MAX * (1 - Math.max(0, max - pos) / AUTOSCROLL_EDGE));
+  return 0;
+}
+
+function autoScrollLoop() {
+  if (!drag || !drag.started) return;   // s'arrête quand le drag se termine
+  let scrolled = false;
+  // Vertical : la fenêtre est le conteneur de défilement vertical de l'app.
+  const vy = edgeSpeed(drag.lastY, 0, window.innerHeight);
+  if (vy) { const y0 = window.scrollY; window.scrollBy(0, vy); if (window.scrollY !== y0) scrolled = true; }
+  // Horizontal : conteneur le plus proche qui défile en X (semaine desktop, Kanban).
+  if (drag.hScroller) {
+    const r = drag.hScroller.getBoundingClientRect();
+    const vx = edgeSpeed(drag.lastX, r.left, r.right);
+    if (vx) { const x0 = drag.hScroller.scrollLeft; drag.hScroller.scrollLeft += vx; if (drag.hScroller.scrollLeft !== x0) scrolled = true; }
+  }
+  if (scrolled) updateDragPosition(drag.lastX, drag.lastY);   // recible la dépose après défilement
+  drag.raf = requestAnimationFrame(autoScrollLoop);
 }
 
 function onDragPointerUp() {
@@ -5153,6 +5239,7 @@ function cancelDrag() { cleanupDrag(); }
 function cleanupDrag() {
   if (!drag) return;
   if (drag.timer) clearTimeout(drag.timer);
+  if (drag.raf) cancelAnimationFrame(drag.raf);   // stoppe la boucle d'auto-défilement
   if (drag.ghost) drag.ghost.remove();
   if (drag.itemEl) drag.itemEl.classList.remove("dragging");
   document.body.classList.remove("is-dragging");
@@ -5342,7 +5429,7 @@ function bindEvents() {
     // Catégorie de vue-liste (rayon…) : clic simple = (dé)plier (différé) ; double-clic rapide = renommer.
     else if (action === "toggle-children") isListCategory(getTask(id)) ? categoryRowClick(id) : toggleChildren(id);
     else if (action === "add-sub") openSubtaskInput(id);
-    else if (action === "edit") openEditor(id);
+    else if (action === "edit") affaireEditable(getTask(id)) ? affaireRowClick(id) : openEditor(id);
     else if (action === "list-rename") startListRename(row);
     // Clic ailleurs sur la ligne : si elle porte un chevron, il (dé)plie (toute la ligne = cible).
     else if (!action && row.querySelector(".task-chevron")) isListCategory(getTask(id)) ? categoryRowClick(id) : toggleChildren(id);

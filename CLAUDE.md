@@ -352,6 +352,26 @@ n'accumulent pas — `db.remove`/`deleteTask` filtrent vraiment, `advanceRecurre
   (chaque genre est une vue filtrée → il faudrait viser un onglet ; fragile au tactile). `select`
   ajouté à l'exclusion `getItem` du drag pour ne pas déclencher un déplacement de carte.
 
+## Affaires/Voyages + drag global (lot 8, fait)
+- **Compteurs par sous-onglet** (Affaires/Voyages) : flag `tabCount: true` ajouté à la config
+  `bagages`. Réutilise l'infra existante (`renderListTabs` → `tabCountBadge(listTabCount(...))`,
+  `.tab-count`). `listTabCount` compte les **racines NON cochées** du sous-onglet → en mode flat =
+  affaires non cochées. (Dispo aussi pour toute vue-liste en activant le flag.)
+- **Renommer une affaire** : crayon `✎` (action `list-rename`) désormais affiché aussi sur les
+  affaires (`!canOpen || affaireEditable(task)`), + **double-clic** rapide (`affaireRowClick`,
+  calqué sur `categoryRowClick` : clic simple = ouvrir l'éditeur **différé 250 ms**, double-clic =
+  renommer). ⚠️ Renommage **groupe-aware** : `renameListItem(id,title)` renomme TOUTES les copies
+  multi-onglets d'une affaire (comme l'éditeur) ; `startListRename` l'utilise (avant : `db.update`
+  d'une seule tâche → désync). Le `dblclick` natif ne traite que `.task-row.no-open` → pas de conflit.
+- **Auto-défilement du drag (générique, toutes vues)** : `makeDraggable` enrichi. `onDragPointerMove`
+  mémorise `drag.lastX/lastY` puis délègue à **`updateDragPosition(x,y)`** (extrait : fantôme +
+  cible de dépôt). `startDrag` lance une boucle `requestAnimationFrame(autoScrollLoop)` ; près d'un
+  bord (`AUTOSCROLL_EDGE=72`), défile la **fenêtre** en vertical et le **scroller horizontal le plus
+  proche** (`horizontalScroller` : semaine desktop, Kanban) en X, vitesse `edgeSpeed` (gradient,
+  max `AUTOSCROLL_MAX=18`/frame), puis `updateDragPosition` recible. `cleanupDrag` fait
+  `cancelAnimationFrame`. ⚠️ **`overflow:hidden` retiré de `body.is-dragging`** (il bloquait le
+  `window.scrollBy`) ; le scroll natif au doigt reste bloqué par `onDragTouchMove` (preventDefault).
+
 ## Règles de collaboration
 - **Committer + pusher systématiquement à la fin de chaque lot de modifs** (demande permanente
   du user, 10/06/2026) : il teste directement en ligne après chaque lot. Commit direct sur
