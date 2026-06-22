@@ -2601,6 +2601,7 @@ function startListRename(row) {
     const v = span.textContent.trim();
     const t = getTask(id);
     if (save && t && v && v !== original) renameListItem(id, v);   // affaire = renomme tout le groupe
+    lastRenameEnd = Date.now();   // déverrouille : le clic qui clôt l'édition ne rouvrira pas l'affaire
     render();
   };
   const onKey = e => {
@@ -5030,6 +5031,7 @@ function closeSidebar() {
    ========================================================= */
 let drag = null;
 let lastDragEnd = 0;
+let lastRenameEnd = 0;   // fin d'un renommage inline : ignore le clic qui vient de clôturer l'édition
 
 function makeDraggable(board, config) {
   board.addEventListener("pointerdown", e => onDragPointerDown(e, board, config));
@@ -5407,6 +5409,10 @@ function bindEvents() {
   // L'id vient de la LIGNE (.task-row) car une carte racine contient plusieurs lignes.
   document.querySelector(".main").addEventListener("click", e => {
     if (Date.now() - lastDragEnd < 300) return;  // un drag vient de se terminer
+    // Renommage inline « verrou » : pendant l'édition, un clic dans le titre place le curseur sans
+    // ouvrir l'affaire ; juste après la fin, on ignore le clic qui a clôturé l'édition (sinon il rouvre).
+    if (e.target.closest('[contenteditable="true"]')) return;
+    if (Date.now() - lastRenameEnd < 300) return;
     // Anniversaire (Aujourd'hui & Prochainement) : le rond marque "souhaité" et renvoie à l'an prochain.
     const bdayBtn = e.target.closest('[data-action="bday-done"]');
     if (bdayBtn) {

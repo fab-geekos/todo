@@ -363,6 +363,10 @@ n'accumulent pas — `db.remove`/`deleteTask` filtrent vraiment, `advanceRecurre
   renommer). ⚠️ Renommage **groupe-aware** : `renameListItem(id,title)` renomme TOUTES les copies
   multi-onglets d'une affaire (comme l'éditeur) ; `startListRename` l'utilise (avant : `db.update`
   d'une seule tâche → désync). Le `dblclick` natif ne traite que `.task-row.no-open` → pas de conflit.
+  **Verrou pendant l'édition** (clic dans le titre = placer le curseur, PAS ouvrir l'affaire) :
+  garde `e.target.closest('[contenteditable="true"]')` en tête du handler clic `.main` + garde
+  temporelle `lastRenameEnd` (300 ms, calquée sur `lastDragEnd`, posée dans `finish()`) pour que le
+  clic qui clôt l'édition ne rouvre pas l'éditeur. Se lève seul à la fin (span non éditable + re-render).
 - **Auto-défilement du drag (générique, toutes vues)** : `makeDraggable` enrichi. `onDragPointerMove`
   mémorise `drag.lastX/lastY` puis délègue à **`updateDragPosition(x,y)`** (extrait : fantôme +
   cible de dépôt). `startDrag` lance une boucle `requestAnimationFrame(autoScrollLoop)` ; près d'un
