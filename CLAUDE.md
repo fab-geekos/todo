@@ -396,20 +396,27 @@ n'accumulent pas — `db.remove`/`deleteTask` filtrent vraiment, `advanceRecurre
 - **`reorder:false` sur les 3 matrices** (`setupEisenBoard`) : le drag n'y change plus que la
   **case** (priorité) ; il ne réordonne plus (le tri date primait, et `reorderFromDOM` aurait
   écrasé l'ordre manuel global de `state.tasks`).
-- **Drag-to-nest (vue Todo)** : on glisse une **carte racine** (`#taskList`, `getItem` branche
-  `state.view==="todo"`, racines todo uniquement). Hooks **`freeMove`/`freeDrop`** ajoutés au mode
-  libre du moteur (`updateDragPosition`/`onDragPointerUp`) : s'ils renvoient `true` ils prennent
-  tout en charge (vue Todo via `todoDragMove`/`todoDragDrop`), sinon réordonnancement par défaut
-  (vues-listes inchangées). Zones d'une ligne **racine** (tiers) : haut = insérer avant, bas =
-  après, **centre = imbriquer** ; ligne de **sous-tâche** = imbriquer (toute la ligne).
-  `nestTaskUnder` : pose `parentTaskId`, **retire priorité + récurrence** (une sous-tâche n'en a
-  pas), **hérite le `projectId` du parent** en cascade (`setProjectDeep`), déplie le parent,
-  `refreshCompletionUpwards`. Garde-fous `canNestUnder` : pas de cycle, `taskDepth(cible) +
-  subtreeHeight(glissé) ≤ MAX_TASK_DEPTH` → sinon classe `.nest-forbidden` (dépôt sans effet).
-  Retour visuel `.nest-target`/`.nest-forbidden` ; curseur `grab` via `body.view-todo`.
-  ⚠️ **Limite connue (à faire si besoin)** : les **sous-tâches ne sont pas draggables** (pas de
-  carte propre dans le rendu) → pas encore de « ressortir » une sous-tâche ni de la promouvoir en
-  racine par glisser. Pas d'undo sur l'imbrication pour l'instant.
+- **Drag-to-nest (Todo + Aujourd'hui + Semaine + Eisenhower + liste/matrice de projet)** : glisser
+  une tâche au **centre** d'une autre = en faire une **sous-tâche** ; sur les **bords** d'une racine
+  = réordonner. Cœur partagé : `nestRowUnder` (`.task-row` sous le pointeur via `elementFromPoint`,
+  hors tâche glissée), `rowDropIntent` (racine → tiers haut/bas = before/after, centre = nest ;
+  sous-tâche → toute la ligne = nest), `canNestUnder`/`nestTaskUnder`, `clearNestFeedback`.
+  - **Mode libre** (`#taskList` en vue Todo, `#projTaskList`) : hooks `freeMove`/`freeDrop` →
+    `freeNestMove`/`freeNestDrop` (réordonne via `reorderFromDOM("#"+drag.list.id+" > .task")`).
+  - **Mode colonnes** (`#todayBoard`, `#weekGrid`, boards Eisenhower) : flag **`config.nestable`**.
+    Au centre d'une ligne → imbrique (pas de changement de colonne/priorité/jour) ; ailleurs →
+    comportement normal de la vue (réordonner / replanifier / changer de quadrant).
+  - `nestTaskUnder` : pose `parentTaskId`, **retire priorité + récurrence** (une sous-tâche n'en a
+    pas), **hérite le `projectId` du parent** en cascade (`setProjectDeep` → ⚠️ nesting inter-projets
+    réaffecte le projet), déplie le parent, `refreshCompletionUpwards`. Garde-fous `canNestUnder` :
+    pas de cycle, `taskDepth(cible) + subtreeHeight(glissé) ≤ MAX_TASK_DEPTH` → sinon `.nest-forbidden`
+    (dépôt sans effet). Retour visuel `.nest-target`/`.nest-forbidden` ; `.dragging` généralisé
+    (pointer-events:none) pour que `elementFromPoint` vise les autres lignes.
+  - **EXCLU** (volontaire, demande user) : vues-listes (courses, multimédia, affaires/voyages,
+    cadeaux, idées/notes/autres), contacts, vaccins. Le Kanban (cartes projet) n'est pas concerné.
+  - ⚠️ **Limites connues** : les **sous-tâches ne sont pas draggables** (pas de carte propre) → pas
+    de « ressortir »/promouvoir par glisser ; pas d'undo d'imbrication. En Semaine/Aujourd'hui, une
+    sous-tâche **datée** reste affichée à sa date (rendu agenda par date, pas par hiérarchie).
 
 ## Règles de collaboration
 - **Committer + pusher systématiquement à la fin de chaque lot de modifs** (demande permanente
