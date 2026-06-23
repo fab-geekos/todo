@@ -417,6 +417,19 @@ n'accumulent pas — `db.remove`/`deleteTask` filtrent vraiment, `advanceRecurre
   - ⚠️ **Limites connues** : les **sous-tâches ne sont pas draggables** (pas de carte propre) → pas
     de « ressortir »/promouvoir par glisser ; pas d'undo d'imbrication. En Semaine/Aujourd'hui, une
     sous-tâche **datée** reste affichée à sa date (rendu agenda par date, pas par hiérarchie).
+  - **Agenda (Aujourd'hui/Semaine) — fin du doublon** : ces vues listent toutes les tâches datées
+    (racines ET sous-tâches). Une sous-tâche datée dont le parent est présent (le même jour pour la
+    Semaine) est retirée du niveau racine (elle s'affiche imbriquée) ; si le parent est absent, elle
+    reste au niveau racine. Filtres dans `visibleTasks` (today) et `renderWeek` (par jour).
+
+### ⚠️ DÉCISION VALIDÉE (user, 23/06/2026) — un parent ne s'auto-termine PLUS
+`refreshCompletionUpwards` **n'auto-COCHE plus** un parent quand tous ses enfants sont cochés : le
+parent reste visible avec sa progression à 100 % (ex. « 1/1 fait »), et **c'est l'utilisateur qui le
+coche**. On GARDE l'auto-DÉCOCHE (parent fait + enfant redevenu à faire / nouvelle sous-tâche →
+parent rouvert). Motivation : en agenda, cocher la dernière sous-tâche faisait disparaître le parent
+(auto-terminé → masqué), donc on ne voyait jamais « la sous-tâche cochée sous le parent ». Vérifié
+en preview (4 cas : check sous-tâche, check parent manuel = cascade, uncheck sous-tâche = auto-décoche,
+addSubtask sur parent fini = rouvre). Ne PAS rétablir l'auto-complétion sans accord.
 
 ## Règles de collaboration
 - **Committer + pusher systématiquement à la fin de chaque lot de modifs** (demande permanente

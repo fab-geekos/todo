@@ -3101,17 +3101,19 @@ function setCompletedDeep(taskId, done) {
   });
 }
 
-// Recalcule l'état d'une tâche d'après ses enfants, puis remonte vers les parents (option c).
-// Une tâche ayant des enfants est "faite" quand TOUS ses enfants directs le sont.
+// Recalcule l'état d'une tâche d'après ses enfants, puis remonte vers les parents.
+// Choix user (23/06/2026) : un parent NE se termine PLUS automatiquement quand tous ses enfants
+// sont cochés — il reste visible avec sa progression (ex. 2/2), et c'est l'utilisateur qui le
+// coche quand il le juge fini. On garde en revanche l'auto-DÉCOCHE : un parent marqué fait qui a
+// (ou retrouve) un enfant à faire — enfant décoché, nouvelle sous-tâche ajoutée — ne peut plus
+// rester "fait". (Les rayons de courses, isListRoot, ne sont jamais touchés ici.)
 function refreshCompletionUpwards(taskId) {
   const task = getTask(taskId);
   if (!task) return;
   const kids = childTasks(taskId);
-  // Les rayons de la liste de courses ne se cochent jamais automatiquement (ils restent visibles).
-  if (kids.length > 0 && !isListRoot(task)) {
-    const allDone = kids.every(k => k.completed);
-    task.completed = allDone;
-    task.completedAt = allDone ? Date.now() : null;
+  if (kids.length > 0 && !isListRoot(task) && task.completed && !kids.every(k => k.completed)) {
+    task.completed = false;
+    task.completedAt = null;
   }
   if (task.parentTaskId) refreshCompletionUpwards(task.parentTaskId);
 }
@@ -4312,7 +4314,7 @@ function toggleTask(id) {
   t.completed = done;
   t.completedAt = done ? Date.now() : null;
   setCompletedDeep(id, done);            // (2) cascade : coche/décoche toute la descendance
-  if (t.parentTaskId) refreshCompletionUpwards(t.parentTaskId);  // (c) remontée auto vers les parents
+  if (t.parentTaskId) refreshCompletionUpwards(t.parentTaskId);  // remontée : décoche un parent fait qui retrouve un enfant à faire (jamais d'auto-coche)
   markRowsDone(id, done);                // retour visuel IMMÉDIAT (coche peinte avant le re-render)
   db.save();
   scheduleRender();                      // tri/compteurs/parents recalculés à la frame suivante (coalescé)
