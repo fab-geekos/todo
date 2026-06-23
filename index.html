@@ -1704,6 +1704,10 @@ const QUADRANTS = {
   eliminer:  { label: "Éliminer",  desc: "Ni urgent ni important", urgent: false, important: false }
 };
 const QUADRANT_ORDER = ["faire", "planifier", "deleguer", "eliminer"];
+// Quadrants affichés dans la vue Eisenhower globale : on masque "Éliminer"
+// (ces tâches sont des pense-bêtes, pas des priorités). Les vues Projets, elles,
+// gardent les 4 cases (cf. renderEisenhowerInto, défaut = QUADRANT_ORDER).
+const EISEN_VIEW_QUADRANTS = ["faire", "planifier", "deleguer"];
 
 function quadrantOf(task) {
   if (task.urgent && task.important) return "faire";
@@ -2985,12 +2989,14 @@ function fillColumn(ul, items, makeCard, emptyText = "—") {
 // Construit une matrice Eisenhower dans n'importe quel conteneur, pour une liste de tâches.
 // Utilisée pour la vue globale, la matrice d'un projet, et la synthèse des projets actifs.
 // opts.showAdd (défaut true) : afficher ou non le bouton "+" d'ajout par case.
+// opts.quadrants (défaut les 4) : quelles cases dessiner (la vue globale masque "Éliminer").
 function renderEisenhowerInto(board, tasks, opts = {}) {
   const showAdd = opts.showAdd !== false;
+  const quadrants = opts.quadrants || QUADRANT_ORDER;
   board.innerHTML = "";
   // La matrice ne montre que les tâches racines (les sous-tâches vivent dans les listes)
   const active = tasks.filter(t => !t.completed && isRoot(t));
-  QUADRANT_ORDER.forEach(key => {
+  quadrants.forEach(key => {
     const q = QUADRANTS[key];
     const cell = document.createElement("div");
     cell.className = "eisen-cell q-" + key;
@@ -3010,7 +3016,7 @@ function renderEisenhowerInto(board, tasks, opts = {}) {
 }
 
 function renderEisenhower() {
-  renderEisenhowerInto($("eisenGrid"), state.tasks.filter(t => !isListRoot(t)));
+  renderEisenhowerInto($("eisenGrid"), state.tasks.filter(t => !isListRoot(t)), { quadrants: EISEN_VIEW_QUADRANTS });
 }
 
 // Synthèse : tâches des projets En cours et Délégué, classées par priorité.
