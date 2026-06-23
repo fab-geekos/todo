@@ -465,6 +465,19 @@
      Le scroll natif au doigt est déjà bloqué pendant le drag par onDragTouchMove (preventDefault). */
   body.is-dragging { cursor: grabbing; user-select: none; touch-action: none; }
 
+  /* Vue Todo : les cartes racines se glissent (réordonner ou imbriquer). */
+  body.view-todo .task-row[style*="--depth:0"] { cursor: grab; }
+  /* Pendant le glisser : cible d'imbrication (déposer ICI = en faire une sous-tâche). */
+  .task-row.nest-target {
+    background: rgba(74,111,165,.14);
+    box-shadow: inset 0 0 0 2px var(--accent); border-radius: 10px;
+  }
+  /* Imbrication impossible (profondeur max atteinte ou cycle) : dépôt sans effet. */
+  .task-row.nest-forbidden {
+    background: rgba(214,40,40,.10);
+    box-shadow: inset 0 0 0 2px var(--alert); border-radius: 10px; cursor: not-allowed;
+  }
+
   /* ===== TOAST « ANNULER » (filet anti-suppression, au-dessus de tout) ===== */
   /* Surface sombre fixe dans les deux thèmes -> contraste garanti du bouton d'action. */
   .undo-toast {
@@ -2679,6 +2692,7 @@ function render() {
   renderMit();   // encadré MIT (vue Aujourd'hui + espace pro)
   // En vue-liste : la saisie rapide crée une CATÉGORIE/rayon (placeholder dédié, pas de priorité)
   document.body.classList.toggle("view-list", listView);
+  document.body.classList.toggle("view-todo", state.view === "todo");   // curseur grab des cartes draggables
   $("quickInput").placeholder = listView ? lcfg.addRootPlaceholder : "Nouvelle tâche";
   document.querySelector(".quick-add .flags").style.display = listView ? "none" : "";
   // Saisie rapide multi-onglets (vues-listes "flat" à sous-onglets : Affaires/Voyages) :
@@ -3090,6 +3104,48 @@ function refreshCompletionUpwards(taskId) {
     task.completedAt = allDone ? Date.now() : null;
   }
   if (task.parentTaskId) refreshCompletionUpwards(task.parentTaskId);
+}
+
+// Hauteur du sous-arbre d'une tâche (1 = feuille). Sert à vérifier qu'une imbrication par
+// glisser-déposer ne fera pas dépasser MAX_TASK_DEPTH une fois la tâche ET sa descendance rattachées.
+function subtreeHeight(taskId) {
+  const kids = childTasks(taskId);
+  return kids.length ? 1 + Math.max(...kids.map(k => subtreeHeight(k.id))) : 1;
+}
+
+// Propage un projectId à une tâche et à toute sa descendance (un sous-arbre partage son projet).
+function setProjectDeep(task, projectId) {
+  task.projectId = projectId;
+  childTasks(task.id).forEach(c => setProjectDeep(c, projectId));
+}
+
+// Peut-on rattacher `dragId` comme sous-tâche de `targetId` ? Non si : même tâche ; la cible
+// descend du glissé (cycle) ; ou la profondeur résultante dépasserait MAX_TASK_DEPTH.
+function canNestUnder(dragId, targetId) {
+  const dragged = getTask(dragId), target = getTask(targetId);
+  if (!dragged || !target || dragId === targetId) return false;
+  for (let cur = target; cur; cur = cur.parentTaskId ? getTask(cur.parentTaskId) : null) {
+    if (cur.id === dragId) return false;          // la cible est dans la descendance du glissé
+  }
+  return taskDepth(target) + subtreeHeight(dragId) <= MAX_TASK_DEPTH;
+}
+
+// Rattache `dragId` comme sous-tâche de `targetId`. Une sous-tâche n'a ni priorité ni récurrence
+// (cf. addSubtask) et hérite du projet du parent (cascade à sa descendance). Le parent, devenant
+// porteur d'enfants, perd sa récurrence ; on le déplie et on recalcule sa complétion.
+function nestTaskUnder(dragId, targetId) {
+  if (!canNestUnder(dragId, targetId)) return false;
+  const dragged = getTask(dragId), target = getTask(targetId);
+  dragged.parentTaskId = targetId;
+  dragged.urgent = false;
+  dragged.important = false;
+  dragged.recurrence = null;
+  setProjectDeep(dragged, target.projectId);
+  if (target.recurrence) target.recurrence = null;
+  state.expandedTasks.add(targetId);
+  refreshCompletionUpwards(targetId);
+  db.save();
+  return true;
 }
 
 // Barre de progression réutilisable (projets ET tâches avec sous-tâches).
@@ -5174,6 +5230,9 @@ function updateDragPosition(clientX, clientY) {
 
   // Mode libre (vues-listes) : on réordonne dans une seule liste (pas de colonnes).
   if (drag.free) {
+    // Hook optionnel (vue Todo) : gère lui-même réordonnancement OU imbrication. S'il retourne
+    // true, il a tout pris en charge ; sinon on retombe sur le réordonnancement par défaut.
+    if (config.freeMove && config.freeMove(clientX, clientY)) return;
     const before = insertBeforeEl(drag.list, clientY, drag.itemSel);
     if (before) drag.list.insertBefore(drag.itemEl, before);
     else drag.list.appendChild(drag.itemEl);
@@ -5240,7 +5299,8 @@ function onDragPointerUp() {
   const wasDragging = drag.started;
   if (wasDragging) {
     if (drag.free) {
-      config.persist(drag.itemEl);
+      // Hook optionnel (vue Todo) : applique imbrication/réordonnancement lui-même. Sinon, persist par défaut.
+      if (!(config.freeDrop && config.freeDrop())) config.persist(drag.itemEl);
     } else {
       const col = drag.itemEl.closest(config.column);  // colonne d'arrivée réelle
       if (col) config.onDrop(drag.itemEl, col);
@@ -5260,12 +5320,70 @@ function cleanupDrag() {
   if (drag.ghost) drag.ghost.remove();
   if (drag.itemEl) drag.itemEl.classList.remove("dragging");
   document.body.classList.remove("is-dragging");
-  if (drag.board) drag.board.querySelectorAll(drag.config.column).forEach(c => c.classList.remove("drop-target"));
+  if (drag.board && drag.config.column) drag.board.querySelectorAll(drag.config.column).forEach(c => c.classList.remove("drop-target"));
+  clearTodoNestFeedback();
   window.removeEventListener("pointermove", onDragPointerMove);
   window.removeEventListener("pointerup", onDragPointerUp);
   window.removeEventListener("pointercancel", cancelDrag);
   window.removeEventListener("touchmove", onDragTouchMove);
   drag = null;
+}
+
+/* ---- Vue Todo : glisser une carte racine pour la RÉORDONNER (bords) ou l'IMBRIQUER (centre) ----
+   Zones d'une ligne racine (tiers) : tiers haut = insérer avant, tiers bas = insérer après, tiers
+   central = en faire une sous-tâche. Sur une ligne de sous-tâche, toute la ligne = imbriquer (le
+   réordonnancement, lui, ne joue qu'au niveau des racines). L'intention est mémorisée sur `drag`
+   (dropMode/dropTargetId) puis appliquée au dépôt. */
+function clearTodoNestFeedback() {
+  document.querySelectorAll("#taskList .nest-target, #taskList .nest-forbidden")
+    .forEach(el => el.classList.remove("nest-target", "nest-forbidden"));
+}
+
+function todoDragMove(x, y) {
+  clearTodoNestFeedback();
+  drag.dropMode = null;
+  drag.dropTargetId = null;
+  // La carte glissée a pointer-events:none → elementFromPoint renvoie une AUTRE ligne (jamais la sienne).
+  const el = document.elementFromPoint(x, y);
+  const row = el && el.closest("#taskList .task-row");
+  if (!row || row.dataset.id === drag.id) return;
+  const target = getTask(row.dataset.id);
+  if (!target) return;
+
+  const r = row.getBoundingClientRect();
+  const rel = (y - r.top) / r.height;
+  const isRootRow = target.parentTaskId == null;
+  let mode = "nest";
+  if (isRootRow && rel < 0.33) mode = "before";
+  else if (isRootRow && rel > 0.67) mode = "after";
+
+  if (mode === "nest") {
+    if (canNestUnder(drag.id, target.id)) {
+      row.classList.add("nest-target");
+      drag.dropMode = "nest";
+      drag.dropTargetId = target.id;
+    } else {
+      row.classList.add("nest-forbidden");   // profondeur max atteinte ou cycle → dépôt sans effet
+    }
+    return;
+  }
+  // Réordonnancement : déplacer physiquement la carte racine glissée avant/après la carte cible.
+  const targetCard = row.closest(".task");
+  const list = $("taskList");
+  if (mode === "before") list.insertBefore(drag.itemEl, targetCard);
+  else list.insertBefore(drag.itemEl, targetCard.nextSibling);
+  drag.dropMode = "reorder";
+}
+
+function todoDragDrop() {
+  clearTodoNestFeedback();
+  if (drag.dropMode === "nest" && drag.dropTargetId) {
+    nestTaskUnder(drag.id, drag.dropTargetId);
+  } else if (drag.dropMode === "reorder") {
+    state.tasks = reorderFromDOM(state.tasks, "#taskList > .task");
+    db.save();
+  }
+  // Dépôt sans cible claire : on ne touche à rien (le render qui suit remet la carte en place).
 }
 
 function bindEvents() {
@@ -5748,19 +5866,36 @@ function bindEvents() {
     persist() { state.tasks = reorderFromDOM(state.tasks, "#weekGrid .agenda-drag"); db.save(); }
   });
 
-  // Vues-listes : réordonnancement libre. Racines (cartes) partout ; produits (prod-row) si reorderItems.
+  // #taskList : réordonnancement libre.
+  //  • Vue Todo  : on glisse les cartes racines → réordonner (bords) OU imbriquer en sous-tâche
+  //                (centre), via les hooks freeMove/freeDrop (todoDragMove/todoDragDrop).
+  //  • Vues-listes : racines (cartes) partout ; produits (prod-row) si reorderItems.
   makeDraggable($("taskList"), {
     getItem(e) {
-      if (!isListView(state.view)) return null;
       if (e.target.closest("button, input, select, .checkbox, .task-del, .task-chevron, .task-addsub, .row-search, .list-additem")) return null;
       const row = e.target.closest(".task-row");
       if (!row) return null;
       const task = getTask(row.dataset.id);
       if (!task) return null;
+      if (state.view === "todo") {
+        if (isListTask(task) || task.parentTaskId != null) return null;  // racines todo uniquement
+        return row.closest(".task");
+      }
+      if (!isListView(state.view)) return null;
       if (isListRoot(task)) return row.closest(".task");                 // déplacer la carte racine
       const cfg = listConfig(state.view);
       if (cfg && cfg.reorderItems && isListTask(task)) return row;        // déplacer un produit
       return null;
+    },
+    freeMove(x, y) {
+      if (state.view !== "todo") return false;   // vues-listes : réordonnancement par défaut du moteur
+      todoDragMove(x, y);
+      return true;
+    },
+    freeDrop() {
+      if (state.view !== "todo") return false;   // vues-listes : persist par défaut
+      todoDragDrop();
+      return true;
     },
     persist(itemEl) {
       state.tasks = reorderFromDOM(state.tasks, itemEl.classList.contains("task") ? "#taskList > .task" : "#taskList .prod-row");
