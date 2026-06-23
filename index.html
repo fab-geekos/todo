@@ -2398,6 +2398,15 @@ function visibleTasks() {
   return sortTasks(list);
 }
 
+// Comparateur d'échéance croissante : les tâches sans date passent à la fin.
+// Partagé par le tri Todo "par échéance" et le tri des matrices Eisenhower.
+function byDueDateAsc(a, b) {
+  if (a.dueDate == null && b.dueDate == null) return 0;
+  if (a.dueDate == null) return 1;
+  if (b.dueDate == null) return -1;
+  return a.dueDate - b.dueDate;
+}
+
 function sortTasks(list) {
   const copy = [...list];
   if (state.sort === "quadrant") {
@@ -2405,12 +2414,7 @@ function sortTasks(list) {
   } else if (state.sort === "created") {
     copy.sort((a,b) => a.createdAt - b.createdAt);
   } else { // due : sans date à la fin
-    copy.sort((a,b) => {
-      if (a.dueDate == null && b.dueDate == null) return 0;
-      if (a.dueDate == null) return 1;
-      if (b.dueDate == null) return -1;
-      return a.dueDate - b.dueDate;
-    });
+    copy.sort(byDueDateAsc);
   }
   return copy;
 }
@@ -2990,12 +2994,15 @@ function fillColumn(ul, items, makeCard, emptyText = "—") {
 // Utilisée pour la vue globale, la matrice d'un projet, et la synthèse des projets actifs.
 // opts.showAdd (défaut true) : afficher ou non le bouton "+" d'ajout par case.
 // opts.quadrants (défaut les 4) : quelles cases dessiner (la vue globale masque "Éliminer").
+// opts.showCompleted (défaut false) : garder les tâches cochées (matrice d'un projet ouvert).
+// Tâches triées par échéance croissante dans chaque case (cochées poussées en bas).
 function renderEisenhowerInto(board, tasks, opts = {}) {
   const showAdd = opts.showAdd !== false;
   const quadrants = opts.quadrants || QUADRANT_ORDER;
+  const showCompleted = opts.showCompleted === true;
   board.innerHTML = "";
   // La matrice ne montre que les tâches racines (les sous-tâches vivent dans les listes)
-  const active = tasks.filter(t => !t.completed && isRoot(t));
+  const active = tasks.filter(t => isRoot(t) && (showCompleted || !t.completed));
   quadrants.forEach(key => {
     const q = QUADRANTS[key];
     const cell = document.createElement("div");
@@ -3010,7 +3017,9 @@ function renderEisenhowerInto(board, tasks, opts = {}) {
         <input class="eisen-add-input" type="text" placeholder="Nouvelle tâche…" autocomplete="off" hidden>
       </div>` : ""}
     `;
-    fillColumn(cell.querySelector(".task-list"), active.filter(t => quadrantOf(t) === key), t => taskCard(t, true));
+    const cellTasks = active.filter(t => quadrantOf(t) === key)
+      .sort((a, b) => (a.completed - b.completed) || byDueDateAsc(a, b));
+    fillColumn(cell.querySelector(".task-list"), cellTasks, t => taskCard(t, true));
     board.appendChild(cell);
   });
 }
@@ -3025,7 +3034,7 @@ function renderProjectsEisenhower() {
     .filter(p => p.status === "en_cours" || p.status === "delegue")
     .map(p => p.id);
   const tasks = state.tasks.filter(t => activeIds.includes(t.projectId));
-  renderEisenhowerInto($("projectsEisenGrid"), tasks, { showAdd: false });
+  renderEisenhowerInto($("projectsEisenGrid"), tasks, { showAdd: false, quadrants: EISEN_VIEW_QUADRANTS });
 }
 
 // Avancement générique d'une liste de tâches : { done, total }
@@ -3397,7 +3406,7 @@ function renderProjectView() {
   if (state.projSub === "eisen") {
     listWrap.style.display = "none";
     eisenBoard.style.display = "grid";
-    renderEisenhowerInto(eisenBoard, tasks);
+    renderEisenhowerInto(eisenBoard, tasks, { showCompleted: true });
   } else {
     eisenBoard.style.display = "none";
     listWrap.style.display = "block";
@@ -5698,8 +5707,11 @@ function bindEvents() {
   document.getElementById("scrim").addEventListener("click", closeSidebar);
 
   // Drag and drop : matrice Eisenhower (globale) et Kanban des projets
-  setupEisenBoard($("eisenGrid"), () => null);          // vue globale : tâches libres
-  setupEisenBoard($("projEisenGrid"), () => state.projectId); // matrice d'un projet
+  // Les matrices sont triées par date : le drag ne sert qu'à changer la case (priorité),
+  // jamais à réordonner (reorder:false partout) — sinon l'ordre date-trié écraserait
+  // l'ordre manuel global de state.tasks via reorderFromDOM.
+  setupEisenBoard($("eisenGrid"), () => null, { reorder: false });          // vue globale : tâches libres
+  setupEisenBoard($("projEisenGrid"), () => state.projectId, { reorder: false }); // matrice d'un projet
   setupEisenBoard($("projectsEisenGrid"), () => null, { reorder: false }); // synthèse projets actifs
 
   const kanban = $("kanbanBoard");
