@@ -1273,7 +1273,7 @@
       <span class="icon">🗓️</span> Prochainement
     </button>
     <button class="nav-item" data-view="eisenhower">
-      <span class="icon">🎯</span> Eisenhower
+      <span class="icon">🎯</span> Eisenhower / Priorités
     </button>
     <div class="nav-sep nav-sep-major"></div>
     <button class="nav-item" data-view="projects">
@@ -2652,7 +2652,7 @@ function render() {
   const titles = {
     todo:  { t: "Todo", s: "" },
     today: { t: "Aujourd'hui", s: new Date().toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" }).replace(/^./, c => c.toUpperCase()) },
-    eisenhower: { t: "Eisenhower", s: "" },
+    eisenhower: { t: "Eisenhower / Priorités", s: "" },
     projects: { t: "Projets", s: "" },
     contacts: { t: "Contacts", s: "Tes contacts et leurs projets délégués" },
     week: { t: "Prochainement", s: "" },
