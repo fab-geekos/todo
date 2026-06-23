@@ -431,6 +431,20 @@ parent rouvert). Motivation : en agenda, cocher la dernière sous-tâche faisait
 en preview (4 cas : check sous-tâche, check parent manuel = cascade, uncheck sous-tâche = auto-décoche,
 addSubtask sur parent fini = rouvre). Ne PAS rétablir l'auto-complétion sans accord.
 
+## Nettoyage/maintenabilité (lot 10, fait)
+Audit complet (script ad hoc : fonctions/constantes/ids définis vs référencés, classes CSS,
+littéraux répétés, blocs dupliqués) → **code déjà très sain** : 0 fonction/constante/id morts,
+échappement `esc()` systématique (aucun `innerHTML` brut ni `value`/`placeholder` non échappé),
+quasi aucune duplication. Changements appliqués (sûrs, vérifiés en preview) :
+- **CSS mort retiré** : `.side-label .soon-tag` et `.side-date-input(:focus)` (résidus d'un ancien
+  champ date de sidebar). NB : `q-planifier/q-deleguer/q-eliminer` et `vac-soon/vac-overdue` sont
+  **dynamiques** (`"q-"+clé`, `vac-${st.cls}`) → conservés (faux positifs d'audit).
+- **DRY** : la déduplication agenda (sous-tâche déjà imbriquée sous son parent présent) factorisée
+  en `withoutNestedDuplicates(list)`, utilisée par `visibleTasks` (today) ET `renderWeek` (par jour).
+- Nombres calendaires (28-31, 365) laissés inline (plus lisibles que des constantes). Les deux
+  pickers (étiquettes vs `createPicker`) partagent ~4 lignes de boilerplate : non factorisés
+  (concerns distincts, gain < risque — prudence lot 5).
+
 ## Règles de collaboration
 - **Committer + pusher systématiquement à la fin de chaque lot de modifs** (demande permanente
   du user, 10/06/2026) : il teste directement en ligne après chaque lot. Commit direct sur

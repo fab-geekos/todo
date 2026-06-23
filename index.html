@@ -908,12 +908,6 @@
   /* Sections du panneau de droite */
   .side-section { margin-bottom: 18px; }
   .side-label { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 6px; display: flex; justify-content: space-between; }
-  .side-label .soon-tag { font-size: 11px; font-weight: 400; color: var(--muted); font-style: italic; }
-  .side-date-input {
-    width: 100%; font-family: inherit; font-size: 14px; color: var(--text);
-    border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--card); outline: none;
-  }
-  .side-date-input:focus { border-color: var(--accent); }
   .recur-select, .recur-num, .recur-unit {
     font-family: inherit; font-size: 14px; color: var(--text);
     border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
@@ -2402,12 +2396,7 @@ function visibleTasks() {
   let list = state.tasks.filter(t => !t.completed);
   if (state.view === "today") {
     // Vue échéance : toute tâche due aujourd'hui (retards inclus), racine ou sous-tâche.
-    list = list.filter(isDueToday);
-    // Dédup : une sous-tâche dont le parent est AUSSI présent s'affiche imbriquée sous lui →
-    // on la retire du niveau racine (sinon elle apparaîtrait en double). Si le parent n'est pas
-    // présent (sous-tâche datée seule), on la garde au niveau racine pour ne pas la masquer.
-    const present = new Set(list.map(t => t.id));
-    list = list.filter(t => t.parentTaskId == null || !present.has(t.parentTaskId));
+    list = withoutNestedDuplicates(list.filter(isDueToday));   // évite le doublon sous-tâche/parent
     // Tri agenda : heure croissante en haut, puis priorité, puis ordre manuel.
     state.flatList = false;
     return agendaSort(list);
@@ -2440,6 +2429,14 @@ function sortTasks(list) {
     copy.sort(byDueDateAsc);
   }
   return copy;
+}
+
+// Agenda (Aujourd'hui / Semaine) : retire les sous-tâches dont le parent figure DÉJÀ dans la même
+// liste — elles s'affichent imbriquées sous lui, donc les garder au niveau racine ferait un doublon.
+// Une sous-tâche dont le parent est absent de la liste est conservée (sinon on la masquerait).
+function withoutNestedDuplicates(list) {
+  const present = new Set(list.map(t => t.id));
+  return list.filter(t => t.parentTaskId == null || !present.has(t.parentTaskId));
 }
 
 // Tri des vues agenda (Aujourd'hui, Prochainement) :
@@ -3629,10 +3626,7 @@ function renderWeek() {
     // Tâches du jour (+ retards repliés dans la colonne d'aujourd'hui)
     let items = dated.filter(t => t.dueDate >= dayStart && t.dueDate <= dayEnd);
     if (isToday) items = items.concat(dated.filter(t => t.dueDate < today));
-    // Dédup : une sous-tâche dont le parent est présent CE JOUR s'affiche imbriquée sous lui →
-    // on la retire du niveau racine (sinon doublon). Parent absent ce jour → on la garde.
-    const present = new Set(items.map(t => t.id));
-    items = items.filter(t => t.parentTaskId == null || !present.has(t.parentTaskId));
+    items = withoutNestedDuplicates(items);   // sous-tâche déjà imbriquée sous son parent ce jour -> pas de doublon
     items = agendaSort(items);   // heure croissante -> priorité -> ordre manuel
 
     const bdays = birthdaysOnDay(dayTs);
