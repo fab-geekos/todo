@@ -2402,8 +2402,13 @@ function visibleTasks() {
   let list = state.tasks.filter(t => !t.completed);
   if (state.view === "today") {
     // Vue échéance : toute tâche due aujourd'hui (retards inclus), racine ou sous-tâche.
-    // Tri agenda : heure croissante en haut, puis priorité, puis ordre manuel.
     list = list.filter(isDueToday);
+    // Dédup : une sous-tâche dont le parent est AUSSI présent s'affiche imbriquée sous lui →
+    // on la retire du niveau racine (sinon elle apparaîtrait en double). Si le parent n'est pas
+    // présent (sous-tâche datée seule), on la garde au niveau racine pour ne pas la masquer.
+    const present = new Set(list.map(t => t.id));
+    list = list.filter(t => t.parentTaskId == null || !present.has(t.parentTaskId));
+    // Tri agenda : heure croissante en haut, puis priorité, puis ordre manuel.
     state.flatList = false;
     return agendaSort(list);
   } else {
@@ -3622,6 +3627,10 @@ function renderWeek() {
     // Tâches du jour (+ retards repliés dans la colonne d'aujourd'hui)
     let items = dated.filter(t => t.dueDate >= dayStart && t.dueDate <= dayEnd);
     if (isToday) items = items.concat(dated.filter(t => t.dueDate < today));
+    // Dédup : une sous-tâche dont le parent est présent CE JOUR s'affiche imbriquée sous lui →
+    // on la retire du niveau racine (sinon doublon). Parent absent ce jour → on la garde.
+    const present = new Set(items.map(t => t.id));
+    items = items.filter(t => t.parentTaskId == null || !present.has(t.parentTaskId));
     items = agendaSort(items);   // heure croissante -> priorité -> ordre manuel
 
     const bdays = birthdaysOnDay(dayTs);
