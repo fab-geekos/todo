@@ -380,6 +380,37 @@ n'accumulent pas — `db.remove`/`deleteTask` filtrent vraiment, `advanceRecurre
   `cancelAnimationFrame`. ⚠️ **`overflow:hidden` retiré de `body.is-dragging`** (il bloquait le
   `window.scrollBy`) ; le scroll natif au doigt reste bloqué par `onDragTouchMove` (preventDefault).
 
+## Eisenhower (recentrage) + imbrication par drag (lot 9, fait)
+- **Vue Eisenhower renommée « Eisenhower / Priorités »** (nav `#nav` + titre `titles.eisenhower`)
+  — choix user (plus parlant, cohérent avec « Priorités du moment » et le tri « par priorité »).
+- **Case « Éliminer » masquée** dans la vue **globale** ET la **synthèse Projets** (« Priorités du
+  moment ») : constante `EISEN_VIEW_QUADRANTS = ["faire","planifier","deleguer"]` passée en
+  `opts.quadrants` à `renderEisenhowerInto`. La **matrice d'un projet ouvert** (`projEisenGrid`)
+  garde les **4 cases** (défaut `QUADRANT_ORDER`). Grille 2×2 inchangée → coin bas-droite vide
+  (= l'emplacement « Éliminer », cohérent).
+- **Tri par échéance croissante dans TOUTES les matrices** : chaque case triée
+  `(a.completed - b.completed) || byDueDateAsc(a,b)` (cochées en bas, sans date en fin).
+  `byDueDateAsc` extrait et partagé avec le tri Todo « par échéance » (`sortTasks`).
+- **Matrice d'un projet ouvert : tâches cochées visibles** (`opts.showCompleted:true`, poussées
+  en bas). Vue globale + synthèse : cochées toujours exclues (défaut `showCompleted:false`).
+- **`reorder:false` sur les 3 matrices** (`setupEisenBoard`) : le drag n'y change plus que la
+  **case** (priorité) ; il ne réordonne plus (le tri date primait, et `reorderFromDOM` aurait
+  écrasé l'ordre manuel global de `state.tasks`).
+- **Drag-to-nest (vue Todo)** : on glisse une **carte racine** (`#taskList`, `getItem` branche
+  `state.view==="todo"`, racines todo uniquement). Hooks **`freeMove`/`freeDrop`** ajoutés au mode
+  libre du moteur (`updateDragPosition`/`onDragPointerUp`) : s'ils renvoient `true` ils prennent
+  tout en charge (vue Todo via `todoDragMove`/`todoDragDrop`), sinon réordonnancement par défaut
+  (vues-listes inchangées). Zones d'une ligne **racine** (tiers) : haut = insérer avant, bas =
+  après, **centre = imbriquer** ; ligne de **sous-tâche** = imbriquer (toute la ligne).
+  `nestTaskUnder` : pose `parentTaskId`, **retire priorité + récurrence** (une sous-tâche n'en a
+  pas), **hérite le `projectId` du parent** en cascade (`setProjectDeep`), déplie le parent,
+  `refreshCompletionUpwards`. Garde-fous `canNestUnder` : pas de cycle, `taskDepth(cible) +
+  subtreeHeight(glissé) ≤ MAX_TASK_DEPTH` → sinon classe `.nest-forbidden` (dépôt sans effet).
+  Retour visuel `.nest-target`/`.nest-forbidden` ; curseur `grab` via `body.view-todo`.
+  ⚠️ **Limite connue (à faire si besoin)** : les **sous-tâches ne sont pas draggables** (pas de
+  carte propre dans le rendu) → pas encore de « ressortir » une sous-tâche ni de la promouvoir en
+  racine par glisser. Pas d'undo sur l'imbrication pour l'instant.
+
 ## Règles de collaboration
 - **Committer + pusher systématiquement à la fin de chaque lot de modifs** (demande permanente
   du user, 10/06/2026) : il teste directement en ligne après chaque lot. Commit direct sur
