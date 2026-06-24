@@ -2840,8 +2840,8 @@ function renderList() {
     return;
   }
   ul.innerHTML = "";
+  bdays.forEach(b => ul.appendChild(birthdayCard(b)));   // anniversaires tout en haut, devant les priorités
   tasks.forEach(t => ul.appendChild(taskCard(t, !state.flatList)));
-  bdays.forEach(b => ul.appendChild(birthdayCard(b)));
   if (vacCard) ul.appendChild(vacCard);
   // Aujourd'hui : seules les tâches SANS heure sont réordonnables par glisser-déposer
   if (isToday) {
@@ -3666,7 +3666,7 @@ function renderWeek() {
       </div>`;
     }
     const emptyMark = (items.length === 0 && bdays.length === 0 && !vacOnDay) ? `<div class="week-empty">Rien de prévu</div>` : "";
-    const body = `<div class="week-list">${listBody}</div>${bdayBody}${vacBody}${emptyMark}`;
+    const body = `${bdayBody}<div class="week-list">${listBody}</div>${vacBody}${emptyMark}`;   // anniversaires tout en haut, devant les priorités
 
     const col = document.createElement("div");
     col.className = "week-col" + (isToday ? " today" : "");
