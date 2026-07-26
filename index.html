@@ -185,8 +185,11 @@
   .gift-todo-add { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; }
   .gift-todo-add .quick-input { flex: 1; min-width: 160px; }
   #giftTodoList { list-style: none; display: flex; flex-direction: column; gap: 10px; }
-  #giftTodoList .task-row[style*="--depth:0"] { cursor: grab; }
-  body.is-dragging #giftTodoList .task-row[style*="--depth:0"] { cursor: grabbing; }
+  #giftTodoList .task-row { cursor: grab; }
+  body.is-dragging #giftTodoList .task-row { cursor: grabbing; }
+  /* Indicateur de dépôt entre deux frères (réordonner) : trait accent en haut / en bas de la ligne. */
+  .task-row.drop-before { box-shadow: inset 0 3px 0 0 var(--accent); border-radius: 6px; }
+  .task-row.drop-after  { box-shadow: inset 0 -3px 0 0 var(--accent); border-radius: 6px; }
 
   /* Ligne « + » d'ajout d'item au bas d'une catégorie de vue-liste dépliée (courses, etc.) */
   .list-additem {
@@ -3953,6 +3956,74 @@ function renderGiftTodo() {
   renderTasksInto($("giftTodoList"), roots, `<div class="big">${cfg.emptyIcon}</div>${esc(cfg.emptyText)}`, false);
 }
 
+/* ---- Glisser-déposer de Cadeaux › À faire (racines ET sous-tâches, sous-arbre entier) ----
+   Au survol d'une ligne : tiers haut = déposer AVANT (même niveau que la cible), tiers bas = APRÈS,
+   centre = IMBRIQUER dedans. Le geste est appliqué au dépôt en réordonnant state.tasks par bloc
+   contigu (le sous-arbre du glissé) → l'ordre est réellement persisté et les sous-sous-tâches
+   suivent leur parent. `drag` (fantôme, auto-défilement) est fourni par makeDraggable. */
+function giftSubtreeIds(rootId) {
+  const set = new Set();
+  (function walk(id) { set.add(id); childTasks(id).forEach(c => walk(c.id)); })(rootId);
+  return set;
+}
+function giftDragMove(x, y) {
+  clearNestFeedback();
+  drag.giftTarget = null; drag.giftPos = null;
+  const el = document.elementFromPoint(x, y);
+  const row = el && el.closest(".task-row");
+  if (!row || !drag.board.contains(row)) return;
+  const targetId = row.dataset.id;
+  if (targetId === drag.id) return;
+  const sub = giftSubtreeIds(drag.id);
+  if (sub.has(targetId)) return;                       // pas dans sa propre descendance
+  const target = getTask(targetId);
+  if (!target) return;
+  const r = row.getBoundingClientRect();
+  const rel = (y - r.top) / r.height;
+  const pos = rel < 0.28 ? "before" : rel > 0.72 ? "after" : "nest";
+  const parentId = pos === "nest" ? targetId : target.parentTaskId;
+  const parentDepth = parentId ? taskDepth(getTask(parentId)) : 0;
+  if (parentDepth + subtreeHeight(drag.id) > MAX_TASK_DEPTH) { row.classList.add("nest-forbidden"); return; }
+  drag.giftTarget = targetId; drag.giftPos = pos;
+  row.classList.add(pos === "nest" ? "nest-target" : pos === "before" ? "drop-before" : "drop-after");
+}
+function giftDragDrop() {
+  clearNestFeedback();
+  if (drag.giftTarget && drag.giftPos) giftMoveSubtree(drag.id, drag.giftTarget, drag.giftPos);
+}
+// Déplace dragId (+ toute sa descendance) : imbriqué sous targetId (pos="nest") ou frère avant/après.
+function giftMoveSubtree(dragId, targetId, pos) {
+  const dragged = getTask(dragId), target = getTask(targetId);
+  if (!dragged || !target || dragId === targetId) return;
+  const sub = giftSubtreeIds(dragId);
+  if (sub.has(targetId)) return;
+  const newParentId = pos === "nest" ? targetId : (target.parentTaskId || null);
+  const parentDepth = newParentId ? taskDepth(getTask(newParentId)) : 0;
+  if (parentDepth + subtreeHeight(dragId) > MAX_TASK_DEPTH) return;   // trop profond
+  const oldParentId = dragged.parentTaskId || null;
+  // Index d'insertion (calculé AVANT de retirer le bloc) : avant la cible, ou après la cible + toute
+  // sa descendance restante (cas "after" et "nest" = dernier enfant).
+  const kept = state.tasks.filter(t => !sub.has(t.id));
+  let idx;
+  if (pos === "before") {
+    idx = kept.findIndex(t => t.id === targetId);
+  } else {
+    const tsub = giftSubtreeIds(targetId);
+    idx = kept.length;
+    for (let i = kept.length - 1; i >= 0; i--) { if (tsub.has(kept[i].id)) { idx = i + 1; break; } }
+  }
+  if (idx < 0) idx = kept.length;
+  const block = state.tasks.filter(t => sub.has(t.id));   // sous-arbre, ordre courant préservé
+  dragged.parentTaskId = newParentId;
+  dragged.urgent = false; dragged.important = false; dragged.recurrence = null;   // une imbriquée n'en a pas
+  kept.splice(idx, 0, ...block);
+  state.tasks = kept;
+  if (pos === "nest") state.expandedTasks.add(targetId);
+  if (oldParentId) refreshCompletionUpwards(oldParentId);
+  if (newParentId) refreshCompletionUpwards(newParentId);
+  db.save();
+}
+
 /* =========================================================
    MIGRATION : les anciennes notes (state.notes) deviennent des racines de la vue
    « Idées / Notes / Autres » (list:"autres"). Idempotent : vide state.notes après coup.
@@ -5465,8 +5536,8 @@ function cleanupDrag() {
    = imbriquer. L'intention est mémorisée sur `drag` (dropMode/dropTargetId) puis appliquée au dépôt.
    Helpers réutilisés par le mode libre (freeMove/freeDrop) ET le mode colonnes (config.nestable). */
 function clearNestFeedback() {
-  document.querySelectorAll(".nest-target, .nest-forbidden")
-    .forEach(el => el.classList.remove("nest-target", "nest-forbidden"));
+  document.querySelectorAll(".nest-target, .nest-forbidden, .drop-before, .drop-after")
+    .forEach(el => el.classList.remove("nest-target", "nest-forbidden", "drop-before", "drop-after"));
 }
 
 // Ligne de tâche (.task-row) sous le pointeur, dans le board glissé, hors tâche en cours de glisser.
@@ -6173,21 +6244,20 @@ function bindEvents() {
   };
   $("giftTodoAdd").addEventListener("click", submitGiftTodo);
   onEnter($("giftTodoInput"), submitGiftTodo);
-  // Cadeaux › À faire : glisser une carte racine → réordonner (bords) ou imbriquer (centre), comme la
-  // vue Todo / la liste d'un projet. Cocher/supprimer/ajouter-sous-tâche passent par la délégation
-  // .main (les cartes y sont incluses) ; deleteTask affiche déjà le toast « Annuler ».
+  // Cadeaux › À faire : glisser une ligne — racine OU sous-tâche, avec TOUTE sa descendance —
+  // pour réordonner entre frères (tiers haut/bas d'une ligne) ou imbriquer sous une autre (centre).
+  // Le déplacement est appliqué au dépôt sur le modèle de données (giftMoveSubtree) → l'ordre est
+  // réellement persisté. Cocher/supprimer/ajouter passent par la délégation .main (undo inclus).
   makeDraggable($("giftTodoList"), {
     getItem(e) {
-      if (e.target.closest("button, input, select, .checkbox, .task-del, .task-chevron, .task-addsub")) return null;
+      if (e.target.closest("button, input, select, .checkbox, .task-del, .task-chevron, .task-addsub, .task-addsub-zone")) return null;
       const row = e.target.closest(".task-row");
-      if (!row) return null;
-      const task = getTask(row.dataset.id);
-      if (!task || task.parentTaskId != null) return null;   // racines uniquement
-      return row.closest(".task");
+      if (!row || !$("giftTodoList").contains(row)) return null;
+      return getTask(row.dataset.id) ? row : null;   // n'importe quelle ligne (racine ou sous-tâche)
     },
-    freeMove(x, y) { freeNestMove(x, y); return true; },
-    freeDrop() { freeNestDrop(); return true; },
-    persist(itemEl) { state.tasks = reorderFromDOM(state.tasks, "#giftTodoList > .task"); db.save(); }
+    freeMove(x, y) { giftDragMove(x, y); return true; },
+    freeDrop() { giftDragDrop(); return true; },
+    persist() {}   // tout est appliqué par giftDragDrop
   });
 
   // Cadeaux : déplier/replier une carte, cocher « offert » / supprimer une idée (délégation).
