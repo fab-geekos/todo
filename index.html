@@ -179,6 +179,14 @@
   .gift-add-input { flex: 1; font-family: inherit; font-size: 14px; border: none; background: none; color: var(--text); padding: 2px 0; }
   .gift-add-input:focus { outline: none; }
   .gift-add-input::placeholder { color: var(--muted); }
+  /* Onglets de sous-vue réutilisables (Cadeaux : Idées / À faire, etc.) */
+  .subview-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  /* Cadeaux › À faire : barre d'ajout d'une liste racine + arbre de cartes cochables (moteur Todo) */
+  .gift-todo-add { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; }
+  .gift-todo-add .quick-input { flex: 1; min-width: 160px; }
+  #giftTodoList { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  #giftTodoList .task-row[style*="--depth:0"] { cursor: grab; }
+  body.is-dragging #giftTodoList .task-row[style*="--depth:0"] { cursor: grabbing; }
 
   /* Ligne « + » d'ajout d'item au bas d'une catégorie de vue-liste dépliée (courses, etc.) */
   .list-additem {
@@ -1477,22 +1485,35 @@
     <div class="vaccines-view" id="vaccinesView"></div>
 
     <div class="cadeaux-view" id="cadeauxView">
-      <div class="cadeaux-add">
-        <div id="giftContactPicker"></div>
-        <input class="quick-input" id="giftInput" type="text" placeholder="Une idée de cadeau…" autocomplete="off">
-        <button class="quick-submit" id="giftAdd">Ajouter</button>
+      <div class="subview-tabs" id="cadeauxSubtabs">
+        <button class="subview-btn" data-cadsub="idees" type="button">💡 Idées</button>
+        <button class="subview-btn" data-cadsub="afaire" type="button">✅ À faire</button>
       </div>
-      <div class="search-box list-search">
-        <span class="search-icon">🔍</span>
-        <input class="search-input" id="giftSearch" type="text" placeholder="Rechercher une personne…" autocomplete="off">
+      <div id="cadeauxIdeesPane">
+        <div class="cadeaux-add">
+          <div id="giftContactPicker"></div>
+          <input class="quick-input" id="giftInput" type="text" placeholder="Une idée de cadeau…" autocomplete="off">
+          <button class="quick-submit" id="giftAdd">Ajouter</button>
+        </div>
+        <div class="search-box list-search">
+          <span class="search-icon">🔍</span>
+          <input class="search-input" id="giftSearch" type="text" placeholder="Rechercher une personne…" autocomplete="off">
+        </div>
+        <div class="toolbar">
+          <select class="sort-select" id="giftSort">
+            <option value="bday">Trier par date</option>
+            <option value="name">Trier par nom</option>
+          </select>
+        </div>
+        <ul class="cadeaux-list" id="cadeauxList"></ul>
       </div>
-      <div class="toolbar">
-        <select class="sort-select" id="giftSort">
-          <option value="bday">Trier par date</option>
-          <option value="name">Trier par nom</option>
-        </select>
+      <div id="cadeauxFairePane">
+        <div class="gift-todo-add">
+          <input class="quick-input" id="giftTodoInput" type="text" placeholder="Nouvelle liste (ex : Noël)…" autocomplete="off">
+          <button class="quick-submit" id="giftTodoAdd" type="button">+ Liste</button>
+        </div>
+        <ul id="giftTodoList"></ul>
       </div>
-      <ul class="cadeaux-list" id="cadeauxList"></ul>
     </div>
 
     <div class="labels-view" id="labelsView"></div>
@@ -1790,6 +1811,7 @@ let state = {
   giftPickContact: null,     // personne sélectionnée dans la saisie d'idée cadeau (vue Cadeaux)
   giftSearch: "",            // recherche de personne dans la vue Cadeaux
   giftSort: "bday",          // tri Cadeaux : "bday" (anniversaire) ou "name" (alphabétique)
+  cadeauxSub: "idees",       // sous-vue Cadeaux active : "idees" (par personne) ou "afaire" (liste à cocher)
   expandedGifts: new Set()   // contacts dont les idées de cadeaux sont dépliées
 };
 
@@ -2028,6 +2050,15 @@ const LIST_VIEWS = {
     persistChecks: true, subTabs: null, reset: false,
     sortDone: true,      // mode "tree" (comme Courses) + sous-éléments cochés envoyés en bas
     reorderItems: true   // drag-and-drop des sous-éléments dans leur note
+  },
+  // Sous-vue « À faire » de Cadeaux (rendue à la main dans #cadeauxView, PAS une vue de nav) :
+  // arbre 100 % cochable (racine → 2 sous-niveaux), imbrication par glisser-déposer. `isListView`
+  // renvoie vrai → ces tâches sont exclues du Todo/agenda comme toute vue-liste, mais le shape
+  // "checklist" leur donne case + nesting (cf. isChecklistTask, canAddChild, addSubtask).
+  cadeauxfaire: {
+    icon: "🎁", title: "À faire", sub: "", shape: "checklist",
+    addRootPlaceholder: "Nouvelle liste (ex : Noël, anniv. de Papa)…",
+    emptyIcon: "🎁", emptyText: "Aucune liste. Ajoutes-en une ci-dessus, puis empile des sous-éléments (jusqu'à 3 niveaux)."
   }
 };
 const listConfig = view => LIST_VIEWS[view] || null;           // config d'une vue-liste (ou null)
@@ -2098,6 +2129,9 @@ const listShape = view => (listConfig(view) && listConfig(view).shape) || "tree"
 // Catégorie = racine d'une vue-liste en mode arbre (pas de case à cocher, son bouton coche tout,
 // peut recevoir des items). En mode "flat", une racine est une affaire cochable normale.
 const isListCategory = t => isListRoot(t) && listShape(t.list) === "tree";
+// Tâche d'une vue-liste "checklist" (Cadeaux → À faire) : arbre 100 % cochable, imbrication jusqu'à
+// MAX_TASK_DEPTH (racine comprise). Se distingue du mode "tree" (racine = catégorie non cochable).
+const isChecklistTask = t => { const lr = listRootOf(t); return !!lr && listShape(lr.list) === "checklist"; };
 // Affaire multi-onglets (mode flat) : toutes les copies d'une même affaire partagent un `group`
 // (généré à l'ajout). Repli sur l'id pour les affaires créées avant ce champ.
 const affaireGroup = t => t.group || t.id;
@@ -2524,7 +2558,9 @@ function taskRowHtml(task, depth, ancestorContinues = [], isLast = false) {
   const subCountBadge = (depth > 0 && total > 0) ? `<span class="count-badge">${done}/${total}</span>` : "";
   // Vue-liste en arbre : seule une catégorie peut recevoir des items (2 niveaux). En mode "flat",
   // une affaire est une feuille (pas d'ajout d'enfant). Hors vue-liste : profondeur max classique.
-  const canAddChild = isListTask(task) ? isListCategory(task) : (taskDepth(task) < MAX_TASK_DEPTH);
+  const canAddChild = isListTask(task)
+    ? (isChecklistTask(task) ? taskDepth(task) < MAX_TASK_DEPTH : isListCategory(task))
+    : (taskDepth(task) < MAX_TASK_DEPTH);
   // S'ouvre (éditeur) : tâches hors vue-liste et affaires multi-onglets (flat). Les catégories
   // d'arbre (rayons, notes) ne s'ouvrent PLUS : on les déplie (chevron) ; items = coche/supprime.
   const canOpen = !isListTask(task) || affaireEditable(task);
@@ -3841,7 +3877,16 @@ function giftCard(contact) {
   return li;
 }
 
+const GIFT_TODO_LIST = "cadeauxfaire";   // clé `list` des tâches de la sous-vue Cadeaux › À faire
+
 function renderCadeaux() {
+  // Bascule Idées (par personne) / À faire (liste à cocher). Onglet actif + panneaux.
+  setActiveTab($("cadeauxSubtabs"), "cadsub", state.cadeauxSub);
+  const afaire = state.cadeauxSub === "afaire";
+  $("cadeauxIdeesPane").style.display = afaire ? "none" : "block";
+  $("cadeauxFairePane").style.display = afaire ? "block" : "none";
+  if (afaire) { renderGiftTodo(); return; }
+
   // Sélecteur de personne (réutilise createPicker) pour la saisie en haut.
   const items = [...state.contacts]
     .sort((a, b) => (a.name || "").localeCompare(b.name || "", "fr"))
@@ -3879,6 +3924,15 @@ function renderCadeaux() {
     return;
   }
   withGifts.forEach(c => ul.appendChild(giftCard(c)));
+}
+
+// Sous-vue Cadeaux › À faire : arbre de listes 100 % cochable (racine → 2 sous-niveaux), rendu par
+// le moteur de tâches (mêmes cartes/gestes que Todo : cocher = barré/persiste, × = supprime + undo,
+// drag = réordonner/imbriquer). Scopé via list:"cadeauxfaire" → exclu du Todo et de l'agenda.
+function renderGiftTodo() {
+  const cfg = listConfig(GIFT_TODO_LIST);
+  const roots = state.tasks.filter(t => isListRoot(t) && t.list === GIFT_TODO_LIST);
+  renderTasksInto($("giftTodoList"), roots, `<div class="big">${cfg.emptyIcon}</div>${esc(cfg.emptyText)}`, false);
 }
 
 /* =========================================================
@@ -4416,9 +4470,10 @@ function openSubtaskInput(taskId) {
 function addSubtask(parentId, raw) {
   const parent = getTask(parentId);
   if (!parent || taskDepth(parent) >= MAX_TASK_DEPTH) return;
-  // Vue-liste : on n'ajoute des sous-tâches que sous une catégorie (mode arbre). Pas de 3e niveau,
-  // et rien sous une affaire (mode "flat").
-  if (isListTask(parent) && !isListCategory(parent)) return;
+  // Vue-liste : en mode arbre on n'ajoute des sous-tâches que sous une catégorie (pas de 3e niveau),
+  // rien sous une affaire (mode "flat"). Le mode "checklist" (Cadeaux → À faire) autorise partout
+  // jusqu'à MAX_TASK_DEPTH (garde-fou de profondeur déjà appliqué juste au-dessus).
+  if (isListTask(parent) && !isListCategory(parent) && !isChecklistTask(parent)) return;
   const task = makeTask(raw, { urgent: false, important: false }, parent.projectId, parentId);
   state.tasks.push(task);
   if (parent.recurrence) parent.recurrence = null;   // une tâche à sous-tâches n'est plus récurrente
@@ -6078,6 +6133,38 @@ function bindEvents() {
   $("giftSort").addEventListener("change", e => {
     state.giftSort = e.target.value;
     renderCadeaux();
+  });
+
+  // Cadeaux : bascule entre les sous-vues « Idées » (par personne) et « À faire » (liste à cocher).
+  $("cadeauxSubtabs").addEventListener("click", e => {
+    const btn = e.target.closest(".subview-btn");
+    if (btn) { state.cadeauxSub = btn.dataset.cadsub; render(); }
+  });
+  // Cadeaux › À faire : ajouter une liste racine.
+  const submitGiftTodo = () => {
+    const raw = $("giftTodoInput").value.trim();
+    if (!raw) return;
+    addListRoot(GIFT_TODO_LIST, raw);
+    $("giftTodoInput").value = "";
+    render();
+  };
+  $("giftTodoAdd").addEventListener("click", submitGiftTodo);
+  onEnter($("giftTodoInput"), submitGiftTodo);
+  // Cadeaux › À faire : glisser une carte racine → réordonner (bords) ou imbriquer (centre), comme la
+  // vue Todo / la liste d'un projet. Cocher/supprimer/ajouter-sous-tâche passent par la délégation
+  // .main (les cartes y sont incluses) ; deleteTask affiche déjà le toast « Annuler ».
+  makeDraggable($("giftTodoList"), {
+    getItem(e) {
+      if (e.target.closest("button, input, select, .checkbox, .task-del, .task-chevron, .task-addsub")) return null;
+      const row = e.target.closest(".task-row");
+      if (!row) return null;
+      const task = getTask(row.dataset.id);
+      if (!task || task.parentTaskId != null) return null;   // racines uniquement
+      return row.closest(".task");
+    },
+    freeMove(x, y) { freeNestMove(x, y); return true; },
+    freeDrop() { freeNestDrop(); return true; },
+    persist(itemEl) { state.tasks = reorderFromDOM(state.tasks, "#giftTodoList > .task"); db.save(); }
   });
 
   // Cadeaux : déplier/replier une carte, cocher « offert » / supprimer une idée (délégation).
