@@ -1387,7 +1387,6 @@
     <div class="todo-tabs" id="todoTabs">
       <button class="subview-btn" data-todotab="all">Toutes</button>
       <button class="subview-btn" data-todotab="recur">🔁 Récurrentes</button>
-      <button class="subview-btn" data-todotab="bday">🎂 Anniversaires</button>
     </div>
 
     <!-- Sous-onglets des vues-listes (ex. Affaires/Voyages), remplis dynamiquement -->
@@ -1456,18 +1455,27 @@
     </div>
 
     <div class="contacts-view" id="contactsView">
-      <div class="contacts-bar">
-        <input class="quick-input" id="contactAddInput" type="text" placeholder="Nom du nouveau contact…" autocomplete="off">
-        <button class="quick-submit" id="contactAdd">+ Contact</button>
-        <button class="contacts-import-btn" id="contactImport" type="button" title="Importer des contacts depuis un fichier CSV (export Google Contacts ou compatible)">⬆ Importer un CSV</button>
-        <button class="contacts-import-btn" id="contactExport" type="button" title="Exporter tous les contacts dans un fichier CSV (réimportable ici ou dans Google Contacts)">⬇ Exporter un CSV</button>
-        <input type="file" id="contactCsvInput" accept=".csv,text/csv" hidden>
+      <div class="subview-tabs" id="contactsSubtabs">
+        <button class="subview-btn" data-consub="contacts" type="button">🧑 Contacts</button>
+        <button class="subview-btn" data-consub="birthdays" type="button">🎂 Anniversaires</button>
       </div>
-      <div class="search-box contacts-search">
-        <span class="search-icon">🔍</span>
-        <input class="search-input" id="contactSearch" type="text" placeholder="Rechercher un contact…" autocomplete="off">
+      <div id="contactsListPane">
+        <div class="contacts-bar">
+          <input class="quick-input" id="contactAddInput" type="text" placeholder="Nom du nouveau contact…" autocomplete="off">
+          <button class="quick-submit" id="contactAdd">+ Contact</button>
+          <button class="contacts-import-btn" id="contactImport" type="button" title="Importer des contacts depuis un fichier CSV (export Google Contacts ou compatible)">⬆ Importer un CSV</button>
+          <button class="contacts-import-btn" id="contactExport" type="button" title="Exporter tous les contacts dans un fichier CSV (réimportable ici ou dans Google Contacts)">⬇ Exporter un CSV</button>
+          <input type="file" id="contactCsvInput" accept=".csv,text/csv" hidden>
+        </div>
+        <div class="search-box contacts-search">
+          <span class="search-icon">🔍</span>
+          <input class="search-input" id="contactSearch" type="text" placeholder="Rechercher un contact…" autocomplete="off">
+        </div>
+        <ul class="contact-list" id="contactList"></ul>
       </div>
-      <ul class="contact-list" id="contactList"></ul>
+      <div id="contactsBdayPane">
+        <ul class="contact-list" id="contactsBdayList"></ul>
+      </div>
     </div>
 
     <div class="week-view" id="weekView">
@@ -1800,6 +1808,7 @@ let state = {
   projSub: "eisen",       // sous-vue du projet par défaut : "eisen" (matrice) ou "list"
   projectsTab: "active",  // onglet de la vue Projets : "active" (tableau) ou "done" (terminés)
   contactSearch: "",      // texte de recherche dans la vue Contacts
+  contactsSub: "contacts", // sous-vue Contacts active : "contacts" (liste) ou "birthdays" (anniversaires)
   weekAnchor: null,       // début (ms) de la semaine affichée dans Prochainement (null = aujourd'hui)
   expandedTasks: new Set(),  // ids dépliés dans le Todo (tout est replié par défaut)
   expandedWeek: new Set(),   // ids dépliés dans la vue Prochainement (indépendant du Todo)
@@ -2774,13 +2783,9 @@ function render() {
   if (todoView) {
     setActiveTab($("todoTabs"), "todotab", state.todoTab);
     const recur = state.todoTab === "recur";
-    const bday = state.todoTab === "bday";
     // Onglet Récurrentes : pas de tri par création (on bascule sur échéance le cas échéant)
     $("sortSelect").querySelector('option[value="created"]').hidden = recur;
     if (recur && state.sort === "created") { state.sort = "due"; $("sortSelect").value = "due"; }
-    // Onglet Anniversaires : ni tri ni saisie rapide (ce sont des contacts, pas des tâches)
-    $("toolbar").style.display = bday ? "none" : "flex";
-    document.querySelector(".quick-add").style.display = bday ? "none" : "block";
   }
 
   // Compteurs : Todo compte les racines (cohérent avec l'affichage) ; Aujourd'hui compte toute échéance du jour
@@ -2865,17 +2870,6 @@ function renderTasksInto(ul, tasks, emptyHtml, flat = false) {
 
 function renderList() {
   const ul = $("taskList");
-  // Onglet Anniversaires (vue Todo) : tous les anniversaires à venir, triés du plus proche au plus lointain.
-  if (state.view === "todo" && state.todoTab === "bday") {
-    const list = upcomingBirthdays();
-    if (list.length === 0) {
-      renderTasksInto(ul, [], `<div class="big">🎂</div>Aucun anniversaire. Ajoute des dates dans la vue Contacts.`, false);
-      return;
-    }
-    ul.innerHTML = "";
-    list.forEach(b => ul.appendChild(birthdayCard(b, true)));
-    return;
-  }
   const tasks = visibleTasks();
   const isToday = state.view === "today";
   // Aujourd'hui : anniversaires du jour + rappel vaccin si l'échéance approche (~2 mois) ou est dépassée.
@@ -3800,6 +3794,13 @@ function submitWeekAdd() {
 }
 
 function renderContacts() {
+  // Bascule Contacts (liste) / Anniversaires (à venir, triés du plus proche au plus lointain).
+  setActiveTab($("contactsSubtabs"), "consub", state.contactsSub);
+  const bday = state.contactsSub === "birthdays";
+  $("contactsListPane").style.display = bday ? "none" : "block";
+  $("contactsBdayPane").style.display = bday ? "block" : "none";
+  if (bday) { renderContactsBirthdays(); return; }
+
   const q = state.contactSearch.trim().toLowerCase();
   const list = [...state.contacts]
     .filter(c => !q || c.name.toLowerCase().includes(q))
@@ -3817,6 +3818,23 @@ function renderContacts() {
   } else {
     list.forEach(c => ul.appendChild(contactCard(c)));
   }
+}
+
+// Sous-vue Contacts › Anniversaires : tous les anniversaires à venir (du plus proche au plus lointain).
+// Le rond marque « souhaité » (data-action="bday-done", géré par la délégation .main) et renvoie à l'an
+// prochain. Mêmes cartes que la vue Prochainement (birthdayCard). Ne s'affiche plus dans la vue Todo.
+function renderContactsBirthdays() {
+  const ul = $("contactsBdayList");
+  ul.innerHTML = "";
+  const list = upcomingBirthdays();
+  if (list.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.innerHTML = `<div class="big">🎂</div>Aucun anniversaire. Ajoute une date dans une fiche contact.`;
+    ul.appendChild(empty);
+    return;
+  }
+  list.forEach(b => ul.appendChild(birthdayCard(b, true)));
 }
 
 /* =========================================================
@@ -6079,6 +6097,11 @@ function bindEvents() {
   onEnter($("projTaskInput"), addProjectTaskFromInput);
 
   // Vue Contacts
+  // Bascule entre les sous-vues « Contacts » (liste) et « Anniversaires » (à venir).
+  $("contactsSubtabs").addEventListener("click", e => {
+    const btn = e.target.closest(".subview-btn");
+    if (btn) { state.contactsSub = btn.dataset.consub; render(); }
+  });
   $("contactSearch").addEventListener("input", e => {
     state.contactSearch = e.target.value;
     renderContacts();   // on ne redessine que la liste (le champ garde le focus)
