@@ -2070,7 +2070,9 @@ const LIST_VIEWS = {
   cadeauxfaire: {
     icon: "🎁", title: "À faire", sub: "", shape: "checklist",
     addRootPlaceholder: "Nouvelle liste (ex : Noël, anniv. de Papa)…",
-    emptyIcon: "🎁", emptyText: "Aucune liste. Ajoutes-en une ci-dessus, puis empile des sous-éléments (jusqu'à 3 niveaux)."
+    emptyIcon: "🎁", emptyText: "Aucune liste. Ajoutes-en une ci-dessus, puis empile des sous-éléments (jusqu'à 3 niveaux).",
+    sortDone: true,          // à chaque niveau : les éléments cochés descendent en bas
+    doneRecentLast: true     // le dernier coché passe en toute dernière position (cf. doneComparator)
   }
 };
 const listConfig = view => LIST_VIEWS[view] || null;           // config d'une vue-liste (ou null)
@@ -2621,11 +2623,7 @@ function taskTreeRows(task, depth, ancestorContinues = [], isLast = false) {
     let kids = childTasks(task.id);
     // Vue-liste avec sortDone (Idées/Notes/Autres) : sous-éléments cochés envoyés en bas.
     const lr = listRootOf(task);
-    if (lr && listConfig(lr.list).sortDone) kids = [...kids].sort((a, b) => {
-      if (!!a.completed !== !!b.completed) return a.completed ? 1 : -1;      // non cochés en haut
-      if (a.completed) return (b.completedAt || 0) - (a.completedAt || 0);   // cochés : le + récemment coché en tête
-      return 0;                                                             // non cochés : ordre manuel (drag), stable
-    });
+    if (lr && listConfig(lr.list).sortDone) kids = [...kids].sort((a, b) => doneComparator(a, b, listConfig(lr.list).doneRecentLast));
     // Recherche de produits sous le nom du rayon (config itemSearch, ex. courses).
     // On rend TOUS les produits ; le filtrage est appliqué en DOM (applyRowSearch), au render
     // comme à la frappe → la liste complète reste toujours présente (pas de désync à l'effacement).
@@ -2646,6 +2644,16 @@ function taskTreeRows(task, depth, ancestorContinues = [], isLast = false) {
     }
   }
   return html;
+}
+
+// Tri « cochés en bas » (vues-listes sortDone). Non cochés d'abord, en gardant leur ordre manuel
+// (drag) stable. Parmi les cochés : recentLast=false (Courses/Idées) = le + récemment coché en TÊTE
+// du groupe ; recentLast=true (Cadeaux › À faire) = le + récemment coché en DERNIÈRE position.
+function doneComparator(a, b, recentLast = false) {
+  if (!!a.completed !== !!b.completed) return a.completed ? 1 : -1;
+  if (a.completed) return recentLast ? (a.completedAt || 0) - (b.completedAt || 0)
+                                     : (b.completedAt || 0) - (a.completedAt || 0);
+  return 0;
 }
 
 // Carte d'une tâche racine : un seul contour qui englobe la racine ET ses sous-tâches.
@@ -3149,18 +3157,26 @@ function setCompletedDeep(taskId, done) {
 }
 
 // Recalcule l'état d'une tâche d'après ses enfants, puis remonte vers les parents.
-// Choix user (23/06/2026) : un parent NE se termine PLUS automatiquement quand tous ses enfants
-// sont cochés — il reste visible avec sa progression (ex. 2/2), et c'est l'utilisateur qui le
-// coche quand il le juge fini. On garde en revanche l'auto-DÉCOCHE : un parent marqué fait qui a
-// (ou retrouve) un enfant à faire — enfant décoché, nouvelle sous-tâche ajoutée — ne peut plus
-// rester "fait". (Les rayons de courses, isListRoot, ne sont jamais touchés ici.)
+// Auto-DÉCOCHE (PARTOUT) : un parent marqué fait qui a (ou retrouve) un enfant à faire — enfant
+// décoché, nouvelle sous-tâche — ne peut plus rester "fait".
+// Auto-COCHE : UNIQUEMENT la checklist Cadeaux › À faire (isChecklistTask). Quand toutes ses
+// sous-tâches sont cochées, la tâche du dessus se coche automatiquement (et remonte en cascade).
+// Choix user (23/06/2026) : AILLEURS (Todo, agenda) un parent ne s'auto-termine PAS — il reste
+// visible avec sa progression et c'est l'utilisateur qui le coche. (Les catégories de courses,
+// isListRoot en mode "tree", ne sont jamais touchées ici.)
 function refreshCompletionUpwards(taskId) {
   const task = getTask(taskId);
   if (!task) return;
   const kids = childTasks(taskId);
-  if (kids.length > 0 && !isListRoot(task) && task.completed && !kids.every(k => k.completed)) {
-    task.completed = false;
-    task.completedAt = null;
+  if (kids.length > 0 && (!isListRoot(task) || isChecklistTask(task))) {
+    const allDone = kids.every(k => k.completed);
+    if (task.completed && !allDone) {                                  // auto-décoche (partout)
+      task.completed = false;
+      task.completedAt = null;
+    } else if (!task.completed && allDone && isChecklistTask(task)) {   // auto-coche (checklist seulement)
+      task.completed = true;
+      task.completedAt = Date.now();
+    }
   }
   if (task.parentTaskId) refreshCompletionUpwards(task.parentTaskId);
 }
@@ -3952,7 +3968,8 @@ function renderCadeaux() {
 // drag = réordonner/imbriquer). Scopé via list:"cadeauxfaire" → exclu du Todo et de l'agenda.
 function renderGiftTodo() {
   const cfg = listConfig(GIFT_TODO_LIST);
-  const roots = state.tasks.filter(t => isListRoot(t) && t.list === GIFT_TODO_LIST);
+  const roots = state.tasks.filter(t => isListRoot(t) && t.list === GIFT_TODO_LIST)
+    .sort((a, b) => doneComparator(a, b, cfg.doneRecentLast));   // listes cochées en dernière position
   renderTasksInto($("giftTodoList"), roots, `<div class="big">${cfg.emptyIcon}</div>${esc(cfg.emptyText)}`, false);
 }
 
