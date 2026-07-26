@@ -693,7 +693,7 @@
     cursor: pointer; padding: 4px 6px; border-radius: 8px; transition: background .15s;
   }
   .contact-proj:hover { background: var(--bg); }
-  .contact-none { font-size: 13px; color: var(--muted); margin-top: 6px; font-style: italic; }
+  .contact-giftcount { font-size: 13px; color: var(--muted); margin-top: 8px; display: inline-flex; align-items: center; gap: 5px; }
   .contact-card { cursor: pointer; transition: border-color .15s; }
   .contact-card:hover { border-color: var(--accent); }
   .contact-bday-show { font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
@@ -724,6 +724,22 @@
     font-family: inherit; font-size: 14px; padding: 4px 0; display: inline-flex; align-items: center; gap: 4px;
   }
   .ce-add:hover { text-decoration: underline; }
+  /* Projets délégués + idées de cadeau (lecture seule, bas de la fiche) */
+  #ceLinked:not(:empty) { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border); }
+  #ceLinked .ce-section:first-child { margin-top: 0; }
+  .ce-linked-list { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ce-linked-chip {
+    font-size: 13px; color: var(--text); background: var(--bg);
+    border: 1px solid var(--border); border-radius: 999px; padding: 4px 11px;
+    display: inline-flex; align-items: center; gap: 5px; max-width: 100%;
+  }
+  .ce-linked-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ce-gift-list { display: flex; flex-direction: column; gap: 4px; }
+  .ce-gift {
+    font-size: 14px; color: var(--text); background: var(--bg);
+    border-radius: 8px; padding: 6px 11px; word-break: break-word;
+  }
+  .ce-gift.done { color: var(--muted); text-decoration: line-through; }
 
   /* ===== VUE VACCINS ===== */
   .vaccines-view { display: none; max-width: 580px; }
@@ -1613,6 +1629,7 @@
         <div class="ce-rows" id="ceEmails"></div>
         <button class="ce-add" id="ceAddEmail" type="button"><span>+</span> Ajouter un e-mail</button>
       </div>
+      <div id="ceLinked"></div>
       <button class="editor-delete" id="ceDelete">🗑 Supprimer le contact</button>
     </div>
   </div>
@@ -3495,14 +3512,21 @@ function contactCard(contact) {
 
   // Projets délégués à ce contact
   const projects = state.projects.filter(p => p.status === "delegue" && p.assigneeId === contact.id);
+  const giftCount = contactGifts(contact).length;
   const bday = formatBirthday(contact.birthday);
   // Les téléphones / e-mails ne sont PAS affichés sur la carte : seulement dans la fiche (à l'ouverture).
 
+  // Projets : affichés seulement s'il y en a (sinon rien).
   const projectsHtml = projects.length === 0
-    ? `<div class="contact-none">Aucun projet délégué</div>`
+    ? ""
     : `<div class="contact-projects">` + projects.map(p =>
         `<div class="contact-proj" data-proj="${p.id}"><span>${esc(p.icon || DEFAULT_PROJECT_ICON)}</span> ${esc(p.name)}</div>`
       ).join("") + `</div>`;
+
+  // Nombre d'idées de cadeau, sous les projets (seulement s'il y en a).
+  const giftHtml = giftCount === 0
+    ? ""
+    : `<div class="contact-giftcount">🎁 ${giftCount} idée${giftCount > 1 ? "s" : ""} de cadeau</div>`;
 
   li.innerHTML = `
     <div class="contact-head">
@@ -3511,6 +3535,7 @@ function contactCard(contact) {
       <button class="contact-del" type="button" data-action="del" aria-label="Supprimer">×</button>
     </div>
     ${projectsHtml}
+    ${giftHtml}
   `;
   return li;
 }
@@ -6225,6 +6250,29 @@ function readContactRows(container) {
     value: row.querySelector(".ce-row-value").value.trim()
   })).filter(r => r.value);
 }
+// Bas de la fiche (lecture seule) : projets délégués puis idées de cadeau.
+// Chaque bloc n'apparaît que s'il a du contenu ; #ceLinked vide => pas de séparateur (CSS :empty).
+function contactLinkedHtml(c) {
+  const projects = state.projects.filter(p => p.status === "delegue" && p.assigneeId === c.id);
+  const gifts = contactGifts(c);
+  let html = "";
+  if (projects.length) {
+    html += `<div class="ce-section">
+      <div class="ce-label">🗂️ Projet${projects.length > 1 ? "s" : ""} délégué${projects.length > 1 ? "s" : ""}</div>
+      <div class="ce-linked-list">` +
+      projects.map(p => `<span class="ce-linked-chip">${esc(p.icon || DEFAULT_PROJECT_ICON)} <span>${esc(p.name)}</span></span>`).join("") +
+      `</div></div>`;
+  }
+  if (gifts.length) {
+    html += `<div class="ce-section">
+      <div class="ce-label">🎁 ${gifts.length} idée${gifts.length > 1 ? "s" : ""} de cadeau</div>
+      <div class="ce-gift-list">` +
+      gifts.map(g => `<div class="ce-gift${g.done ? " done" : ""}">${esc(g.title)}</div>`).join("") +
+      `</div></div>`;
+  }
+  return html;
+}
+
 function openContactEditor(id) {
   const c = getContact(id);
   if (!c) return;
@@ -6233,6 +6281,7 @@ function openContactEditor(id) {
   $("ceBday").value = c.birthday ? c.birthday.split("-").reverse().join("/") : "";
   $("cePhones").innerHTML = (c.phones || []).map(p => contactRowHtml(p, "Numéro")).join("");
   $("ceEmails").innerHTML = (c.emails || []).map(p => contactRowHtml(p, "Adresse e-mail")).join("");
+  $("ceLinked").innerHTML = contactLinkedHtml(c);
   setOverlay("contactOverlay", true);
   $("ceName").focus();
 }
