@@ -430,6 +430,9 @@ parent rouvert). Motivation : en agenda, cocher la dernière sous-tâche faisait
 (auto-terminé → masqué), donc on ne voyait jamais « la sous-tâche cochée sous le parent ». Vérifié
 en preview (4 cas : check sous-tâche, check parent manuel = cascade, uncheck sous-tâche = auto-décoche,
 addSubtask sur parent fini = rouvre). Ne PAS rétablir l'auto-complétion sans accord.
+➡️ **Exception validée (lot 11)** : la **checklist Cadeaux › À faire** (`isChecklistTask`) fait
+EXCEPTION — le parent s'y auto-coche quand tous ses enfants sont cochés. La règle ci-dessus reste
+la norme partout ailleurs (Todo, agenda).
 
 ## Nettoyage/maintenabilité (lot 10, fait)
 Audit complet (script ad hoc : fonctions/constantes/ids définis vs référencés, classes CSS,
@@ -444,6 +447,41 @@ quasi aucune duplication. Changements appliqués (sûrs, vérifiés en preview) 
 - Nombres calendaires (28-31, 365) laissés inline (plus lisibles que des constantes). Les deux
   pickers (étiquettes vs `createPicker`) partagent ~4 lignes de boilerplate : non factorisés
   (concerns distincts, gain < risque — prudence lot 5).
+
+## Cadeaux (sous-vues) + Contacts/Anniversaires + checklist (lot 11, fait)
+- **Contacts — carte épurée** : plus de « Aucun projet délégué » (les projets ne s'affichent que
+  s'il y en a) ; sous les projets, compteur `🎁 N idée(s) de cadeau` (masqué si 0). **Fiche contact** :
+  bloc lecture seule en bas (juste au-dessus de Supprimer, séparé par un liseré via `#ceLinked:not(:empty)`)
+  = projets délégués (puces) + liste des idées de cadeau (offertes barrées). `contactLinkedHtml(c)`.
+- **Vue Cadeaux = 2 sous-vues** (onglets `.subview-tabs` `#cadeauxSubtabs`, `state.cadeauxSub`) :
+  **💡 Idées** (l'existant par personne) et **✅ À faire** (nouveau). Panneaux `#cadeauxIdeesPane` /
+  `#cadeauxFairePane` montrés/masqués dans `renderCadeaux`.
+- **Sous-vue « À faire » = checklist imbriquée** (racine → 2 sous-niveaux, `MAX_TASK_DEPTH=3`),
+  **plusieurs racines**, **tout cochable**. Réutilise le moteur de tâches via un **nouveau `shape:"checklist"`**
+  dans `LIST_VIEWS` (clé `cadeauxfaire`, `GIFT_TODO_LIST`, PAS une vue de nav) → exclu du Todo/agenda
+  comme toute vue-liste (`isListView` vrai) mais **case + nesting partout**. Helper `isChecklistTask`.
+  Généralisations : `canAddChild` (nesting jusqu'à MAX pour checklist), `addSubtask` (autorisé sous une
+  checklist). Rendu **manuel** dans `#cadeauxView` (`renderGiftTodo` → `renderTasksInto($("giftTodoList"),…)`).
+  Cocher/×(undo)/+ passent par la délégation `.main` (le conteneur y est inclus). Renommer = double-clic.
+- **Drag & drop dédié `#giftTodoList`** (racines ET sous-tâches, tout le sous-arbre suit) : geste appliqué
+  au **drop sur le modèle de données** (`giftMoveSubtree` réordonne un bloc contigu de `state.tasks`) →
+  ordre **réellement persisté** (l'ancien chemin partagé `freeNestDrop`/`reorderFromDOM` ne persistait pas
+  ici). Survol d'une ligne : tiers haut = **avant**, tiers bas = **après** (même niveau), centre = **imbriquer**.
+  Garde-fous : profondeur ≤ 3, pas de dépôt dans sa propre descendance. Feedback `.drop-before`/`.drop-after`
+  (+ `.nest-target`/`.nest-forbidden` réutilisés) ; `clearNestFeedback` étendu ; `giftDragMove`/`giftDragDrop`.
+- **Cochés en bas + auto-cochage (checklist)** : à chaque niveau, un élément coché descend en **dernière
+  position** (racines triées dans `renderGiftTodo`, sous-tâches via `sortDone` de `taskTreeRows`).
+  Comparateur factorisé `doneComparator(a,b,recentLast)` : `recentLast=true` (checklist, `doneRecentLast`)
+  = dernier coché en dernier ; `recentLast=false` (Courses/Idées, inchangé) = dernier coché en tête.
+  **Auto-cochage du parent** quand tous ses enfants sont cochés, en **cascade** (auto-décochage symétrique) —
+  `refreshCompletionUpwards` gère les 2 sens, garde-fou `isListRoot` relâché pour les racines checklist,
+  auto-coche **gated `isChecklistTask`** (cf. exception de la décision du 23/06 ci-dessus).
+- **Anniversaires déplacés Todo → Contacts** : l'onglet Todo `bday` est supprimé (HTML `#todoTabs`,
+  logique `render`/`renderList`). Nouvelle sous-vue **🎂 Anniversaires** de Contacts (`#contactsSubtabs`,
+  `state.contactsSub`, `renderContactsBirthdays` → `upcomingBirthdays`/`birthdayCard`). Toujours affichés
+  en **Prochainement** et le jour J en **Aujourd'hui** (inchangés).
+- Validé : syntaxe JS OK + tests unitaires de la logique (déplacement de sous-arbre, auto-cochage en
+  cascade, tris) via node/`vm`. Commits `322118f`, `aeba796`, `3188dc2`, `f31d8a6`, `70261e8`.
 
 ## Règles de collaboration
 - **Committer + pusher systématiquement à la fin de chaque lot de modifs** (demande permanente
