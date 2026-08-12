@@ -1,2 +1,20 @@
 # Outillage local Claude Code (ne pas publier sur GitHub)
 .claude/
+
+# Secrets : NE JAMAIS COMMITTER
+# (notamment la cle du Firebase Admin SDK prevue pour le script local)
+serviceAccountKey.json
+*serviceAccount*.json
+.env
+.env.*
+jeton*
+*token*.txt
+*.pem
+*.key
+
+# Dependances / OS / editeurs
+node_modules/
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
