@@ -11,17 +11,19 @@
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #fafafa;
+    --bg: #F4F6F9;
     --text: #2C3E50;
     --accent: #4A6FA5;
-    --success: #2D936C;
+    --accent-text: #4A6FA5;  /* accent en TEXTE : doit s'eclaircir la nuit (cf. body.dark) */
+    --success: #2D936C;      /* vert d'etat : coche, echeance du jour, ET cadre de survol */
+    --on-success: #fff;      /* glyphe pose SUR un aplat vert */
     --alert: #E07A5F;
     --red-strong: #D62828;   /* rouge appuyé partagé : MIT + priorité « Faire » (urgent + important) */
     --warning: #F2CC8F;
     --muted: #6b7280;        /* gris secondaire — assombri pour passer AA 4,5:1 (était #888 ≈ 3,3:1) */
     --card: #fff;
-    --border: #ececec;
-    --hover: #fcfcfc;
+    --border: #E6EAF0;
+    --hover: #F9FAFC;
     --radius: 14px;
     --shadow: 0 1px 3px rgba(0,0,0,.06), 0 1px 2px rgba(0,0,0,.04);
 
@@ -49,6 +51,13 @@
     --muted: #94a3b8;        /* gris secondaire (nuit) — éclairci pour passer AA 4,5:1 (était #64748b ≈ 3,6:1) */
     --border: #1e293b;
     --hover: #1a2438;
+    /* Le bleu de remplissage ne bouge pas (du blanc dessus donne 5,1:1), mais
+       en TEXTE sur ce fond #4A6FA5 ne donne que 3,7:1 : il faut l'eclaircir.
+       Meme raison pour le vert, qui monte de 4,5:1 a 7,5:1, d'ou une coche
+       sombre plutot que blanche sur l'aplat devenu clair. */
+    --accent-text: #7FA3D8;
+    --success: #6fb39d;
+    --on-success: #0b1120;
     --red-strong: #F26D6D;   /* rouge appuyé éclairci pour rester lisible sur fond sombre */
     --shadow: 0 1px 3px rgba(0,0,0,.4);
   }
@@ -126,7 +135,7 @@
     padding: 6px 8px; border-radius: 8px; transition: all .15s;
   }
   .espace-opt:hover { color: var(--text); }
-  .espace-opt.active { background: var(--card); color: var(--accent); box-shadow: var(--shadow); }
+  .espace-opt.active { background: var(--card); color: var(--accent-text); box-shadow: var(--shadow); }
 
   .nav-item {
     display: flex; align-items: center; gap: 12px;
@@ -174,7 +183,7 @@
     display: flex; align-items: center; gap: 6px; margin-top: 10px; color: var(--muted);
     border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; transition: border-color .15s;
   }
-  .gift-addrow:hover { border-color: var(--accent); }
+  .gift-addrow:hover { border-color: var(--success); }
   .gift-addrow:focus-within { border-color: var(--accent); }
   .gift-add-input { flex: 1; font-family: inherit; font-size: 14px; border: none; background: none; color: var(--text); padding: 2px 0; }
   .gift-add-input:focus { outline: none; }
@@ -352,7 +361,7 @@
   .checkbox:hover { transform: scale(1.1); }
   .checkbox::after {
     content: '✓'; position: absolute; inset: 0; display: grid; place-items: center;
-    color: #fff; font-size: 12px; opacity: 0; transition: opacity .15s;
+    color: var(--on-success); font-size: 12px; opacity: 0; transition: opacity .15s;
   }
   .task-row.done .checkbox { background: var(--success); border-color: var(--success); }
   .task-row.done .checkbox::after { opacity: 1; }
@@ -387,7 +396,7 @@
     opacity: 0; background: none; border: none; cursor: pointer;
     align-self: center; padding: 0 4px; flex-shrink: 0; transition: opacity .2s;
   }
-  .task-addsub .plus-sm { font-size: 16px; font-weight: 600; line-height: 1; color: var(--accent); }
+  .task-addsub .plus-sm { font-size: 16px; font-weight: 600; line-height: 1; color: var(--accent-text); }
   .task-row:hover .task-addsub { opacity: 1; }
   .task-addsub-zone { padding: 0 14px 12px calc(48px + var(--depth, 0) * 22px); }
   .task-addsub-input {
@@ -410,7 +419,7 @@
     transition: opacity .2s, color .2s;
   }
   .task-row:hover .task-edit { opacity: 1; }
-  .task-edit:hover { color: var(--accent); }
+  .task-edit:hover { color: var(--accent-text); }
   .task-title[contenteditable="true"] { outline: none; cursor: text; border-bottom: 1px dashed var(--accent); }
   .rayon-count { color: var(--muted); font-size: 13px; font-weight: 400; flex-shrink: 0; }
 
@@ -552,7 +561,7 @@
     background: var(--card); border: 1px solid var(--border); border-radius: 8px;
     padding: 3px 6px; cursor: pointer; max-width: 130px; align-self: center;
   }
-  .genre-select:hover { border-color: var(--accent); color: var(--text); }
+  .genre-select:hover { border-color: var(--success); color: var(--text); }
   /* Bouton « Tout décocher » d'une vue-liste (poussé à droite de la barre de sous-onglets) */
   .list-reset {
     margin-left: auto; font-family: inherit; font-size: 13px; cursor: pointer;
@@ -568,7 +577,7 @@
     background: var(--card); color: var(--muted); border: 1px solid var(--border);
     border-radius: 20px; padding: 5px 12px; transition: all .15s;
   }
-  .list-add-chip:hover { border-color: var(--accent); color: var(--text); }
+  .list-add-chip:hover { border-color: var(--success); color: var(--text); }
   .list-add-chip.on { background: var(--accent); color: #fff; border-color: var(--accent); }
   /* Recherche dans une vue-liste (réutilise .search-box / .search-input des contacts) */
   .list-search { margin-bottom: 16px; max-width: 420px; }
@@ -585,7 +594,7 @@
     background: var(--bg); border: 1px solid var(--border); border-radius: 12px;
     padding: 12px; cursor: grab; touch-action: pan-y; transition: background .15s;
   }
-  .proj-card:hover { border-color: var(--accent); }
+  .proj-card:hover { border-color: var(--success); }
   .proj-card.dragging { opacity: .35; pointer-events: none; }
   .proj-head { display: flex; align-items: center; gap: 8px; }
   .proj-icon { font-size: 18px; flex-shrink: 0; }
@@ -615,7 +624,7 @@
     font-family: inherit; font-size: 13px; padding: 4px; border-radius: 8px;
     transition: color .15s;
   }
-  .proj-add:hover { color: var(--accent); }
+  .proj-add:hover { color: var(--accent-text); }
   .proj-add .plus-sm { font-size: 16px; font-weight: 600; line-height: 1; color: var(--proj-color, var(--accent)); }
 
   .col-add { margin-top: 10px; }
@@ -625,7 +634,7 @@
     font-family: inherit; font-size: 14px; padding: 6px; border-radius: 8px;
     transition: color .15s;
   }
-  .col-add-btn:hover { color: var(--accent); }
+  .col-add-btn:hover { color: var(--accent-text); }
   .col-add-btn .plus-sm { font-size: 18px; font-weight: 600; line-height: 1; }
   .st-pas_commence .col-add-btn .plus-sm { color: var(--st-pas_commence); }
   .st-delegue .col-add-btn .plus-sm { color: var(--st-delegue); }
@@ -674,7 +683,7 @@
     border: 1px solid var(--border); background: var(--card); color: var(--muted);
     transition: background .15s, color .15s, border-color .15s;
   }
-  .contacts-import-btn:hover { background: var(--hover); color: var(--text); border-color: var(--accent); }
+  .contacts-import-btn:hover { background: var(--hover); color: var(--text); border-color: var(--success); }
   .contacts-search { margin-bottom: 20px; }
   .search-box { flex: 1; position: relative; display: flex; align-items: center; }
   .search-icon { position: absolute; left: 12px; font-size: 14px; opacity: .6; pointer-events: none; }
@@ -706,7 +715,7 @@
   .contact-proj:hover { background: var(--bg); }
   .contact-giftcount { font-size: 13px; color: var(--muted); margin-top: 8px; display: inline-flex; align-items: center; gap: 5px; }
   .contact-card { cursor: pointer; transition: border-color .15s; }
-  .contact-card:hover { border-color: var(--accent); }
+  .contact-card:hover { border-color: var(--success); }
   .contact-bday-show { font-size: 13px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
 
   /* ===== FICHE CONTACT (modale) ===== */
@@ -731,7 +740,7 @@
   }
   .ce-row-del:hover { color: var(--alert); }
   .ce-add {
-    margin-top: 8px; background: none; border: none; cursor: pointer; color: var(--accent);
+    margin-top: 8px; background: none; border: none; cursor: pointer; color: var(--accent-text);
     font-family: inherit; font-size: 14px; padding: 4px 0; display: inline-flex; align-items: center; gap: 4px;
   }
   .ce-add:hover { text-decoration: underline; }
@@ -783,7 +792,7 @@
   .vac-ms-age { font-weight: 600; font-size: 14px; width: 64px; flex-shrink: 0; }
   .vac-milestone.done .vac-ms-age, .vac-milestone.done .vac-ms-date { color: var(--muted); }
   .vac-ms-date { font-size: 13px; color: var(--muted); flex: 1; }
-  .vac-ms-tag { font-size: 11px; font-weight: 600; color: var(--accent); background: rgba(74,111,165,.1); border-radius: 8px; padding: 1px 7px; flex-shrink: 0; }
+  .vac-ms-tag { font-size: 11px; font-weight: 600; color: var(--accent-text); background: rgba(74,111,165,.1); border-radius: 8px; padding: 1px 7px; flex-shrink: 0; }
 
   /* ===== ÉTIQUETTES (labels) ===== */
   /* Pastille sobre : petit point coloré + nom en texte discret */
@@ -799,7 +808,7 @@
   .picker-option-name { flex: 1; white-space: nowrap; }
   .label-dot-btn { border: none; padding: 0; cursor: pointer; width: 13px; height: 13px; transition: transform .12s; }
   .label-dot-btn:hover { transform: scale(1.25); }
-  .picker-option.picker-create { color: var(--accent); font-weight: 500; }
+  .picker-option.picker-create { color: var(--accent-text); font-weight: 500; }
   /* Bouton étiquettes du quick-add (compact) + panneau élargi pour la lisibilité */
   .quick-labels { width: auto; }
   .quick-labels .picker-trigger { width: auto; border-radius: 20px; padding: 5px 12px; font-size: 13px; gap: 6px; }
@@ -873,7 +882,7 @@
     color: var(--muted); padding: 2px 6px; border-radius: 6px; transition: background .15s, color .15s;
     max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .editor-crumb:hover { background: var(--hover); color: var(--accent); }
+  .editor-crumb:hover { background: var(--hover); color: var(--accent-text); }
   .editor-crumb-sep { color: var(--muted); }
   .editor-side {
     width: 280px; flex-shrink: 0; background: var(--bg);
@@ -926,7 +935,7 @@
   .editor-addsub {
     display: flex; align-items: center; gap: 8px; padding: 10px 0; cursor: pointer; color: var(--muted);
   }
-  .editor-addsub:hover { color: var(--accent); }
+  .editor-addsub:hover { color: var(--accent-text); }
   .editor-addsub-input {
     width: 100%; font-family: inherit; font-size: 14px; color: var(--text); margin-top: 8px;
     border: 1px solid var(--accent); border-radius: 8px; padding: 8px 10px; background: var(--card); outline: none;
@@ -973,7 +982,7 @@
     border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--card);
     transition: border-color .15s;
   }
-  .picker-trigger:hover { border-color: var(--accent); }
+  .picker-trigger:hover { border-color: var(--success); }
   .picker-trigger .picker-caret { color: var(--muted); font-size: 11px; flex-shrink: 0; }
   .picker-value { display: inline-flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .picker-panel {
@@ -1038,7 +1047,7 @@
   }
   .week-nav-btn { width: 34px; height: 34px; font-size: 18px; line-height: 1; }
   .week-today-btn { padding: 0 14px; height: 34px; font-weight: 600; }
-  .week-nav-btn:hover, .week-today-btn:hover { background: var(--hover); border-color: var(--accent); }
+  .week-nav-btn:hover, .week-today-btn:hover { background: var(--hover); border-color: var(--success); }
 
   .week-grid { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 8px; align-items: flex-start; }
   .week-col {
@@ -1082,7 +1091,7 @@
     background: none; border: none; cursor: pointer; padding: 6px 4px;
     display: inline-flex; align-items: center; gap: 6px; border-radius: 8px;
   }
-  .week-add-btn:hover { color: var(--accent); }
+  .week-add-btn:hover { color: var(--accent-text); }
   .week-add-btn .plus-sm { font-size: 16px; font-weight: 600; }
 
   /* Pop-up d'ajout de tâche (Prochainement) */
@@ -1111,7 +1120,7 @@
     border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px;
     background: var(--card); cursor: pointer; transition: border-color .15s;
   }
-  .week-modal-day:hover { border-color: var(--accent); }
+  .week-modal-day:hover { border-color: var(--success); }
   .week-modal .flags { display: flex; gap: 8px; flex-wrap: wrap; }
   .week-modal-foot {
     display: flex; align-items: center; justify-content: space-between; gap: 10px;
@@ -1135,7 +1144,7 @@
     padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px;
     background: var(--card); color: var(--text); cursor: pointer; transition: border-color .15s;
   }
-  .side-date-btn:hover { border-color: var(--accent); }
+  .side-date-btn:hover { border-color: var(--success); }
   .side-date-btn.empty { color: var(--muted); }
   /* Dupliquer une tâche : ouvre le calendrier en multi-sélection (plusieurs dates) */
   .dup-btn {
@@ -1143,7 +1152,7 @@
     border: 1px solid var(--border); border-radius: 10px; background: var(--card); color: var(--text);
     transition: border-color .15s;
   }
-  .dup-btn:hover { border-color: var(--accent); }
+  .dup-btn:hover { border-color: var(--success); }
 
   /* Calendrier réutilisable (sélecteur de date + heure) */
   .cal-scrim {
@@ -1162,7 +1171,7 @@
     font-family: inherit; font-size: 12px; cursor: pointer; background: var(--card);
     color: var(--text); border: 1px solid var(--border); border-radius: 20px; padding: 5px 10px; transition: all .15s;
   }
-  .cal-shortcuts button:hover { border-color: var(--accent); color: var(--accent); }
+  .cal-shortcuts button:hover { border-color: var(--success); color: var(--accent-text); }
   .cal-shortcuts .cal-sc-none { color: var(--muted); margin-left: auto; }
   .cal-head { display: flex; align-items: center; justify-content: space-between; }
   .cal-title { font-size: 14px; font-weight: 600; }
@@ -1170,7 +1179,7 @@
     font-family: inherit; font-size: 13px; cursor: pointer; color: var(--muted);
     background: none; border: none; padding: 4px 8px; border-radius: 8px;
   }
-  .cal-nav:hover { color: var(--accent); background: var(--hover); }
+  .cal-nav:hover { color: var(--accent-text); background: var(--hover); }
   .cal-weekdays, .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
   .cal-weekdays span { text-align: center; font-size: 11px; color: var(--muted); padding: 4px 0; }
   .cal-day {
@@ -1178,7 +1187,7 @@
     border: none; background: none; color: var(--text); border-radius: 8px; transition: background .12s;
   }
   .cal-day:hover { background: var(--hover); }
-  .cal-day.today { color: var(--accent); font-weight: 700; }
+  .cal-day.today { color: var(--accent-text); font-weight: 700; }
   .cal-day.selected { background: var(--accent); color: #fff; }
   .cal-empty { aspect-ratio: 1; }
   .cal-time-row { display: flex; align-items: center; gap: 10px; border-top: 1px solid var(--border); padding-top: 10px; }
