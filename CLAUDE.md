@@ -146,8 +146,7 @@ Idées/Notes/Autres · Vaccins.
 **Toutes les vues prévues sont faites, ET la migration Firebase est faite** (login Google +
 Firestore `onSnapshot` + cache hors-ligne `enablePersistence`, doc-blob par espace
 `users/{uid}/spaces/{pro|perso}`). **Reste :** le **script Claude local** (Firebase Admin SDK,
-décision #3) et, si un jour usage multi-appareils, la **réconciliation par date** au chargement
-(empêcher une copie cloud plus ancienne d'écraser une copie locale plus récente — cf. ci-dessous).
+décision #3). La sécurité multi-appareils est traitée au lot 12 (cf. « Sync multi-appareils »).
 
 ## Persistance Firebase (FAIT — à connaître absolument)
 - `db.save()` : 1) `localStorage` tout de suite ; 2) `spaceRef.set(...)` **débouncé 600 ms**.
@@ -156,11 +155,10 @@ décision #3) et, si un jour usage multi-appareils, la **réconciliation par dat
   dans la fenêtre de 600 ms avant fermeture n'atteignait jamais le cloud, puis `onSnapshot`
   rechargeait la copie cloud plus ancienne et **écrasait** la copie locale → **perte de données**.
   Flag `_pendingWrite` = pas de double écriture.
-- ⚠️ Au chargement, `onSnapshot` **écrase le state avec la copie cloud sans comparer les dates**
-  (le cloud gagne toujours). OK en mono-appareil grâce au flush ci-dessus ; en **multi-appareils**
-  il faudra une réconciliation par `_updatedAt` (suivi non fait).
 - `_lastSync` (stable-stringify) = anti-écho de nos propres écritures ; `enablePersistence` rejoue
   une écriture déjà émise même si le réseau n'a pas répondu avant fermeture.
+- ⚠️ Le comportement « le cloud gagne toujours au chargement » a été **remplacé** au lot 12
+  (il détruisait les données en multi-appareils) — voir la section dédiée plus bas.
 
 Idée d'extension (non faite) : pastille 🎁 sur les cartes d'anniversaire (Today/Anniversaires)
 quand la personne a des idées de cadeaux.
@@ -482,6 +480,43 @@ quasi aucune duplication. Changements appliqués (sûrs, vérifiés en preview) 
   en **Prochainement** et le jour J en **Aujourd'hui** (inchangés).
 - Validé : syntaxe JS OK + tests unitaires de la logique (déplacement de sous-arbre, auto-cochage en
   cascade, tris) via node/`vm`. Commits `322118f`, `aeba796`, `3188dc2`, `f31d8a6`, `70261e8`.
+
+## Sync multi-appareils (lot 12, fait) — ⚠️ SECTION CRITIQUE
+**Bug d'origine (signalé par le user, 2 ordinateurs)** : des modifs faites au bureau
+n'apparaissaient pas le soir sur le portable, et étaient **définitivement perdues**. Le modèle est
+un **document-blob écrit EN ENTIER** (`set`) : sans garde-fous, 4 défauts s'enchaînaient —
+(1) rien n'exigeait d'avoir reçu la version **serveur** avant d'écrire → un appareil rouvert avec un
+cache périmé écrasait tout le document ; (2) `onSnapshot` **jetait** la donnée distante si une
+écriture locale était en attente (`if (_pendingWrite) return`) sans jamais la redemander ;
+(3) un snapshot venant du **cache** (`enablePersistence`) était appliqué comme faisant autorité
+(pas de test `fromCache` dans la branche « doc existe ») ; (4) les échecs d'écriture étaient
+**silencieux** (`console.warn`) → un réseau qui bloque Firestore passait inaperçu.
+
+Invariants à NE PAS casser :
+- **Aucune écriture cloud tant que `_serverSynced` est faux** (gardes dans `db.save` ET
+  `flushFirestore`). C'est LE garde-fou anti-écrasement. Les modifs attendent dans `localStorage`.
+- **Un snapshot `fromCache` ne sert jamais de base d'écriture** (affiché au démarrage, rien de plus).
+- **La donnée distante n'est jamais jetée en silence.** On compare une **empreinte** (`hashStr`) :
+  `_baseRemote` = version du cloud dont l'état local dérive. Cloud == base → nos modifs sont
+  par-dessus, on pousse. Cloud != base + modifs locales → **CONFLIT**.
+- **Conflit = on demande** (modale `#syncOverlay`, `openSyncConflict` / `resolveConflictKeepRemote`
+  / `resolveConflictKeepLocal`). Jamais de résolution automatique. La version écartée part dans
+  `BACKUP_KEY` et est téléchargeable en JSON (`downloadBlob`). Choix user validé (« me demander »).
+- **Mémo persisté `SYNCMETA_KEY`** = `{ base, dirty }`. Indispensable : sans lui, des modifs faites
+  **hors ligne** seraient prises pour « rien à pousser » au lancement suivant et le cloud les
+  écraserait. Relu par `init()` ET `attachSpace()`.
+- **Pastille `#syncPill`** (en-tête) : `ok` / `pending` / `waiting` / `local` / `error` via
+  `setSyncState`. Rend visible tout échec d'écriture. Ne pas la supprimer « pour épurer ».
+
+Limite assumée : pas de fusion par élément (le blob reste global). Deux appareils modifiant
+**en même temps** aboutissent à un conflit tranché par l'utilisateur, pas à une fusion.
+Validé par simulation de la couche de sync (15 cas : bug reproduit avant correctif, arrivée des
+modifs de l'autre appareil, pas de faux conflit en mono-appareil, hors-ligne poussé à la
+reconnexion, vrai conflit signalé). Commit `9c9ae95`.
+
+⚠️ **Piège de diagnostic** : avant de soupçonner la sync, vérifier que les 2 appareils sont sur le
+**même espace** (`?espace=pro` vs défaut `perso` = deux documents Firestore totalement distincts)
+et le **même compte Google** (`users/{uid}`).
 
 ## Règles de collaboration
 - **Committer + pusher systématiquement à la fin de chaque lot de modifs** (demande permanente
