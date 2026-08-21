@@ -508,6 +508,18 @@ Invariants à NE PAS casser :
 - **Pastille `#syncPill`** (en-tête) : `ok` / `pending` / `waiting` / `local` / `error` via
   `setSyncState`. Rend visible tout échec d'écriture. Ne pas la supprimer « pour épurer ».
 
+Helpers de la couche (source unique de chaque motif — les réutiliser, ne pas réécrire l'enchaînement) :
+`markSynced(blobStr)` (aligné sur le cloud : base + dirty + mémo + pastille), `adoptRemote(data)`
+(appliquer une version du cloud : état + migrations + cache), `restoreSyncMeta()` (relit le mémo,
+appelé par `init` ET `attachSpace`), `cacheLocalBlob()` (seule écriture du cache local),
+`writeBackup(blob,tag)` / `backupLocalBlob(tag)`, `downloadBlob(blob,suffix?)` (seul format
+d'export ; `exportData` s'appuie dessus), `flushNow()`, `hashStr()`.
+⚠️ `adoptRemote` remet le **cache local** d'aplomb : sans ça, l'app réaffichait l'ancienne version
+au lancement suivant le temps que le serveur réponde.
+- **Menu ⋯ → « Récupérer la sauvegarde locale »** (`offerLocalBackup`) : ressort la copie de secours
+  et la **télécharge** (non destructif) au lieu de l'appliquer. Sans ce bouton, le filet existait
+  mais restait inaccessible.
+
 Limite assumée : pas de fusion par élément (le blob reste global). Deux appareils modifiant
 **en même temps** aboutissent à un conflit tranché par l'utilisateur, pas à une fusion.
 Validé par simulation de la couche de sync (15 cas : bug reproduit avant correctif, arrivée des
