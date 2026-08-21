@@ -1408,6 +1408,7 @@
             <button type="button" id="exportBtn">⬇️ Exporter (JSON)</button>
             <button type="button" id="importBtn">⬆️ Importer (JSON)</button>
             <button type="button" id="purgeDoneBtn">🧹 Vider les tâches terminées</button>
+            <button type="button" id="restoreBackupBtn">♻️ Récupérer la sauvegarde locale</button>
             <button type="button" id="signOutBtn">🚪 Se déconnecter</button>
           </div>
         </div>
@@ -1954,12 +1955,14 @@ const SYNCMETA_KEY = STORAGE_KEY + "__sync";
 function saveSyncMeta() {
   try { localStorage.setItem(SYNCMETA_KEY, JSON.stringify({ base: _baseRemote, dirty: _localDirty })); } catch {}
 }
-function loadSyncMeta() {
-  try {
-    const m = JSON.parse(localStorage.getItem(SYNCMETA_KEY));
-    if (m && typeof m === "object") return { base: m.base || null, dirty: !!m.dirty };
-  } catch {}
-  return null;
+// Restaure la base de référence + le drapeau « modifs non envoyées » depuis le mémo persisté.
+// Sans mémo (1ʳᵉ fois), le cache local fait office de base et rien n'est réputé en attente.
+function restoreSyncMeta() {
+  let m = null;
+  try { m = JSON.parse(localStorage.getItem(SYNCMETA_KEY)); } catch {}
+  const ok = m && typeof m === "object";
+  _baseRemote = ok ? (m.base || null) : hashStr(stableStr(currentBlob()));
+  _localDirty = ok ? !!m.dirty : false;
 }
 
 // Sérialisation stable (clés triées) : compare 2 blobs indépendamment de l'ordre des clés.
@@ -1976,6 +1979,12 @@ function currentBlob() {
     birthDate: state.birthDate, vaccineDone: state.vaccineDone, labels: state.labels, notes: state.notes,
     mit: state.mit
   };
+}
+// Écrit l'état courant dans le cache local (source unique de cette écriture). Appelé à chaque
+// sauvegarde ET après avoir adopté une version venue du cloud, pour que cache et état ne divergent
+// jamais (sinon, au lancement suivant, l'app réaffiche brièvement l'ancienne version).
+function cacheLocalBlob() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(currentBlob())); } catch {}
 }
 // Recopie un blob normalisé dans le state.
 function applyData(data) {
@@ -2005,16 +2014,16 @@ const db = {
   save() {
     const blob = currentBlob();
     // 1) cache local immédiat : instantané + filet hors-ligne, même non connecté.
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(blob)); } catch {}
+    cacheLocalBlob();
     // 2) écriture Firestore débouncée (uniquement si connecté). Le flush réel est centralisé
     //    dans flushFirestore() pour pouvoir le forcer à la fermeture de l'onglet (cf. listeners).
-    if (!spaceRef) { _localDirty = true; saveSyncMeta(); setSyncState("local"); return; }
     _localDirty = true;
     saveSyncMeta();          // « modifs non envoyées » survit à la fermeture du navigateur
-    // ⚠️ GARDE-FOU MULTI-APPAREILS : tant qu'on n'a pas vu la version SERVEUR de l'espace, on
-    // n'écrit RIEN dans le cloud. Sinon un appareil rouvert avec un cache vieux de plusieurs jours
-    // écraserait (set = document entier) tout ce qu'un autre appareil a fait entre-temps.
-    // Les modifs restent en sécurité dans localStorage et partiront dès la 1ʳᵉ réponse serveur.
+    // ⚠️ GARDE-FOU MULTI-APPAREILS : on n'écrit dans le cloud QUE si on est connecté ET qu'on a
+    // déjà vu la version SERVEUR de l'espace. Sinon un appareil rouvert avec un cache vieux de
+    // plusieurs jours écraserait (set = document entier) tout ce qu'un autre appareil a fait
+    // entre-temps. Les modifs restent dans localStorage et partiront à la 1ʳᵉ réponse serveur.
+    if (!spaceRef) { setSyncState("local"); return; }
     if (!_serverSynced) { setSyncState("waiting"); return; }
     _lastSync = stableStr(blob);                 // ce qu'on s'apprête à pousser → ignore l'écho
     _pendingWrite = true;
@@ -2071,8 +2080,7 @@ function flushFirestore() {
   spaceRef.set({ ...blob, _v: 1, _updatedAt: firebase.firestore.FieldValue.serverTimestamp() })
     .then(() => {
       if (_lastSync !== pushed) return;         // une écriture plus récente a pris le relais
-      _baseRemote = hashStr(pushed); _localDirty = false; saveSyncMeta();
-      setSyncState("ok");
+      markSynced(pushed);
     })
     .catch(e => {
       console.warn("[firebase] échec écriture :", e);
@@ -2093,23 +2101,44 @@ function flushNow() {
   flushFirestore();
 }
 
-// Copie de secours du blob local, gardée à part du cache courant. Posée AVANT d'écraser l'état
-// local par une version venue du cloud → rien n'est jamais définitivement perdu sur cet appareil.
+// L'état local est aligné sur le cloud : `blobStr` (sérialisation de la version commune, ou null
+// si le doc n'existe pas encore) devient la nouvelle base de référence, et il n'y a plus rien en
+// attente. Un seul endroit pour cet enchaînement, utilisé par le flush ET par onSnapshot.
+function markSynced(blobStr) {
+  _baseRemote = blobStr == null ? null : hashStr(blobStr);
+  _localDirty = false;
+  saveSyncMeta();
+  setSyncState("ok");
+}
+
+// Adopte une version venue du cloud : état + migrations éventuelles + cache local remis d'aplomb.
+// Utilisé par onSnapshot ET par la résolution de conflit « garder le cloud ».
+function adoptRemote(data) {
+  applyData(data);
+  migrateNotesToAutres();   // no-op si pas d'anciennes notes
+  migrateMediaGenres();     // titres Multimédia sans genre → Romans / Films
+  cacheLocalBlob();
+}
+
+// Copie de secours, gardée à part du cache courant. Posée AVANT tout écrasement (mise à jour venue
+// du cloud, ou version écartée lors d'un conflit) → rien n'est jamais définitivement perdu ici.
 const BACKUP_KEY = STORAGE_KEY + "__backup";
-function backupLocalBlob(tag) {
+function writeBackup(blob, tag) {
   try {
-    if (isEmptyData(currentBlob())) return;
-    localStorage.setItem(BACKUP_KEY, JSON.stringify({ at: Date.now(), tag, espace: ESPACE, blob: currentBlob() }));
+    if (isEmptyData(blob)) return;
+    localStorage.setItem(BACKUP_KEY, JSON.stringify({ at: Date.now(), tag, espace: ESPACE, blob }));
   } catch {}
 }
-// Télécharge un blob de données en JSON (réimportable via « Importer (JSON) »).
+const backupLocalBlob = tag => writeBackup(currentBlob(), tag);
+// Télécharge un blob de données en JSON (réimportable via « Importer (JSON) »). Source unique du
+// format d'export : utilisé par le bouton « Exporter », les sauvegardes et les versions en conflit.
 function downloadBlob(blob, suffix) {
   const payload = { _app: "todo", _version: 1, _espace: ESPACE, _exportedAt: new Date().toISOString(), ...blob };
   const f = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(f);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `todo-${ESPACE}-${suffix}-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = `todo-${ESPACE}-${suffix ? suffix + "-" : ""}${new Date().toISOString().slice(0, 10)}.json`;
   document.body.appendChild(a); a.click(); a.remove();
   URL.revokeObjectURL(url);
 }
@@ -2164,29 +2193,18 @@ function resolveConflictKeepRemote() {
   const { data, incoming } = _conflictRemote || {};
   if (!data) { closeSyncConflict(); return; }
   backupLocalBlob("conflit-version-locale");
-  _baseRemote = hashStr(incoming);
-  _localDirty = false;
-  saveSyncMeta();
   _pendingWrite = false;
   clearTimeout(_saveTimer); _saveTimer = null;
-  applyData(data);
-  migrateNotesToAutres();
-  migrateMediaGenres();
+  markSynced(incoming);
+  adoptRemote(data);
   closeSyncConflict();
-  setSyncState("ok");
   render();
 }
 // Garde les modifications de cet appareil : on écrase le cloud, après avoir sauvegardé sa version.
 function resolveConflictKeepLocal() {
   const { data, incoming } = _conflictRemote || {};
-  if (data) {
-    try {
-      localStorage.setItem(BACKUP_KEY, JSON.stringify({
-        at: Date.now(), tag: "conflit-version-cloud", espace: ESPACE, blob: data
-      }));
-    } catch {}
-  }
-  _baseRemote = incoming ? hashStr(incoming) : _baseRemote;   // base à jour → plus de conflit
+  writeBackup(data, "conflit-version-cloud");
+  if (incoming) _baseRemote = hashStr(incoming);   // base à jour → notre écriture ne reconflictera pas
   saveSyncMeta();
   closeSyncConflict();
   flushNow();
@@ -6980,21 +6998,7 @@ function initEspaceSwitch() {
 }
 
 // Exporte l'espace courant en fichier JSON (filet de sécurité + sauvegarde manuelle).
-function exportData() {
-  const payload = {
-    _app: "todo", _version: 1, _espace: ESPACE, _exportedAt: new Date().toISOString(),
-    tasks: state.tasks, projects: state.projects, contacts: state.contacts,
-    birthDate: state.birthDate, vaccineDone: state.vaccineDone, labels: state.labels,
-    notes: state.notes, mit: state.mit
-  };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `todo-${ESPACE}-${new Date().toISOString().slice(0, 10)}.json`;
-  document.body.appendChild(a); a.click(); a.remove();
-  URL.revokeObjectURL(url);
-}
+function exportData() { downloadBlob(currentBlob()); }
 
 // Importe un JSON exporté → remplace les données de l'espace courant (après confirmation).
 function importData(file) {
@@ -7022,6 +7026,25 @@ function importData(file) {
   reader.readAsText(file);
 }
 
+// Propose la copie de secours locale (posée avant tout écrasement par le cloud ou après un choix
+// de conflit). On la TÉLÉCHARGE au lieu de l'appliquer : non destructif — l'utilisateur relit le
+// fichier puis décide de l'importer ou non via « Importer (JSON) ».
+function offerLocalBackup() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(BACKUP_KEY)); } catch {}
+  if (!saved || !saved.blob) {
+    alert("Aucune sauvegarde locale sur cet appareil.\n\nElle est créée automatiquement juste avant qu'une version venue du cloud ne remplace les données de cet appareil.");
+    return;
+  }
+  const d = new Date(saved.at || Date.now());
+  const ok = confirm(
+    `Sauvegarde du ${d.toLocaleDateString("fr-FR")} à ${d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}\n`
+    + `(${blobSummary(saved.blob)})\n\n`
+    + `Télécharger ce fichier JSON ?\nRien n'est modifié : tu pourras ensuite l'importer si besoin.`
+  );
+  if (ok) downloadBlob(normalizeData(saved.blob), "sauvegarde-locale");
+}
+
 function bindDataMenu() {
   const btn = $("dataMenuBtn"), menu = $("dataMenu");
   btn.addEventListener("click", e => { e.stopPropagation(); menu.hidden = !menu.hidden; });
@@ -7032,6 +7055,7 @@ function bindDataMenu() {
   $("exportBtn").addEventListener("click", () => { menu.hidden = true; exportData(); });
   $("importBtn").addEventListener("click", () => { menu.hidden = true; $("importFile").click(); });
   $("purgeDoneBtn").addEventListener("click", () => { menu.hidden = true; purgeCompletedDoneNow(); });
+  $("restoreBackupBtn").addEventListener("click", () => { menu.hidden = true; offerLocalBackup(); });
   $("importFile").addEventListener("change", e => {
     const f = e.target.files[0];
     if (f) importData(f);
@@ -7096,9 +7120,7 @@ function attachSpace(uid) {
   // (cf. garde-fou de db.save). La base et l'éventuel « modifs non envoyées » sont repris du mémo
   // persisté — c'est ce qui protège des modifications faites hors ligne lors d'une session passée.
   _serverSynced = false;
-  const meta = loadSyncMeta();
-  _baseRemote = meta ? meta.base : hashStr(stableStr(currentBlob()));
-  _localDirty = meta ? meta.dirty : false;
+  restoreSyncMeta();
   setSyncState("waiting");
   // includeMetadataChanges : indispensable pour distinguer "absent en cache" de "absent confirmé serveur".
   _spaceUnsub = spaceRef.onSnapshot({ includeMetadataChanges: true }, snap => {
@@ -7118,9 +7140,8 @@ function attachSpace(uid) {
       migrateNotesToAutres();
       migrateMediaGenres();
       maybeAutoPurge();                                  // purge auto avant de semer le cloud
-      _baseRemote = null;
-      if (isEmptyData(currentBlob())) { _localDirty = false; saveSyncMeta(); setSyncState("ok"); }
-      else { _localDirty = true; flushNow(); }           // sème Firestore depuis le cache local
+      if (isEmptyData(currentBlob())) markSynced(null);
+      else { _baseRemote = null; _localDirty = true; flushNow(); }   // sème Firestore depuis le cache local
       render();
       return;
     }
@@ -7143,11 +7164,11 @@ function attachSpace(uid) {
     _serverSynced = true;
 
     if (incoming === _lastSync) {                        // notre propre écriture, confirmée
-      _baseRemote = hashStr(incoming); _localDirty = false; saveSyncMeta(); setSyncState("ok");
+      markSynced(incoming);
       return;
     }
     if (incoming === stableStr(currentBlob())) {         // identique à notre état → rien à re-rendre…
-      _baseRemote = hashStr(incoming); _localDirty = false; saveSyncMeta(); setSyncState("ok");
+      markSynced(incoming);
       if (maybeAutoPurge()) render();                    // …mais bon moment pour la purge auto (1×/chargement)
       return;
     }
@@ -7157,12 +7178,9 @@ function attachSpace(uid) {
       // Aucune modif locale en attente → le serveur fait foi : on applique (c'est ici que les
       // modifs faites sur un AUTRE appareil arrivent enfin).
       backupLocalBlob("avant-maj-cloud");
-      _baseRemote = hashStr(incoming); saveSyncMeta();
-      applyData(data);
-      migrateNotesToAutres();                            // no-op si pas d'anciennes notes
-      migrateMediaGenres();                              // titres Multimédia sans genre → Romans / Films
+      markSynced(incoming);
+      adoptRemote(data);
       maybeAutoPurge();                                  // purge auto des tâches terminées (1× par chargement)
-      setSyncState("ok");
       render();
       return;
     }
@@ -7231,12 +7249,9 @@ function init() {
   db.load();                 // affichage instantané depuis le cache local
   migrateNotesToAutres();    // anciennes notes (vue séparée) → racines de « Idées / Notes / Autres »
   migrateMediaGenres();      // titres Multimédia sans genre → Romans (À lire) / Films (À regarder)
-  // Base de référence : dernière version du cloud connue sur cet appareil (mémo persisté), pour
-  // distinguer « mes modifs par-dessus la même base » (→ on pousse) de « le cloud a bougé
-  // ailleurs » (→ conflit, on demande). Sans mémo (1ʳᵉ fois), le cache local fait office de base.
-  const _meta0 = loadSyncMeta();
-  _baseRemote = _meta0 ? _meta0.base : hashStr(stableStr(currentBlob()));
-  _localDirty = _meta0 ? _meta0.dirty : false;
+  // Base de référence : dernière version du cloud connue sur cet appareil, pour distinguer « mes
+  // modifs par-dessus la même base » (→ on pousse) de « le cloud a bougé ailleurs » (→ conflit).
+  restoreSyncMeta();
   applyMode();
   restoreView();             // reprend la dernière vue de l'onglet (F5) ; nouvel onglet → défaut "today"
   bindEvents();
