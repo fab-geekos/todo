@@ -432,6 +432,11 @@ addSubtask sur parent fini = rouvre). Ne PAS rétablir l'auto-complétion sans a
 EXCEPTION — le parent s'y auto-coche quand tous ses enfants sont cochés. La règle ci-dessus reste
 la norme partout ailleurs (Todo, agenda).
 
+- **Case P3 renommée « Si possible » en perso** (21/09/2026, choix user) : seul le `label` de
+  `QUADRANTS.deleguer` dépend de `ESPACE` ; la clé `deleguer`, les classes `q-deleguer` et le pro
+  (« Déléguer ») sont inchangés. Correspondance prévue pour l'import Notion : P1 Faire, P2 Planifier,
+  P3 Si possible, P4 hors matrice.
+
 ## Nettoyage/maintenabilité (lot 10, fait)
 Audit complet (script ad hoc : fonctions/constantes/ids définis vs référencés, classes CSS,
 littéraux répétés, blocs dupliqués) → **code déjà très sain** : 0 fonction/constante/id morts,

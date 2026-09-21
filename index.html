@@ -1844,10 +1844,11 @@ const DEFAULT_PROJECT_ICON = "📁";       // icône par défaut d'un nouveau pr
 
 // Matrice d'Eisenhower : pour chaque quadrant, libellé, description et drapeaux urgent/important.
 // La classe CSS d'un quadrant est toujours "q-" + sa clé (ex : q-faire).
+// En perso on délègue peu : la case "deleguer" s'y affiche « Si possible » (P3). Seul le libellé change.
 const QUADRANTS = {
   faire:     { label: "Faire",     desc: "Important + Urgent",     urgent: true,  important: true },
   planifier: { label: "Planifier", desc: "Important, pas urgent",  urgent: false, important: true },
-  deleguer:  { label: "Déléguer",  desc: "Urgent, pas important",  urgent: true,  important: false },
+  deleguer:  { label: ESPACE === "perso" ? "Si possible" : "Déléguer", desc: "Urgent, pas important", urgent: true, important: false },
   eliminer:  { label: "Éliminer",  desc: "Ni urgent ni important", urgent: false, important: false }
 };
 const QUADRANT_ORDER = ["faire", "planifier", "deleguer", "eliminer"];
