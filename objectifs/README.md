@@ -13,6 +13,8 @@ Toujours dans cet ordre :
 
 Tout premier lancement, une seule fois : `objectifs import --adoption` (reconnaît les objectifs déjà saisis à la main).
 
+Option `--temps` : affiche la durée de chaque étape (ex. `objectifs import --temps`).
+
 En cas d'erreur, le script s'arrête sans rien casser et dit quoi faire. Après une coupure (réseau, fenêtre fermée), il suffit de relancer la même commande : elle reprend là où elle s'est arrêtée.
 
 ## Installation (une seule fois)
@@ -30,7 +32,9 @@ En cas d'erreur, le script s'arrête sans rien casser et dit quoi faire. Après 
    - `firebase.email` : l'adresse du compte Google utilisé dans l'app.
 5. **Commande `objectifs` partout** : Paramètres Windows → rechercher « variables d'environnement » → « Modifier les variables d'environnement pour votre compte » → `Path` → Nouveau → coller le chemin de ce dossier. Rouvrir cmd.
 
-⚠️ `serviceAccountKey.json`, `config.local.json` et `sauvegardes/` contiennent des secrets ou des données réelles : ils sont exclus de Git (le dépôt est public). Ne jamais les envoyer à qui que ce soit.
+Au premier lancement, le script mémorise l'emplacement des sections Notion et ton identifiant Firebase dans `config.local.cache.json` (revérifiés à chaque lancement). Ce fichier peut être supprimé à tout moment : il sera recréé.
+
+⚠️ `serviceAccountKey.json`, `config.local.json`, `config.local.cache.json` et `sauvegardes/` contiennent des secrets ou des données réelles : ils sont exclus de Git (le dépôt est public). Ne jamais les envoyer à qui que ce soit.
 
 ## Pour le développement
 

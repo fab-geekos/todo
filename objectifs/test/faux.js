@@ -38,18 +38,32 @@ export class FauxNotion {
   constructor() {
     this.blocs = new Map();       // id → { id, type, data, parent, enfants: [ids], in_trash }
     this.seq = 0;
-    this.appels = { list: 0, append: 0, update: 0, delete: 0 };
+    this.appels = { list: 0, append: 0, update: 0, delete: 0, retrieve: 0 };
     this.panne = null;            // { methode, n, apres } : la n-ième requête de ce type échoue
     this.tailleMax = 2;           // petite pagination : oblige le code à suivre next_cursor
+    this.latence = 0;             // ms de « réseau » simulé par requête (0 = immédiat)
+    this.enCours = 0;
+    this.maxEnCours = 0;          // nombre maximal de requêtes simultanées observé
     const self = this;
+    const reseau = fn => p => self._reseau(() => fn(p));
     this.blocks = {
       children: {
-        list: async p => self._list(p),
-        append: async p => self._append(p)
+        list: reseau(p => self._list(p)),
+        append: reseau(p => self._append(p))
       },
-      update: async p => self._update(p),
-      delete: async p => self._delete(p)
+      retrieve: reseau(p => { self.appels.retrieve++; return self._reponse(self._vivant(p.block_id)); }),
+      update: reseau(p => self._update(p)),
+      delete: reseau(p => self._delete(p))
     };
+  }
+
+  async _reseau(fn) {
+    this.enCours++;
+    this.maxEnCours = Math.max(this.maxEnCours, this.enCours);
+    try {
+      if (this.latence) await new Promise(r => setTimeout(r, this.latence));
+      return fn();
+    } finally { this.enCours--; }
   }
 
   _id() {
@@ -80,7 +94,9 @@ export class FauxNotion {
   _reponse(b) {
     const data = clone(b.data);
     if (data.rich_text) data.rich_text = data.rich_text.map(versReponse);
-    return { object: "block", id: b.id, type: b.type, has_children: b.enfants.some(id => !this.blocs.get(id).in_trash), in_trash: b.in_trash, [b.type]: data };
+    const parent = b.parent ? { type: this.blocs.get(b.parent).type === "child_page" ? "page_id" : "block_id" } : { type: "workspace", workspace: true };
+    if (b.parent) parent[parent.type] = b.parent;
+    return { object: "block", id: b.id, type: b.type, parent, has_children: b.enfants.some(id => !this.blocs.get(id).in_trash), in_trash: b.in_trash, [b.type]: data };
   }
 
   _list({ block_id, start_cursor, page_size = 100 }) {

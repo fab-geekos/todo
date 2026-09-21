@@ -5,7 +5,8 @@
 import { stop, Abandon } from "./erreurs.js";
 import { formatFr, deMois, decalerMois, jourLocal, jourDe } from "./texte.js";
 import { canon, datesDe, texteCanon, reecrireScore, remplacerDate, mentionDate, blocApi, SCORE_RE, parcourir } from "./blocs.js";
-import { localiserSections, lireArbre, creerArbre, noeudDe } from "./notion.js";
+import { localiserSections, lireArbre, creerArbre, noeudDe, tous } from "./notion.js";
+import { sansMesure } from "./chrono.js";
 import { analyserSection } from "./section.js";
 import { planifierCloture, appliquerRetrait, verifierMoisUnique, estImportee } from "./regles.js";
 import { sauvegarder, planCloture } from "./sauvegardes.js";
@@ -23,20 +24,26 @@ function styleArchive(freres) {
   return { type: "toggle", color: dernier ? dernier.data.color : undefined };
 }
 
-export async function commandeCloture({ notion: N, store, ui, config, maintenant }) {
+export async function commandeCloture({ notion: N, store, ui, config, maintenant, mesure = sansMesure, cache = null }) {
   ui.titre("Clôture du mois");
   const dossier = config.dossierSauvegardes;
-  const { sectionId, archivesId } = await localiserSections(N, config);
   let plan = planCloture.lire(dossier);
+  // Lectures en parallèle (rien n'est écrit avant le résumé et le « o »).
+  const lectureApp = plan ? null : mesure("Lecture de l'app (Firebase)", () => store.lire());
+  if (lectureApp) lectureApp.catch(() => {});
+  const { sectionId, archivesId } = await mesure("Emplacement des sections", () => localiserSections(N, config, { cache }));
 
   if (plan) {
     ui.avert(`La clôture des objectifs ${deMois(plan.date)} a été interrompue : elle va reprendre là où elle s'est arrêtée.`);
     if (!(await ui.demander("Reprendre la clôture ?"))) throw new Abandon();
   } else {
-    const noeuds = await lireArbre(N, sectionId);
+    const [noeuds, freresBruts] = await tous([
+      mesure("Lecture de « Dans 1 mois »", () => lireArbre(N, sectionId)),
+      mesure("Lecture des archives", () => N.enfants(archivesId))
+    ]);
     const modele = analyserSection(noeuds);
     const date = modele.date;
-    const { blob, registre } = await store.lire();
+    const { blob, registre } = await lectureApp;
 
     if (!(blob.tasks || []).some(estImportee) && !(registre.ids || []).length) {
       if (modele.cases.some(c => !c.vide)) stop("Les cases de « Dans 1 mois » n'ont jamais été importées dans l'app.",
@@ -45,7 +52,7 @@ export async function commandeCloture({ notion: N, store, ui, config, maintenant
       return;
     }
     verifierMoisUnique(blob, registre, date, "cloture");
-    const freres = (await N.enfants(archivesId)).map(noeudDe);
+    const freres = freresBruts.map(noeudDe);
     if (archivesDatees(freres, date).length) stop(`Une archive @${formatFr(date)} existe déjà dans Archives › Dans 1 mois.`,
       "Si elle vient d'une ancienne tentative, supprime-la dans Notion, puis relance.");
 
@@ -61,7 +68,7 @@ export async function commandeCloture({ notion: N, store, ui, config, maintenant
     planCloture.ecrire(dossier, plan);
   }
 
-  await executer({ N, store, ui, plan, sectionId, archivesId });
+  await executer({ N, store, ui, plan, sectionId, archivesId, mesure });
   planCloture.effacer(dossier);
   afficherBilan(ui, plan);
 }
@@ -79,13 +86,40 @@ function afficherResume(ui, p) {
   ui.info(`  3. ${p.nbTachesARetirer} tâche(s) retirée(s) de l'app.`);
 }
 
-async function executer({ N, store, ui, plan, sectionId, archivesId }) {
+async function executer({ N, store, ui, plan, sectionId, archivesId, mesure }) {
   const { date, dateSuivante } = plan;
+  await mesure("Création de l'archive", () => etapeArchive({ N, ui, plan, archivesId }));
+  await mesure("Remise à zéro de « Dans 1 mois »", () => etapeModele({ N, ui, plan, sectionId }));
 
-  // --- Étapes 1-2 : archive, puis relecture ---
-  // Avant d'enregistrer le plan, on a vérifié qu'aucune archive de ce mois n'existait : une archive
-  // trouvée ici vient donc de CETTE clôture (interrompue, peut-être juste après la création du titre,
-  // réponse perdue). Complète → on la garde ; incomplète → corbeille et recréation.
+  // --- Étape 4 : retrait des objectifs dans l'app (+ registre vidé), en une opération ---
+  let nb = 0;
+  await mesure("Retrait dans l'app", () => store.transaction(({ blob, registre }) => {
+    const r = appliquerRetrait(blob, date);
+    nb = r.nb;
+    if (!r.nb && !(registre.ids || []).length && !registre.mois) return null;
+    return { blob: r.blob, registre: { mois: null, ids: [] } };
+  }));
+  ui.ok(`${nb} tâche(s) retirée(s) de l'app.`);
+
+  // --- Étape 5 : vérification finale (complète : la clôture efface) ---
+  const [{ blob, registre }, relu] = await mesure("Vérification", () => tous([store.lire(), lireArbre(N, sectionId)]));
+  const aRetirer = new Set(plan.casesModele);
+  const restes = (blob.tasks || []).filter(t => estImportee(t) && t.notion.mois === date);
+  const problemes = [];
+  if (restes.length) problemes.push(`${restes.length} objectif(s) encore dans l'app`);
+  if ((registre.ids || []).length) problemes.push("registre des cases importées non vidé");
+  if (casesDeTete(relu).some(n => aRetirer.has(n.id))) problemes.push("des cases restent dans « Dans 1 mois »");
+  const date2 = relu.find(n => n.id === plan.dateNoeudId);
+  if (!date2 || !datesDe(date2.data.rich_text).some(d => jourDe(d.start) === dateSuivante)) problemes.push("date de revue non avancée");
+  if (problemes.length) stop(`Vérification après clôture : ${problemes.join(" ; ")}.`, "Relance « objectifs cloture » : elle reprendra là où elle s'est arrêtée.");
+}
+
+// --- Étapes 1-2 : archive, puis relecture ---
+// Avant d'enregistrer le plan, on a vérifié qu'aucune archive de ce mois n'existait : une archive
+// trouvée ici vient donc de CETTE clôture (interrompue, peut-être juste après la création du titre,
+// réponse perdue). Complète → on la garde ; incomplète → corbeille et recréation.
+async function etapeArchive({ N, ui, plan, archivesId }) {
+  const { date } = plan;
   const archives = archivesDatees((await N.enfants(archivesId)).map(noeudDe), date);
   if (archives.length > 1) stop(`Plusieurs archives @${formatFr(date)} dans Archives › Dans 1 mois.`, "Supprime celle en trop dans Notion, puis relance.");
   let archiveId = null;
@@ -104,44 +138,28 @@ async function executer({ N, store, ui, plan, sectionId, archivesId }) {
   if (!memeArbre(await lireArbre(N, archiveId), plan.archive)) stop("L'archive créée ne correspond pas à « Dans 1 mois » : rien n'a été effacé.",
     "Relance « objectifs cloture » : l'archive incomplète sera recréée.");
   ui.ok(`Archive @${formatFr(date)} créée et vérifiée (${plan.faits}/${plan.total}).`);
+}
 
-  // --- Étape 3 : modèle vierge ---
+// --- Étape 3 : modèle vierge. Chaque action vérifie l'état réel (reprise possible) ; elles
+// portent sur des blocs différents, donc partent en parallèle. ---
+async function etapeModele({ N, ui, plan, sectionId }) {
+  const { date, dateSuivante } = plan;
   const noeuds = await lireArbre(N, sectionId);
   const aRetirer = new Set(plan.casesModele);
-  for (const n of casesDeTete(noeuds)) if (aRetirer.has(n.id)) await N.supprimer(n.id);
   const score = noeuds.find(n => n.id === plan.scoreNoeudId);
   const ligneDate = noeuds.find(n => n.id === plan.dateNoeudId);
   if (!score || !ligneDate) stop("La ligne de date ou de score de « Dans 1 mois » a disparu pendant la clôture.",
     `Remets-les dans Notion (date @${formatFr(dateSuivante)} et « / : »), puis relance.`);
-  const m = texteCanon(score.data.rich_text).match(SCORE_RE);
-  if (!m || m[1] !== "" || m[2] !== "") await N.modifier(score.id, score.type, { rich_text: reecrireScore(score.data.rich_text, "/ :") });
   const jours = datesDe(ligneDate.data.rich_text).map(d => jourDe(d.start));
-  if (jours.includes(date)) await N.modifier(ligneDate.id, ligneDate.type, { rich_text: remplacerDate(ligneDate.data.rich_text, date, dateSuivante) });
-  else if (!jours.includes(dateSuivante)) stop("La date de revue de « Dans 1 mois » a été modifiée pendant la clôture.",
+  if (!jours.includes(date) && !jours.includes(dateSuivante)) stop("La date de revue de « Dans 1 mois » a été modifiée pendant la clôture.",
     `Remets la date @${formatFr(dateSuivante)} en tête de « Dans 1 mois », puis relance.`);
+  const m = texteCanon(score.data.rich_text).match(SCORE_RE);
+  await tous([
+    ...casesDeTete(noeuds).filter(n => aRetirer.has(n.id)).map(n => N.supprimer(n.id)),
+    (!m || m[1] !== "" || m[2] !== "") ? N.modifier(score.id, score.type, { rich_text: reecrireScore(score.data.rich_text, "/ :") }) : null,
+    jours.includes(date) ? N.modifier(ligneDate.id, ligneDate.type, { rich_text: remplacerDate(ligneDate.data.rich_text, date, dateSuivante) }) : null
+  ]);
   ui.ok(`« Dans 1 mois » remis à zéro, daté @${formatFr(dateSuivante)}.`);
-
-  // --- Étape 4 : retrait des objectifs dans l'app (+ registre vidé), en une opération ---
-  let nb = 0;
-  await store.transaction(({ blob, registre }) => {
-    const r = appliquerRetrait(blob, date);
-    nb = r.nb;
-    if (!r.nb && !(registre.ids || []).length && !registre.mois) return null;
-    return { blob: r.blob, registre: { mois: null, ids: [] } };
-  });
-  ui.ok(`${nb} tâche(s) retirée(s) de l'app.`);
-
-  // --- Étape 5 : vérification finale ---
-  const { blob, registre } = await store.lire();
-  const restes = (blob.tasks || []).filter(t => estImportee(t) && t.notion.mois === date);
-  const relu = await lireArbre(N, sectionId);
-  const problemes = [];
-  if (restes.length) problemes.push(`${restes.length} objectif(s) encore dans l'app`);
-  if ((registre.ids || []).length) problemes.push("registre des cases importées non vidé");
-  if (casesDeTete(relu).some(n => aRetirer.has(n.id))) problemes.push("des cases restent dans « Dans 1 mois »");
-  const date2 = relu.find(n => n.id === plan.dateNoeudId);
-  if (!date2 || !datesDe(date2.data.rich_text).some(d => jourDe(d.start) === dateSuivante)) problemes.push("date de revue non avancée");
-  if (problemes.length) stop(`Vérification après clôture : ${problemes.join(" ; ")}.`, "Relance « objectifs cloture » : elle reprendra là où elle s'est arrêtée.");
 }
 
 function afficherBilan(ui, plan) {

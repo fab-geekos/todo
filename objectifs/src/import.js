@@ -2,21 +2,25 @@
 import { stop, Abandon } from "./erreurs.js";
 import { formatFr, deMois } from "./texte.js";
 import { reecrireScore, texteCanon, SCORE_RE } from "./blocs.js";
-import { localiserSections, lireArbre } from "./notion.js";
+import { localiserSections, lireArbre, noeudDe, tous } from "./notion.js";
+import { sansMesure } from "./chrono.js";
 import { analyserSection } from "./section.js";
 import { construireUnites, aplatir, trouverProjet, planifierImport, empreintePlan, appliquerImport,
   verifierMoisUnique, moisPresents, indexEtiquettes } from "./regles.js";
 import { sauvegarder } from "./sauvegardes.js";
 
-export async function commandeImport({ notion: N, store, ui, config, maintenant, adoption = false }) {
+export async function commandeImport({ notion: N, store, ui, config, maintenant, adoption = false, mesure = sansMesure, cache = null }) {
   ui.titre(adoption ? "Import des objectifs (premier lancement : adoption)" : "Import des objectifs");
-  const { sectionId } = await localiserSections(N, config, { archives: false });
-  const noeuds = await lireArbre(N, sectionId);
+  // L'app et Notion sont lus en même temps (rien n'est écrit avant l'aperçu et le « o »).
+  const lectureApp = mesure("Lecture de l'app (Firebase)", () => store.lire());
+  lectureApp.catch(() => {});
+  const { sectionId } = await mesure("Emplacement de « Dans 1 mois »", () => localiserSections(N, config, { archives: false, cache }));
+  const noeuds = await mesure("Lecture de « Dans 1 mois »", () => lireArbre(N, sectionId));
   const modele = analyserSection(noeuds);
   const date = modele.date;
   ui.info(`Objectifs ${deMois(date)} (revue le ${formatFr(date)})`);
 
-  const { blob, registre } = await store.lire();
+  const { blob, registre } = await lectureApp;
   const projet = trouverProjet(blob, config.projet);
   if (adoption && (moisPresents(blob.tasks || []).length || (registre.ids || []).length))
     stop("L'adoption a déjà été faite : l'app contient déjà des objectifs importés.", "Lance « objectifs import » sans --adoption.");
@@ -46,19 +50,19 @@ export async function commandeImport({ notion: N, store, ui, config, maintenant,
   // Écriture atomique. Le plan est recalculé sur l'état FRAIS de l'app : s'il diffère de l'aperçu
   // (modif faite dans l'app entre-temps), on n'écrit rien.
   const empreinte = empreintePlan(plan);
-  await store.transaction(({ blob: frais, registre: regFrais }) => {
+  await mesure("Écriture dans l'app", () => store.transaction(({ blob: frais, registre: regFrais }) => {
     const projetFrais = trouverProjet(frais, config.projet);
     verifierMoisUnique(frais, regFrais, date, "import");
     const planFrais = planifierImport({ unites, blob: frais, registre: regFrais, projet: projetFrais, date, adoption });
     if (empreintePlan(planFrais) !== empreinte) stop("L'app a été modifiée pendant l'aperçu : rien n'a été écrit.", "Relance « objectifs import ».");
     return { blob: appliquerImport(frais, planFrais, { projet: projetFrais, date, maintenant }), registre: planFrais.registre };
-  });
+  }));
   if (!scoreOk) {
-    await N.modifier(modele.scoreNoeud.id, modele.scoreNoeud.type,
-      { rich_text: reecrireScore(modele.scoreNoeud.data.rich_text, `/${plan.total} :`) });
+    await mesure("Écriture du score dans Notion", () => N.modifier(modele.scoreNoeud.id, modele.scoreNoeud.type,
+      { rich_text: reecrireScore(modele.scoreNoeud.data.rich_text, `/${plan.total} :`) }));
   }
 
-  await verifierImport({ N, store, sectionId, unites, plan, date, fichier });
+  await mesure("Vérification", () => verifierImport({ N, store, scoreId: modele.scoreNoeud.id, unites, plan, date, fichier }));
   ui.ok(`${plan.total} objectifs ${deMois(date)} dans l'app, score « /${plan.total} : » écrit dans Notion.`);
 }
 
@@ -89,9 +93,10 @@ function afficherApercu(ui, { plan, unites, adoption, score }) {
   ui.info(`\nScore écrit dans Notion : « ${score} »`);
 }
 
-// Relit l'app et Notion : tout doit correspondre exactement au plan (SPEC § 7, étape 8).
-async function verifierImport({ N, store, sectionId, unites, plan, date, fichier }) {
-  const { blob, registre } = await store.lire();
+// Relit l'app (en entier) et la ligne de score Notion (seule chose écrite dans Notion) : tout doit
+// correspondre exactement au plan (SPEC § 7, étape 8).
+async function verifierImport({ N, store, scoreId, unites, plan, date, fichier }) {
+  const [{ blob, registre }, blocScore] = await tous([store.lire(), N.bloc(scoreId)]);
   const index = indexEtiquettes(blob.tasks || [], date);
   const problemes = [];
   const supprimees = new Set(plan.supprimees);
@@ -105,8 +110,7 @@ async function verifierImport({ N, store, sectionId, unites, plan, date, fichier
   if (new Set(index.values()).size !== plan.total) problemes.push(`${new Set(index.values()).size} tâches importées au lieu de ${plan.total}`);
   const reg = new Set(registre.ids || []);
   if (registre.mois !== date || plan.registre.ids.some(id => !reg.has(id))) problemes.push("registre des cases importées incomplet");
-  const scoreLu = (await lireArbre(N, sectionId)).find(n => n.type !== "to_do" && SCORE_RE.test(texteCanon(n.data.rich_text || [])));
-  const m = scoreLu && texteCanon(scoreLu.data.rich_text).match(SCORE_RE);
+  const m = texteCanon(noeudDe(blocScore).data.rich_text || []).match(SCORE_RE);
   if (!m || m[1] !== "" || Number(m[2]) !== plan.total) problemes.push("score Notion incorrect");
   if (problemes.length) stop(`Vérification après import : ${problemes.join(" ; ")}.`,
     `Relance « objectifs import » (il ne recrée rien de ce qui existe). Sauvegarde de l'app avant import : ${fichier}`);

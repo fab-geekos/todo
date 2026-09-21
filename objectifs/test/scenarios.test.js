@@ -313,7 +313,7 @@ const PANNES = [
 for (const panne of PANNES) {
   test(`clôture : reprise après une coupure pendant « ${panne.nom} »`, async () => {
     const m = await moisVecu();
-    if (panne.notion) { m.faux.panne = { ...panne.notion }; m.faux.appels = { list: 0, append: 0, update: 0, delete: 0 }; }
+    if (panne.notion) { m.faux.panne = { ...panne.notion }; m.faux.appels = { list: 0, append: 0, update: 0, delete: 0, retrieve: 0 }; }
     if (panne.store) m.store.panne = true;
     await assert.rejects(lancerCloture(m, ["o"]), /simulé/);
     assert.ok(existsSync(join(m.config.dossierSauvegardes, "cloture-en-cours.json")));
@@ -391,4 +391,78 @@ test("adoption : deux tâches au même titre → arrêt", async () => {
   blob.tasks.push({ id: "d1", title: "Finir le dossier A", projectId: "pobj", parentTaskId: null },
     { id: "d2", title: "Finir le dossier A ", projectId: "pobj", parentTaskId: null });
   await rejette(lancerImport(monde({ blob }), ["o"], { adoption: true }), /Plusieurs tâches « Finir le dossier A »/);
+});
+
+/* ================= RAPIDITÉ : mémorisation, parallélisme ================= */
+
+const cacheMemoire = () => { const d = {}; return { d, lire: k => d[k], ecrire: (k, v) => { d[k] = v; } }; };
+const importAvecCache = (m, reponses, cache) => {
+  const ui = new FausseUI(reponses);
+  return commandeImport({ notion: m.N, store: m.store, ui, config: m.config, maintenant: JOUR("2026-09-03"), cache }).then(() => ui);
+};
+
+test("mémorisation : les sections ne sont recherchées qu'au premier lancement", async () => {
+  const m = monde();
+  const cache = cacheMemoire();
+  await importAvecCache(m, ["o"], cache);
+  const listes1 = m.faux.appels.list;
+  assert.equal(Object.values(cache.d)[0].id, m.section);                           // emplacement mémorisé
+  m.faux.appels.list = 0; m.faux.appels.retrieve = 0;
+  const ui = await importAvecCache(m, [], cache);
+  assert.match(ui.texte, /Rien de nouveau/);
+  assert.equal(m.faux.appels.retrieve, 2);                                          // vérification : le bloc + son parent
+  assert.ok(m.faux.appels.list < listes1, `${m.faux.appels.list} lectures, contre ${listes1} au 1er lancement`);
+  // La clôture profite aussi de la mémoire (et mémorise les archives).
+  await commandeCloture({ notion: m.N, store: m.store, ui: new FausseUI(["o"]), config: m.config, maintenant: JOUR("2026-10-02"), cache });
+  assert.equal(Object.keys(cache.d).length, 2);
+  assert.deepEqual(m.faux.dump(m.archives).map(a => Object.keys(a)[0]), ["▸ @2026-08-01", "▸ @2026-09-01", "▸ @2026-10-01"]);
+});
+
+test("mémorisation périmée : identifiant inconnu, blocs inversés, section recréée → nouvelle recherche", async () => {
+  // Identifiant inconnu.
+  const m = monde();
+  const cache = cacheMemoire();
+  await assert.rejects(importAvecCache(m, ["n"], cache), Abandon);
+  const cle = Object.keys(cache.d)[0];
+  cache.d[cle] = { id: "00000000-0000-4000-8000-0000000fffff", parentId: "x" };
+  await assert.rejects(importAvecCache(m, ["n"], cache), Abandon);
+  assert.equal(cache.d[cle].id, m.section);                                         // corrigé
+
+  // Archives mémorisées sur le mauvais « Dans 1 mois » (même nom, autre parent) : refusé.
+  const m2 = await moisVecu();
+  const cache2 = cacheMemoire();
+  await commandeCloture({ notion: m2.N, store: m2.store, ui: new FausseUI(["n"]), config: m2.config, maintenant: JOUR("2026-10-02"), cache: cache2 }).catch(() => {});
+  const cleArchives = Object.keys(cache2.d).find(k => k.includes("Archives"));
+  cache2.d[cleArchives] = { ...cache2.d[Object.keys(cache2.d).find(k => !k.includes("Archives"))] };
+  await commandeCloture({ notion: m2.N, store: m2.store, ui: new FausseUI(["o"]), config: m2.config, maintenant: JOUR("2026-10-02"), cache: cache2 });
+  assert.deepEqual(m2.faux.dump(m2.archives)[2]["▸ @2026-10-01"], ARCHIVE_ATTENDUE);  // au bon endroit
+  assert.equal(cache2.d[cleArchives].id, m2.archives);
+
+  // « Dans 1 mois » mis à la corbeille puis recréé : la mémoire pointe un bloc supprimé.
+  const m3 = monde();
+  const cache3 = cacheMemoire();
+  await importAvecCache(m3, ["n"], cache3).catch(() => {});
+  m3.faux.blocs.get(m3.section).in_trash = true;
+  const [nouvelle] = m3.faux.ajouterSous(m3.faux.trouver("Objectifs"), [toggle("Dans 1 mois", [para(date("2026-10-01")), para("/ :"), todo(["Nouvel objectif ", P(1)])])]);
+  await importAvecCache(m3, ["o"], cache3);
+  assert.deepEqual(importees(m3.store).map(t => t.title), ["Nouvel objectif"]);
+  assert.equal(Object.values(cache3.d)[0].id, nouvelle);
+});
+
+test("parallélisme : lectures simultanées, jamais plus de 3 requêtes à la fois", async () => {
+  const m = monde();
+  m.faux.latence = 5;
+  await lancerImport(m, ["o"]);
+  await lancerCloture(m, ["o"]);
+  assert.ok(m.faux.maxEnCours > 1, "les lectures devraient partir en parallèle");
+  assert.ok(m.faux.maxEnCours <= 3, `${m.faux.maxEnCours} requêtes simultanées`);
+  assert.deepEqual(m.faux.dump(m.section), ["¶ @2026-11-01", "¶ / :", "¶ **Top priorités", "¶ **Culture", "¶ **Projets perso"]);
+});
+
+test("Firebase connecté en arrière-plan : une erreur de connexion ressort au premier usage", async () => {
+  const { storeDiffere } = await import("../src/store.js");
+  const store = storeDiffere(Promise.reject(new ErreurObjectifs("Clé Firebase illisible")));
+  await new Promise(r => setTimeout(r, 5));                                         // pas de rejet non géré
+  const m = monde();
+  await rejette(commandeImport({ notion: m.N, store, ui: new FausseUI(["o"]), config: m.config, maintenant: JOUR("2026-09-03") }), /Clé Firebase/);
 });
