@@ -437,7 +437,10 @@ la norme partout ailleurs (Todo, agenda).
   classes `q-*` et libellés pro (« Déléguer », « Éliminer ») inchangés. La vue globale garde « Sans
   priorité » masquée, les matrices de projet l'affichent (objectifs différents, voulu). Correspondance
   import Notion : P1 Faire, P2 Planifier, P3 Si possible, P4 Sans priorité.
-- **Objectifs du mois (Notion)** : sous-dossier `objectifs/` (script Node local, cf. `objectifs/SPEC.md`).
+- **Objectifs du mois (Notion)** : sous-dossier `objectifs/` (script Node local, cf. `objectifs/SPEC.md` et
+  `objectifs/README.md`). V1 codée le 21/09/2026 : `objectifs cloture` puis `objectifs import` ; `npm test`
+  (29 tests, faux Notion + faux Firestore). Registre des cases importées : doc `users/{uid}/objectifs/perso`.
+  ⚠️ Pas encore essayé sur les vraies API : prévoir un essai en bac à sable (clés + page Notion de test).
   Les tâches importées portent un champ `notion` ; **la purge (auto + bouton 🧹) les épargne**
   (`isPurgeableRoot` / `subtreeHasNotionTask`) : c'est la clôture du mois qui les retire.
   ⚠️ Repo PUBLIC + GitHub Pages : `objectifs/sauvegardes/` et les clés sont dans `.gitignore`, et la spec

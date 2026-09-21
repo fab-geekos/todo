@@ -247,3 +247,18 @@ objectifs import --adoption      (une seule fois, au tout premier lancement)
 | Case P3 affichée « Si possible » en perso (pro : « Déléguer ») | `30223c9` |
 | Case P4 affichée « Sans priorité » en perso (pro : « Éliminer ») | `2d65602` |
 | La purge des tâches terminées épargne les tâches importées de Notion | `2d65602` |
+
+## 15. Précisions apparues au codage (V1)
+
+Petits choix faits pendant l'implémentation, dans l'esprit de la spec. À rediscuter si l'un d'eux ne convient pas.
+
+| Sujet | Choix retenu | Pourquoi |
+|---|---|---|
+| Confirmation de la clôture | La clôture affiche son résumé (score, non faits, ce qui va se passer) et attend un « o », comme l'import. | Elle supprime des cases et des tâches : rien ne part sans accord. |
+| Moment de la sauvegarde | Faite juste **après** le « o », avant la première écriture. | Répondre « n » ne fait pas tourner les sauvegardes pour rien. |
+| Registre des cases importées | Un petit document Firestore à part (`users/{uid}/objectifs/perso` : mois + identifiants des cases), que l'app ignore. | Distinguer « supprimée dans l'app » (retirée de l'archive) de « jamais importée » (arrêt). Vidé à chaque clôture. |
+| Sous-objectif au même texte qu'un objectif | Fusionné avec l'objectif (une tâche, avec sa priorité), signalé dans l'aperçu. | Cas « mis en avant dans Top priorités ». |
+| Sous-tâches ajoutées à la main sous un objectif importé | Retirées avec l'objectif à la clôture, listées dans le résumé avant le « o ». | Elles font partie de l'objectif archivé. |
+| Contenu de l'archive | Copie de toute la section, y compris la ligne de date et la ligne de score (remplie). | Copie fidèle. |
+| Clé Firebase | Fichier `objectifs/serviceAccountKey.json` (chemin indiqué dans `config.local.json`), exclu de Git. | Format fourni par Firebase. |
+| Tests | `npm test` : 29 tests sur un faux Notion et un faux Firestore, dont les reprises après coupure à chaque étape de la clôture et un cycle complet de deux mois. | Vérifier sans toucher aux vraies données. |

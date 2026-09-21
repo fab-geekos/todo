@@ -14,7 +14,8 @@ jeton*
 
 # Script objectifs/ : sauvegardes = donnees perso reelles, cles = secrets (repo PUBLIC)
 objectifs/sauvegardes/
-objectifs/config.local.json
+objectifs/config*.json
+!objectifs/config.exemple.json
 
 # Dependances / OS / editeurs
 node_modules/

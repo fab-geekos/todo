@@ -1,0 +1,16 @@
+{
+  "name": "objectifs",
+  "private": true,
+  "type": "module",
+  "description": "Objectifs du mois : Notion vers l'app Todo (cf. SPEC.md)",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "@notionhq/client": "^5.26.0",
+    "firebase-admin": "^14.4.0"
+  }
+}

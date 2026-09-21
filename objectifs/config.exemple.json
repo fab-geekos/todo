@@ -1,0 +1,12 @@
+{
+  "notion": {
+    "token": "ntn_... (jeton de l'intégration Notion)",
+    "page": "https://www.notion.so/... (lien de la page qui contient « Dev perso »)"
+  },
+  "firebase": {
+    "cleService": "serviceAccountKey.json",
+    "email": "adresse du compte Google utilisé dans l'app"
+  },
+  "espace": "perso",
+  "projet": "Objectifs du mois"
+}
