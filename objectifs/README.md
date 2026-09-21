@@ -40,6 +40,7 @@ Au premier lancement, le script mémorise l'emplacement des sections Notion et t
 
 - `npm test` : tests complets sur un faux Notion et un faux Firestore (aucun accès réseau).
 - `src/regles.js` : toutes les règles (fusion des doublons, priorités, plans d'import et de clôture), sans réseau.
-- `src/notion.js`, `src/store.js` : accès à Notion et à Firestore (adaptateurs minces).
+- `src/notion.js` : accès à Notion (bibliothèque officielle, adaptateur mince).
+- `src/store.js` : accès à Firestore par son API web, sans bibliothèque (jeton signé avec la clé de service, transactions).
 - `src/import.js`, `src/cloture.js` : les deux commandes, étape par étape, avec vérifications.
 - `OBJECTIFS_DEBUG=1` affiche le détail technique d'une erreur inattendue.

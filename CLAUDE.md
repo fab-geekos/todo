@@ -439,7 +439,11 @@ la norme partout ailleurs (Todo, agenda).
   import Notion : P1 Faire, P2 Planifier, P3 Si possible, P4 Sans priorité.
 - **Objectifs du mois (Notion)** : sous-dossier `objectifs/` (script Node local, cf. `objectifs/SPEC.md` et
   `objectifs/README.md`). V1 codée le 21/09/2026 : `objectifs cloture` puis `objectifs import` ; `npm test`
-  (34 tests, faux Notion + faux Firestore). Registre des cases importées : doc `users/{uid}/objectifs/perso`.
+  (40 tests, faux Notion + faux serveur Firestore). Registre des cases importées : doc `users/{uid}/objectifs/perso`.
+  **Firestore par API REST directe (plus de `firebase-admin`)** : la bibliothèque (~2 400 fichiers) était
+  analysée par les 2 antivirus du PC (Cortex XDR + Defender), d'où des lancements bloqués 17-24 s. `src/store.js`
+  signe le jeton (crypto) et appelle `:batchGet`/`:beginTransaction`/`:commit` ; parité vérifiée sur le vrai
+  Firestore. Idée pour le futur script `todo.js` (décision #3) : réutiliser `objectifs/src/store.js`.
   Essai en bac à sable réussi sur les vraies API (21/09/2026) : sous-page Notion de test + espace Firestore
   `test-objectifs` (supprimé après), cycle adoption → clôture → import → relance.
   Les tâches importées portent un champ `notion` ; **la purge (auto + bouton 🧹) les épargne**

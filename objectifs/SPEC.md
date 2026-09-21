@@ -236,7 +236,7 @@ objectifs import --adoption      (une seule fois, au tout premier lancement)
 
 ## 13. Développement
 
-- Node.js, bibliothèques officielles : `@notionhq/client` (Notion) et `firebase-admin` (Firestore).
+- Node.js, bibliothèque officielle `@notionhq/client` (Notion). Firestore est appelé directement par son API web (HTTPS, jeton signé avec la clé de service), sans bibliothèque : voir § 15.
 - Claude développe et teste dans un **bac à sable** : une page Notion de test (copie de la structure avec de faux objectifs) et un espace de test dans Firestore (ni perso ni pro). Les vraies données ne sont jamais utilisées pendant le développement.
 - Fabien lance ensuite directement sur ses vraies données (premier lancement : `import --adoption`).
 
@@ -262,4 +262,5 @@ Petits choix faits pendant l'implémentation, dans l'esprit de la spec. À redis
 | Contenu de l'archive | Copie de toute la section, y compris la ligne de date et la ligne de score (remplie), sauf les cases vides (retirées, leurs sous-cases remontées d'un niveau). | Copie fidèle, sans les cases oubliées. |
 | Clé Firebase | Fichier `objectifs/serviceAccountKey.json` (chemin indiqué dans `config.local.json`), exclu de Git. | Format fourni par Firebase. |
 | Rapidité | Lectures Notion en parallèle (3 requêtes à la fois au plus), connexion à Firebase pendant la lecture de Notion, emplacement des sections et identifiant Firebase mémorisés dans `config.local.cache.json` (revérifiés : bloc + parent), vérification de l'import limitée à la ligne de score (la clôture garde sa vérification complète). Option `--temps`. | Mesuré en bac à sable : import 2,4 s (1,1 s sans nouveauté), clôture environ 15 s, dont l'essentiel est la latence de Notion à chaque suppression. |
-| Tests | `npm test` : 34 tests sur un faux Notion et un faux Firestore, dont les reprises après coupure à chaque étape de la clôture et un cycle complet de deux mois. | Vérifier sans toucher aux vraies données. |
+| Accès à Firestore | API web de Firestore (REST) appelée directement avec `fetch` et `crypto` (intégrés à Node), au lieu de la bibliothèque `firebase-admin`. Même format de données, même écriture atomique (transaction rejouée en cas de conflit ou de coupure). Vérifié sur le vrai Firestore : ce que le script écrit est lu à l'identique par la bibliothèque officielle, et inversement. | La bibliothèque officielle compte environ 2 400 fichiers : sur le PC (2 antivirus), leur analyse bloquait parfois le lancement 17 à 24 s. Accès direct : 0,1 à 0,4 s. `node_modules` passe de 85 Mo à 1,8 Mo. |
+| Tests | `npm test` : 40 tests sur un faux Notion et un faux Firestore, dont les reprises après coupure à chaque étape de la clôture et un cycle complet de deux mois. | Vérifier sans toucher aux vraies données. |
