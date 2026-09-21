@@ -12,6 +12,10 @@ jeton*
 *.pem
 *.key
 
+# Script objectifs/ : sauvegardes = donnees perso reelles, cles = secrets (repo PUBLIC)
+objectifs/sauvegardes/
+objectifs/config.local.json
+
 # Dependances / OS / editeurs
 node_modules/
 .DS_Store

@@ -432,10 +432,16 @@ addSubtask sur parent fini = rouvre). Ne PAS rétablir l'auto-complétion sans a
 EXCEPTION — le parent s'y auto-coche quand tous ses enfants sont cochés. La règle ci-dessus reste
 la norme partout ailleurs (Todo, agenda).
 
-- **Case P3 renommée « Si possible » en perso** (21/09/2026, choix user) : seul le `label` de
-  `QUADRANTS.deleguer` dépend de `ESPACE` ; la clé `deleguer`, les classes `q-deleguer` et le pro
-  (« Déléguer ») sont inchangés. Correspondance prévue pour l'import Notion : P1 Faire, P2 Planifier,
-  P3 Si possible, P4 hors matrice.
+- **Libellés perso des cases** (21/09/2026, choix user) : en perso, `deleguer` s'affiche « Si possible »
+  et `eliminer` « Sans priorité » (constante `PERSO`, seuls les `label` de `QUADRANTS` changent). Clés,
+  classes `q-*` et libellés pro (« Déléguer », « Éliminer ») inchangés. La vue globale garde « Sans
+  priorité » masquée, les matrices de projet l'affichent (objectifs différents, voulu). Correspondance
+  import Notion : P1 Faire, P2 Planifier, P3 Si possible, P4 Sans priorité.
+- **Objectifs du mois (Notion)** : sous-dossier `objectifs/` (script Node local, cf. `objectifs/SPEC.md`).
+  Les tâches importées portent un champ `notion` ; **la purge (auto + bouton 🧹) les épargne**
+  (`isPurgeableRoot` / `subtreeHasNotionTask`) : c'est la clôture du mois qui les retire.
+  ⚠️ Repo PUBLIC + GitHub Pages : `objectifs/sauvegardes/` et les clés sont dans `.gitignore`, et la spec
+  ne contient que des exemples fictifs.
 
 ## Nettoyage/maintenabilité (lot 10, fait)
 Audit complet (script ad hoc : fonctions/constantes/ids définis vs référencés, classes CSS,

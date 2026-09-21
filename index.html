@@ -1844,12 +1844,14 @@ const DEFAULT_PROJECT_ICON = "📁";       // icône par défaut d'un nouveau pr
 
 // Matrice d'Eisenhower : pour chaque quadrant, libellé, description et drapeaux urgent/important.
 // La classe CSS d'un quadrant est toujours "q-" + sa clé (ex : q-faire).
-// En perso on délègue peu : la case "deleguer" s'y affiche « Si possible » (P3). Seul le libellé change.
+// En perso, deux libellés changent (seuls les libellés : clés et classes CSS restent) :
+// « deleguer » s'affiche « Si possible » (P3, on délègue peu) et « eliminer » « Sans priorité » (P4).
+const PERSO = ESPACE === "perso";
 const QUADRANTS = {
   faire:     { label: "Faire",     desc: "Important + Urgent",     urgent: true,  important: true },
   planifier: { label: "Planifier", desc: "Important, pas urgent",  urgent: false, important: true },
-  deleguer:  { label: ESPACE === "perso" ? "Si possible" : "Déléguer", desc: "Urgent, pas important", urgent: true, important: false },
-  eliminer:  { label: "Éliminer",  desc: "Ni urgent ni important", urgent: false, important: false }
+  deleguer:  { label: PERSO ? "Si possible" : "Déléguer",      desc: "Urgent, pas important",  urgent: true,  important: false },
+  eliminer:  { label: PERSO ? "Sans priorité" : "Éliminer",    desc: "Ni urgent ni important", urgent: false, important: false }
 };
 const QUADRANT_ORDER = ["faire", "planifier", "deleguer", "eliminer"];
 // Quadrants affichés dans la vue Eisenhower globale : on masque "Éliminer"
@@ -4882,6 +4884,19 @@ function subtreeAllCompleted(id) {
   return childTasks(id).every(c => c.completed && subtreeAllCompleted(c.id));
 }
 
+// Vrai si l'arbre de `id` contient une tâche importée de Notion (champ `notion`, posé par le
+// script objectifs/). Ces tâches sont retirées par la clôture du mois, jamais par la purge :
+// sinon un objectif atteint disparaîtrait et la clôture le prendrait pour un objectif supprimé.
+function subtreeHasNotionTask(id) {
+  const t = getTask(id);
+  return !!(t && t.notion) || childTasks(id).some(c => subtreeHasNotionTask(c.id));
+}
+
+// Racine purgeable : tâche todo terminée de fond en comble, hors vues-listes et hors objectifs Notion.
+function isPurgeableRoot(t) {
+  return isRoot(t) && t.completed && !isListTask(t) && subtreeAllCompleted(t.id) && !subtreeHasNotionTask(t.id);
+}
+
 // Supprime les arbres de tâches todo terminés. maxAgeDays = null → tout âge (bouton manuel) ;
 // sinon ne purge que si la racine a été terminée il y a plus de maxAgeDays (purge auto). En mode
 // auto, une tâche terminée SANS completedAt (donnée ancienne) est ÉPARGNÉE (âge inconnu) ; le
@@ -4889,7 +4904,7 @@ function subtreeAllCompleted(id) {
 function purgeCompletedTodos(maxAgeDays) {
   const cutoff = (maxAgeDays == null) ? null : Date.now() - maxAgeDays * DAY_MS;
   const roots = state.tasks.filter(t =>
-    isRoot(t) && t.completed && !isListTask(t) && subtreeAllCompleted(t.id) &&
+    isPurgeableRoot(t) &&
     (cutoff == null || (typeof t.completedAt === "number" && t.completedAt < cutoff))
   );
   if (!roots.length) return 0;
@@ -4913,14 +4928,15 @@ function maybeAutoPurge() {
 // Bouton « Vider les tâches terminées » (menu ⋯) : purge immédiate de TOUTES les tâches todo
 // terminées (tout âge), après confirmation. N'affecte aucune vue-liste.
 function purgeCompletedDoneNow() {
-  const count = state.tasks.filter(t => isRoot(t) && t.completed && !isListTask(t) && subtreeAllCompleted(t.id)).length;
+  const count = state.tasks.filter(isPurgeableRoot).length;
   if (!count) {
     alert("Aucune tâche terminée à supprimer.\n(Les listes Courses, Affaires, Multimédia, Idées/Notes ne sont pas concernées.)");
     return;
   }
   const msg = `Supprimer définitivement ${count} tâche(s) terminée(s) ?\n\n`
     + `Concerne les tâches cochées des vues Todo / Aujourd'hui / Prochainement / Eisenhower / Projets.\n`
-    + `Les listes (Courses, Affaires, Multimédia, Idées/Notes/Autres) ne sont PAS touchées.\n\n`
+    + `Les listes (Courses, Affaires, Multimédia, Idées/Notes/Autres) ne sont PAS touchées,\n`
+    + `ni les objectifs du mois importés de Notion (retirés par la clôture).\n\n`
     + `⚠️ Action définitive (pas d'annulation).`;
   if (!confirm(msg)) return;
   purgeCompletedTodos(null);
