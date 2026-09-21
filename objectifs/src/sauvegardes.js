@@ -2,8 +2,8 @@
 // Tout est dans objectifs/sauvegardes/, exclu de Git (données réelles).
 import { mkdirSync, writeFileSync, readdirSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { SAUVEGARDES_GARDEES } from "./parametres.js";
 
-const GARDER = 2;
 const MOTIF = /^(\d{4}-\d{2}-\d{2}_\d{6})_[a-z]+_(todo-[a-z-]+|notion)\.json$/;
 
 // Même format que l'export JSON de l'app (index.html → downloadBlob) : réimportable par le menu ⋯.
@@ -21,7 +21,7 @@ const horodatage = d => {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
 };
 
-// Écrit une sauvegarde (app + section Notion) puis ne garde que les 2 plus récentes.
+// Écrit une sauvegarde (app + section Notion) puis ne garde que les plus récentes.
 export function sauvegarder(dossier, { commande, espace, blob, notion, maintenant }) {
   mkdirSync(dossier, { recursive: true });
   let stamp = horodatage(new Date(maintenant));
@@ -30,7 +30,7 @@ export function sauvegarder(dossier, { commande, espace, blob, notion, maintenan
   writeFileSync(fichierApp, JSON.stringify(exportApp(blob, espace, maintenant), null, 2));
   writeFileSync(join(dossier, `${stamp}_${commande}_notion.json`), JSON.stringify(notion, null, 2));
   const stamps = [...new Set(readdirSync(dossier).map(f => (f.match(MOTIF) || [])[1]).filter(Boolean))].sort();
-  for (const vieux of stamps.slice(0, Math.max(0, stamps.length - GARDER))) {
+  for (const vieux of stamps.slice(0, Math.max(0, stamps.length - SAUVEGARDES_GARDEES))) {
     for (const f of readdirSync(dossier)) if (f.startsWith(vieux + "_") && MOTIF.test(f)) rmSync(join(dossier, f));
   }
   return fichierApp;

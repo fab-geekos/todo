@@ -3,6 +3,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { avecListes } from "../src/ui.js";
 
 const clone = v => JSON.parse(JSON.stringify(v));
 const TYPES = new Set(["paragraph", "heading_1", "heading_2", "heading_3", "bulleted_list_item", "numbered_list_item",
@@ -252,6 +253,7 @@ export class FausseUI {
     this.lignes = [];
     this.questions = [];
     this.pendantQuestion = pendantQuestion;
+    avecListes(this);             // mêmes listes et avertissements que la vraie console
   }
   titre(t) { this.lignes.push(`=== ${t}`); }
   info(t) { this.lignes.push(t); }

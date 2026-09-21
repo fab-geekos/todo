@@ -8,11 +8,13 @@ import { adaptateurNotion } from "./notion.js";
 import { creerStore, storeDiffere } from "./store.js";
 import { ouvrirCache } from "./cache.js";
 import { creerChrono } from "./chrono.js";
+import { NOTION } from "./parametres.js";
 import { creerUI } from "./ui.js";
 import { commandeImport } from "./import.js";
 import { commandeCloture } from "./cloture.js";
 
 const RACINE = join(dirname(fileURLToPath(import.meta.url)), "..");
+const COMMANDES = ["import", "cloture"];
 
 const AIDE = `
 Objectifs du mois : Notion → app Todo
@@ -31,6 +33,8 @@ Options :
   --config <fichier>          autre fichier de configuration (défaut : config.local.json)
 `;
 
+const sansAccents = s => s.normalize("NFD").replace(/\p{M}/gu, "");
+
 function lireArgs(argv) {
   const args = { commande: null, adoption: false, temps: false, config: join(RACINE, "config.local.json") };
   for (let i = 0; i < argv.length; i++) {
@@ -39,7 +43,7 @@ function lireArgs(argv) {
     else if (a === "--temps") args.temps = true;
     else if (a === "--config") args.config = argv[++i];
     else if (a.startsWith("--")) args.inconnue = a;
-    else if (!args.commande) args.commande = a.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+    else if (!args.commande) args.commande = sansAccents(a).toLowerCase();   // « clôture » = « cloture »
     else args.inconnue = a;
   }
   return args;
@@ -47,17 +51,17 @@ function lireArgs(argv) {
 
 async function main() {
   const args = lireArgs(process.argv.slice(2));
-  if (!args.commande || args.commande === "aide" || args.commande === "help" || args.inconnue
-    || !["import", "cloture"].includes(args.commande) || (args.adoption && args.commande !== "import")) {
+  const aide = !args.commande || ["aide", "help"].includes(args.commande);
+  if (aide || args.inconnue || !COMMANDES.includes(args.commande) || (args.adoption && args.commande !== "import")) {
     console.log(AIDE);
-    return args.commande && args.commande !== "aide" && args.commande !== "help" ? 1 : 0;
+    return aide ? 0 : 1;                             // commande mal tapée : code d'erreur
   }
   const mesure = creerChrono({ detail: args.temps, ecrire: t => console.log(t) });
   const config = chargerConfig(args.config);
   // Mémo local à côté de la config (config.local.json → config.local.cache.json, exclu de Git).
   const cache = ouvrirCache(args.config.replace(/\.json$/i, "") + ".cache.json");
   const { Client } = await import("@notionhq/client");
-  const notion = adaptateurNotion(new Client({ auth: config.notion.token, retry: { maxRetries: 5 } }));
+  const notion = adaptateurNotion(new Client({ auth: config.notion.token, retry: { maxRetries: NOTION.reessais } }));
   // Connexion à Firebase lancée en arrière-plan : elle se fait pendant la lecture de Notion.
   const store = storeDiffere(mesure("Connexion à Firebase", () => creerStore({ ...config.firebase, espace: config.espace, cache })));
   const contexte = { notion, store, ui: creerUI(), config, maintenant: Date.now(), mesure, cache };

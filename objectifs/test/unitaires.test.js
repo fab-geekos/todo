@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { cle, cleChemin, extrairePriorite, similarite, decalerMois, formatFr, libelleMoisCouvert, deMois,
   estPremierDuMois, heureDe, echeanceApp } from "../src/texte.js";
-import { reecrireScore, remplacerDate, nettoyerTexte, texteCanon, texteSansDates } from "../src/blocs.js";
+import { reecrireScore, lireScore, scoreVaut, remplacerDate, nettoyerTexte, texteCanon, texteSansDates } from "../src/blocs.js";
 import { construireUnites, drapeaux } from "../src/regles.js";
 import { ErreurObjectifs } from "../src/erreurs.js";
 
@@ -47,12 +47,18 @@ test("dates", () => {
 
 test("ligne de score : réécrite sans toucher la suite", () => {
   const rt = [txt(" / :", { bold: true }), txt(" ma note")];
-  const r = reecrireScore(rt, "/8 :");
+  const r = reecrireScore(rt, null, 8);
   assert.equal(texteCanon(r), "/8 : ma note");
   assert.equal(r[0].annotations.bold, true);
-  assert.equal(texteCanon(reecrireScore([txt("6/9 : bravo")], "/ :")), "/ : bravo");
-  assert.equal(texteCanon(reecrireScore([txt("/"), txt(" 9 "), txt(": fin")], "3/9 :")), "3/9 : fin");
-  assert.throws(() => reecrireScore([txt("pas de score")], "/ :"), ErreurObjectifs);
+  assert.equal(texteCanon(reecrireScore([txt("6/9 : bravo")], null, null)), "/ : bravo");
+  assert.equal(texteCanon(reecrireScore([txt("/"), txt(" 9 "), txt(": fin")], 3, 9)), "3/9 : fin");
+  assert.throws(() => reecrireScore([txt("pas de score")], null, null), ErreurObjectifs);
+  assert.deepEqual(lireScore([txt(" / : note")]), { faits: null, total: null });
+  assert.deepEqual(lireScore([txt("6/9 :")]), { faits: 6, total: 9 });
+  assert.equal(lireScore([txt("Top priorités")]), null);
+  assert.ok(scoreVaut(lireScore([txt("/9 :")]), null, 9));
+  assert.ok(!scoreVaut(lireScore([txt("0/9 :")]), null, 9));
+  assert.ok(!scoreVaut(null, null, null));
 });
 
 test("texte enrichi : nettoyage pour l'API, dates", () => {
@@ -71,7 +77,7 @@ test("texte enrichi : nettoyage pour l'API, dates", () => {
 });
 
 const cas = (id, titre, { prio = null, parentId = null, vide = false, echeance = null } = {}) =>
-  ({ id, titre, cle: cle(titre), prio, parentId, vide, echeance, coche: false, profondeurNotion: 1 });
+  ({ id, titre, cle: cle(titre), prio, parentId, vide, echeance });
 
 test("unités : doublons fusionnés, priorité par défaut P4, sous-objectifs", () => {
   const u = construireUnites([
@@ -104,7 +110,7 @@ test("unités : sous-objectif mis en avant dans Top priorités → fusionné ave
   assert.ok(u.avert.some(a => a.includes("aussi un sous-objectif")));
 });
 
-test("unités : priorités contradictoires, ressemblances, 4 niveaux", () => {
+test("unités : priorités contradictoires, ressemblances", () => {
   const u = construireUnites([cas("a", "Lire B", { prio: 2 }), cas("b", "Lire B", { prio: 1 }),
     cas("c", "Relire le compte rendu"), cas("d", "Relire le compte-rendu")]);
   assert.equal(u.racines[0].prio, 1);
@@ -112,8 +118,6 @@ test("unités : priorités contradictoires, ressemblances, 4 niveaux", () => {
   assert.ok(u.avert.some(a => a.includes("se ressemblent")));
   const numeros = construireUnites([cas("p", "Projet"), cas("e1", "Étape 1", { parentId: "p" }), cas("e2", "Étape 2", { parentId: "p" })]);
   assert.ok(!numeros.avert.some(a => a.includes("se ressemblent")));
-  assert.throws(() => construireUnites([cas("1", "Un"), cas("2", "Deux", { parentId: "1" }), cas("3", "Trois", { parentId: "2" }), cas("4", "Quatre", { parentId: "3" })]),
-    ErreurObjectifs);
 });
 
 test("priorités → drapeaux de l'app", () => {

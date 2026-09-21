@@ -71,41 +71,62 @@ export function nettoyerTexte(rt = [], avert = () => {}) {
   });
 }
 
-// Ligne de score : « / : », « /9 : », « 6/9 : » (tout ce qui suit les « : » est conservé).
-export const SCORE_RE = /^\s*(\d*)\s*\/\s*(\d*)\s*:/;
+/* ---------- Ligne de score : « / : », « /9 : », « 6/9 : » (la suite après « : » est conservée) ---------- */
+
+const SCORE_RE = /^\s*(\d*)\s*\/\s*(\d*)\s*:/;
+
+// Score lu sur une ligne → { faits, total } (null quand la partie est vide), ou null si ce n'en est pas une.
+export function lireScore(rt = []) {
+  const m = texteCanon(rt).match(SCORE_RE);
+  if (!m) return null;
+  return { faits: m[1] === "" ? null : Number(m[1]), total: m[2] === "" ? null : Number(m[2]) };
+}
+
+// Le score lu vaut-il exactement faits/total ? (null = partie vide : « /9 : » → faits null)
+export const scoreVaut = (score, faits, total) => !!score && score.faits === faits && score.total === total;
+
+const texteScore = (faits, total) => `${faits ?? ""}/${total ?? ""} :`;
 
 // Réécrit le début « x/y : » d'une ligne de score, en gardant la suite intacte (SPEC § 4.2).
-export function reecrireScore(rt, prefixe) {
+export function reecrireScore(rt, faits, total) {
+  const conseil = "Remets « / : » en début de ligne dans Notion, puis relance.";
   const propre = nettoyerTexte(rt);
-  const complet = texteCanon(propre);
-  const m = complet.match(SCORE_RE);
-  if (!m) stop("La ligne de score « / : » n'a pas le format attendu.", "Remets « / : » en début de ligne dans Notion, puis relance.");
+  const m = texteCanon(propre).match(SCORE_RE);
+  if (!m) stop("La ligne de score « / : » n'a pas le format attendu.", conseil);
   let reste = m[0].length;          // nb de caractères à retirer au début
   const suite = [];
   for (const it of propre) {
     const txt = texteCanon([it]);
     if (reste >= txt.length) { reste -= txt.length; continue; }
     if (reste > 0) {
-      if (it.type !== "text") stop("La ligne de score contient une mention avant « : ».", "Remets « / : » en début de ligne dans Notion, puis relance.");
+      if (it.type !== "text") stop("La ligne de score contient une mention avant « : ».", conseil);
       suite.push({ ...it, text: { ...it.text, content: it.text.content.slice(reste) } });
       reste = 0;
     } else suite.push(it);
   }
   const annotations = propre[0] ? propre[0].annotations : {};
-  return [{ type: "text", text: { content: prefixe, link: null }, annotations }, ...suite];
+  return [{ type: "text", text: { content: texteScore(faits, total), link: null }, annotations }, ...suite];
+}
+
+/* ---------- Dates ---------- */
+
+export function mentionDate(jour) {
+  return { type: "mention", mention: { date: { start: jour, end: null } } };
 }
 
 // Remplace une date de revue par une autre dans un texte enrichi (ligne de date du modèle).
 export function remplacerDate(rt, ancienJour, nouveauJour) {
   return nettoyerTexte(rt).map(it =>
     (it.type === "mention" && it.mention.date && jourDe(it.mention.date.start) === ancienJour)
-      ? { ...it, mention: { date: { start: nouveauJour, end: null } } }
+      ? { ...it, mention: mentionDate(nouveauJour).mention }
       : it);
 }
 
-export function mentionDate(jour) {
-  return { type: "mention", mention: { date: { start: jour, end: null } } };
-}
+// Le texte enrichi contient-il une mention du jour « AAAA-MM-JJ » ?
+export const mentionneJour = (rt, jour) => datesDe(rt).some(d => jourDe(d.start) === jour);
+
+// Blocs datés du jour `jour` (archives d'un mois parmi les enfants de Archives › Dans 1 mois).
+export const blocsDates = (noeuds, jour) => noeuds.filter(n => mentionneJour(n.data.rich_text, jour));
 
 /* ---------- Blocs ---------- */
 
@@ -148,7 +169,7 @@ export function chargeDe(noeud, avert) {
 export const blocApi = n => ({ object: "block", type: n.type, [n.type]: n.data });
 
 // Empreinte comparable d'un arbre (lu dans Notion ou prévu dans le plan) : type, texte, case cochée.
-export function canon(noeuds) {
+function canon(noeuds) {
   return noeuds.map(n => ({
     t: n.type,
     x: texteCanon(n.data.rich_text || []),
@@ -157,10 +178,20 @@ export function canon(noeuds) {
   }));
 }
 
+// Deux arbres ont-ils le même contenu (types, textes, cases cochées, hiérarchie) ?
+export const memesArbres = (a, b) => JSON.stringify(canon(a)) === JSON.stringify(canon(b));
+
 // Parcours en profondeur (ordre du document) : fn(noeud, ancetres).
 export function parcourir(noeuds, fn, ancetres = []) {
   for (const n of noeuds) {
     fn(n, ancetres);
     parcourir(n.enfants || [], fn, [...ancetres, n]);
   }
+}
+
+// Cases qui ne sont sous aucune autre case : les supprimer emporte leurs sous-cases.
+export function casesDeTete(noeuds) {
+  const out = [];
+  parcourir(noeuds, (n, anc) => { if (n.type === "to_do" && !anc.some(a => a.type === "to_do")) out.push(n); });
+  return out;
 }

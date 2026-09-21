@@ -7,11 +7,11 @@
 import { readFileSync } from "node:fs";
 import { sign } from "node:crypto";
 import { stop } from "./erreurs.js";
+import { FIRESTORE } from "./parametres.js";
+import { enAvance } from "./outils.js";
 
-const REGISTRE_VIDE = { mois: null, ids: [] };
 const PORTEES = ["https://www.googleapis.com/auth/datastore", "https://www.googleapis.com/auth/identitytoolkit"];
-const DELAI_REQUETE_MS = 30000;
-const ESSAIS_TRANSACTION = 5;
+const URL_JETON = "https://oauth2.googleapis.com/token";
 
 /* ---------- Conversion JS ⇄ valeurs Firestore (mêmes règles que le SDK web de l'app) ---------- */
 
@@ -49,7 +49,7 @@ export function versChamps(obj) {
   return fields;
 }
 
-export function depuisFirestore(v) {
+function depuisFirestore(v) {
   if ("nullValue" in v) return null;
   if ("booleanValue" in v) return v.booleanValue;
   if ("stringValue" in v) return v.stringValue;
@@ -73,7 +73,7 @@ function jwt(compte, maintenant) {
   const iat = Math.floor(maintenant / 1000);
   const entete = base64url(JSON.stringify({ alg: "RS256", typ: "JWT", kid: compte.private_key_id }));
   const corps = base64url(JSON.stringify({ iss: compte.client_email, scope: PORTEES.join(" "),
-    aud: compte.token_uri || "https://oauth2.googleapis.com/token", iat, exp: iat + 3600 }));
+    aud: compte.token_uri || URL_JETON, iat, exp: iat + 3600 }));
   const signature = sign("RSA-SHA256", Buffer.from(`${entete}.${corps}`), compte.private_key).toString("base64url");
   return `${entete}.${corps}.${signature}`;
 }
@@ -91,16 +91,19 @@ class ErreurHttp extends Error {
 const passagere = e => !!e.reseau
   || (e instanceof ErreurHttp && ([409, 429, 500, 502, 503, 504].includes(e.statut) || e.statutGoogle === "ABORTED"));
 
+// Accès bas niveau (jeton + requêtes) : utilisé par creerStore, et par les essais en bac à sable
+// pour préparer puis effacer un espace de test.
 export async function connecter(compte, { fetch: f = fetch, maintenant = Date.now } = {}) {
-  const appel = async (url, { methode = "POST", corps, jeton, formulaire } = {}) => {
+  // Toutes les requêtes sont des POST : soit un formulaire (jeton), soit du JSON authentifié.
+  const appel = async (url, { corps, jeton, formulaire }) => {
     let r;
     try {
       r = await f(url, {
-        method: methode,
+        method: "POST",
         headers: formulaire ? { "content-type": "application/x-www-form-urlencoded" }
-          : { "content-type": "application/json", ...(jeton ? { authorization: `Bearer ${jeton}` } : {}) },
-        body: formulaire ? new URLSearchParams(formulaire).toString() : (corps === undefined ? undefined : JSON.stringify(corps)),
-        signal: AbortSignal.timeout(DELAI_REQUETE_MS)
+          : { "content-type": "application/json", authorization: `Bearer ${jeton}` },
+        body: formulaire ? new URLSearchParams(formulaire).toString() : JSON.stringify(corps),
+        signal: AbortSignal.timeout(FIRESTORE.delaiRequeteMs)
       });
     } catch (e) {
       throw Object.assign(new Error(`Firebase injoignable (${e.cause && e.cause.code || e.message}).`), { reseau: true });
@@ -117,7 +120,7 @@ export async function connecter(compte, { fetch: f = fetch, maintenant = Date.no
     return json;
   };
 
-  const { access_token: jeton } = await appel(compte.token_uri || "https://oauth2.googleapis.com/token", {
+  const { access_token: jeton } = await appel(compte.token_uri || URL_JETON, {
     formulaire: { grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion: jwt(compte, maintenant()) }
   });
   const racine = `projects/${compte.project_id}/databases/(default)/documents`;
@@ -153,7 +156,7 @@ export async function connecter(compte, { fetch: f = fetch, maintenant = Date.no
   };
 }
 
-/* ---------- Le store (même interface qu'avant : lire, transaction) ---------- */
+/* ---------- Le store : lire() et transaction(fn), utilisés par les commandes ---------- */
 
 // `cache` (facultatif) mémorise l'identifiant Firebase du compte : évite de le rechercher par email
 // à chaque lancement (il ne change jamais pour un même compte Google).
@@ -175,13 +178,14 @@ export async function creerStore({ cleService, email, uid, espace, cache = null,
   return storeDepuisApi(api, `users/${id}/spaces/${espace}`, `users/${id}/objectifs/${espace}`);
 }
 
-export function storeDepuisApi(api, cheminEspace, cheminRegistre) {
+function storeDepuisApi(api, cheminEspace, cheminRegistre) {
   const lireDocs = docs => {
     if (!docs[cheminEspace]) stop("Espace introuvable dans Firestore.", "Vérifie « espace » et le compte dans config.local.json, et ouvre l'app une fois avec ce compte. Si l'email a changé, supprime aussi config.local.cache.json.");
-    const blob = depuisChamps(docs[cheminEspace]);
-    delete blob._updatedAt;                          // horodatage serveur, réécrit à chaque écriture
+    // Forme garantie au reste du script : blob.tasks et registre.ids sont toujours des tableaux.
+    const { _updatedAt, ...blob } = depuisChamps(docs[cheminEspace]);   // horodatage serveur, réécrit à chaque écriture
+    if (!Array.isArray(blob.tasks)) blob.tasks = [];
     const reg = docs[cheminRegistre] ? depuisChamps(docs[cheminRegistre]) : {};
-    return { blob, registre: { ...REGISTRE_VIDE, mois: reg.mois ?? null, ids: reg.ids || [] } };
+    return { blob, registre: { mois: reg.mois ?? null, ids: Array.isArray(reg.ids) ? reg.ids : [] } };
   };
   // Document entier réécrit (comme `set` dans l'app) + horodatage posé par le serveur.
   const ecriture = (chemin, donnees) => ({
@@ -212,7 +216,7 @@ export function storeDepuisApi(api, cheminEspace, cheminRegistre) {
           return true;
         } catch (e) {
           if (tx) await api.annuler(tx);
-          if (e.duCalcul || essai >= ESSAIS_TRANSACTION || !passagere(e)) throw e;
+          if (e.duCalcul || essai >= FIRESTORE.essaisTransaction || !passagere(e)) throw e;
           await new Promise(r => setTimeout(r, 200 * 2 ** essai));   // puis on relit tout et on recalcule
         }
       }
@@ -223,7 +227,7 @@ export function storeDepuisApi(api, cheminEspace, cheminRegistre) {
 // Store utilisable tout de suite, connecté en arrière-plan : la connexion à Firebase se fait
 // pendant la lecture de Notion. Une erreur de connexion ressort au premier usage.
 export function storeDiffere(promesse) {
-  promesse.catch(() => {});                          // évite l'alerte « rejet non géré » en attendant
+  enAvance(promesse);
   return {
     lire: async () => (await promesse).lire(),
     transaction: async fn => (await promesse).transaction(fn)

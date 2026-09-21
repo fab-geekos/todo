@@ -2,39 +2,16 @@
 import { stop } from "./erreurs.js";
 import { cleChemin } from "./texte.js";
 import { texteCanon, blocApi } from "./blocs.js";
+import { NOTION } from "./parametres.js";
+import { tous, limiteur } from "./outils.js";
 
-// Notion accepte environ 3 requêtes par seconde : on en lance au plus 3 en même temps (au-delà,
-// le client officiel attend et réessaie tout seul, ce qui ne ferait que ralentir).
-export const REQUETES_SIMULTANEES = 3;
-
-// File d'attente : au plus `max` promesses en cours. Une requête n'occupe une place que le temps
-// de son aller-retour (pas pendant la lecture de ses enfants) : aucun blocage possible.
-function limiteur(max) {
-  let actives = 0;
-  const file = [];
-  const suivant = () => {
-    if (actives >= max || !file.length) return;
-    actives++;
-    const { fn, ok, ko } = file.shift();
-    fn().then(ok, ko).finally(() => { actives--; suivant(); });
-  };
-  return fn => new Promise((ok, ko) => { file.push({ fn, ok, ko }); suivant(); });
-}
-
-// Comme Promise.all, mais attend que TOUT soit terminé avant de signaler la première erreur :
-// aucune écriture ne continue en arrière-plan après un échec (la reprise part d'un état stable).
-export async function tous(promesses) {
-  const r = await Promise.allSettled(promesses);
-  const echec = r.find(x => x.status === "rejected");
-  if (echec) throw echec.reason;
-  return r.map(x => x.value);
-}
+const PROFONDEUR_RECHERCHE = 4;       // niveaux explorés pour trouver « Dev perso » dans la page
 
 // `client` = instance de @notionhq/client (ou le faux client des tests : mêmes méthodes).
 // Le client officiel réessaie seul les limitations de débit, et ne rejoue JAMAIS une écriture
 // après une erreur serveur (pas de doublon possible dans l'archive).
 export function adaptateurNotion(client) {
-  const file = limiteur(REQUETES_SIMULTANEES);
+  const file = limiteur(NOTION.requetesSimultanees);   // au-delà, Notion ne ferait que nous ralentir
   const N = {
     requetes: 0,                                    // compteur affiché avec --temps
     appel(fn) { N.requetes++; return file(fn); },
@@ -71,7 +48,7 @@ export function adaptateurNotion(client) {
 }
 
 // Identifiant d'une page à partir de son lien Notion (ou de l'identifiant lui-même).
-export function idDePage(lienOuId) {
+function idDePage(lienOuId) {
   const m = String(lienOuId || "").replace(/-/g, "").match(/([0-9a-f]{32})(?:\?|#|$)/i);
   if (!m) stop("Lien de la page Notion invalide dans config.local.json.", "Copie le lien de la page (menu ⋯ → Copier le lien) dans « notion.page ».");
   return m[1];
@@ -81,10 +58,7 @@ export function idDePage(lienOuId) {
 export const noeudDe = b => ({ id: b.id, type: b.type, data: b[b.type] || {}, aEnfants: !!b.has_children, enfants: [] });
 
 // Texte d'un bloc pour la recherche de chemin (titre d'une sous-page ou texte du bloc).
-function texteDe(n) {
-  if (n.type === "child_page") return n.data.title || "";
-  return texteCanon(n.data.rich_text || []);
-}
+const texteDe = n => (n.type === "child_page" ? n.data.title || "" : texteCanon(n.data.rich_text));
 
 // Lit tout l'arbre sous `blockId` (sans descendre dans les sous-pages ni les bases de données).
 // Les branches sont lues en parallèle (le limiteur de l'adaptateur borne le nombre de requêtes).
@@ -105,12 +79,12 @@ async function enfantsNommes(N, parentId, libelle) {
 // Suit un chemin de libellés depuis la page (« Dev perso » › « Objectifs » › …) → { id, parentId }.
 // Le 1er libellé est cherché en profondeur (il peut être dans une colonne, une sous-page…), les
 // suivants parmi les enfants directs. Introuvable ou ambigu → arrêt.
-export async function trouverChemin(N, pageId, chemin) {
+async function trouverChemin(N, pageId, chemin) {
   const nom = chemin.join(" › ");
   let courant = null, parentId = null;
-  // 1er libellé : recherche en largeur, niveau par niveau (4 niveaux au plus).
+  // 1er libellé : recherche en largeur, niveau par niveau.
   let niveau = [pageId];
-  for (let prof = 0; prof < 4 && !courant; prof++) {
+  for (let prof = 0; prof < PROFONDEUR_RECHERCHE && !courant; prof++) {
     const suivants = [], trouves = [];
     for (const id of niveau) {
       for (const n of (await N.enfants(id)).map(noeudDe)) {

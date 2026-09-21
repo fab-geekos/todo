@@ -444,6 +444,7 @@ la norme partout ailleurs (Todo, agenda).
   analysée par les 2 antivirus du PC (Cortex XDR + Defender), d'où des lancements bloqués 17-24 s. `src/store.js`
   signe le jeton (crypto) et appelle `:batchGet`/`:beginTransaction`/`:commit` ; parité vérifiée sur le vrai
   Firestore. Idée pour le futur script `todo.js` (décision #3) : réutiliser `objectifs/src/store.js`.
+  Réglages du script : **un seul fichier `objectifs/src/parametres.js`** (ne pas en disperser ailleurs).
   Essai en bac à sable réussi sur les vraies API (21/09/2026) : sous-page Notion de test + espace Firestore
   `test-objectifs` (supprimé après), cycle adoption → clôture → import → relance.
   Les tâches importées portent un champ `notion` ; **la purge (auto + bouton 🧹) les épargne**

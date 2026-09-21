@@ -38,9 +38,11 @@ Au premier lancement, le script mémorise l'emplacement des sections Notion et t
 
 ## Pour le développement
 
-- `npm test` : tests complets sur un faux Notion et un faux Firestore (aucun accès réseau).
-- `src/regles.js` : toutes les règles (fusion des doublons, priorités, plans d'import et de clôture), sans réseau.
-- `src/notion.js` : accès à Notion (bibliothèque officielle, adaptateur mince).
-- `src/store.js` : accès à Firestore par son API web, sans bibliothèque (jeton signé avec la clé de service, transactions).
+- `npm test` : tests complets sur un faux Notion et un faux serveur Firestore (aucun accès réseau).
+- `src/parametres.js` : **tous les réglages** (structure Notion par défaut, niveaux, seuil de ressemblance, sauvegardes gardées, délais et réessais).
+- `src/regles.js` : toutes les règles métier (fusion des doublons, priorités, plans d'import et de clôture), sans réseau.
+- `src/section.js` : lecture de « Dans 1 mois » (date, score, cases) ; `src/blocs.js` : blocs et texte Notion (score, dates, copie, comparaison) ; `src/texte.js` : textes et dates.
+- `src/notion.js` : accès à Notion (bibliothèque officielle, adaptateur mince) ; `src/store.js` : accès à Firestore par son API web, sans bibliothèque.
 - `src/import.js`, `src/cloture.js` : les deux commandes, étape par étape, avec vérifications.
+- `src/outils.js` (tâches en parallèle), `src/ui.js` (console), `src/sauvegardes.js`, `src/cache.js`, `src/chrono.js`, `src/config.js`, `src/cli.js`.
 - `OBJECTIFS_DEBUG=1` affiche le détail technique d'une erreur inattendue.
