@@ -439,7 +439,7 @@ la norme partout ailleurs (Todo, agenda).
   import Notion : P1 Faire, P2 Planifier, P3 Si possible, P4 Sans priorité.
 - **Objectifs du mois (Notion)** : sous-dossier `objectifs/` (script Node local, cf. `objectifs/SPEC.md` et
   `objectifs/README.md`). V1 codée le 21/09/2026 : `objectifs cloture` puis `objectifs import` ; `npm test`
-  (29 tests, faux Notion + faux Firestore). Registre des cases importées : doc `users/{uid}/objectifs/perso`.
+  (30 tests, faux Notion + faux Firestore). Registre des cases importées : doc `users/{uid}/objectifs/perso`.
   Essai en bac à sable réussi sur les vraies API (21/09/2026) : sous-page Notion de test + espace Firestore
   `test-objectifs` (supprimé après), cycle adoption → clôture → import → relance.
   Les tâches importées portent un champ `notion` ; **la purge (auto + bouton 🧹) les épargne**

@@ -296,9 +296,12 @@ export function planifierCloture({ noeuds, modele, blob, registre }) {
   const total = presentes.size;
 
   // Copie fidèle de la section : cases mises à jour, cases supprimées dans l'app retirées,
-  // ligne de score remplie avec le score final.
+  // ligne de score remplie avec le score final. Une case vide disparaît et ses sous-cases
+  // remontent d'un niveau (choix de Fabien, 21/09/2026).
+  const vides = new Set(modele.cases.filter(c => c.vide).map(c => c.id));
   const copier = noeuds => noeuds.flatMap(n => {
     if (n.type === "to_do" && statut.get(n.id) === null) return [];
+    if (vides.has(n.id)) return copier(n.enfants || []);
     const data = chargeDe(n, m => avert.push(m));
     if (n.type === "to_do" && statut.has(n.id)) data.checked = statut.get(n.id);
     if (n === modele.scoreNoeud) data.rich_text = reecrireScore(n.data.rich_text, `${faits}/${total} :`);

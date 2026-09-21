@@ -224,8 +224,7 @@ const ARCHIVE_ATTENDUE = [
   "☑  Lire le livre B P3",
   { "¶ **Culture": ["☑ Lire le livre B", "☐ Voir l'exposition C @2026-09-15"] },
   { "¶ **Projets perso": [{ "☐ Avancer le projet D": ["☑ Étape 1", "☐ Étape 2"] }] },
-  { "☐ ": ["☐ Sous une case vide"] },
-  "☐ "
+  "☐ Sous une case vide"                         // case vide retirée, sa sous-case remontée d'un niveau
 ];
 
 test("clôture : archive fidèle, modèle vierge, objectifs retirés de l'app", async () => {
@@ -245,6 +244,18 @@ test("clôture : archive fidèle, modèle vierge, objectifs retirés de l'app", 
   assert.equal(ui.questions.length, 1);                                            // pas de question « date »
   // La corbeille Notion garde les cases retirées (récupérables).
   assert.ok([...m.faux.blocs.values()].some(b => b.in_trash && b.type === "to_do"));
+});
+
+test("clôture : case vide imbriquée → retirée de l'archive, sa sous-case remonte sous l'objectif", async () => {
+  const page = pageSeptembre();
+  const section = page[0].enfants[0].enfants[2].enfants;
+  section.splice(3, section.length - 3, todo("Avancer le projet D", [todo("Étape 1"), todo("", [todo("Sous-étape")])]));
+  const m = monde({ page });
+  await lancerImport(m, ["o"]);
+  assert.equal(tache(m.store, "Sous-étape").parentTaskId, tache(m.store, "Avancer le projet D").id);
+  await lancerCloture(m, ["o"]);
+  assert.deepEqual(m.faux.dump(m.archives)[2]["▸ @2026-10-01"],
+    ["¶ @2026-10-01", "¶ 0/3 :", "¶ **Top priorités", { "☐ Avancer le projet D": ["☐ Étape 1", "☐ Sous-étape"] }]);
 });
 
 test("clôture : case jamais importée → arrêt, rien n'est touché", async () => {

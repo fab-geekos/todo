@@ -89,8 +89,8 @@ Dev perso
 | **`P1` / `P2` / `P3` en fin de ligne** | Priorité (§ 5.1). Retiré du titre dans l'app, conservé dans l'archive. |
 | **Pas de P écrit** | P4. |
 | **Mention @date dans une ligne** | Échéance de la tâche. Retirée du titre dans l'app, conservée dans l'archive. Seules les mentions Notion comptent : « en novembre » ou « x2/semaine » restent du texte, sans échéance ni récurrence. |
-| **Case vide avec des sous-cases** | La case vide est ignorée ; ses sous-cases deviennent des tâches normales (P4). |
-| **Case vide sans sous-case** | Ignorée. Ne compte pas dans le score. |
+| **Case vide avec des sous-cases** | La case vide est ignorée ; ses sous-cases deviennent des tâches normales (P4). Dans l'archive, la case vide disparaît et ses sous-cases remontent d'un niveau. |
+| **Case vide sans sous-case** | Ignorée. Ne compte pas dans le score. Absente de l'archive. |
 | **Deux cases au texte identique** (ex. Top priorités + catégorie) | **Une seule tâche** dans l'app, avec la priorité trouvée ; un seul point dans le score ; les deux cases cochées ensemble à la clôture. Comparaison du texte sans tenir compte de la casse, des espaces en trop ni du Px. |
 | **Deux cases qui se ressemblent sans être identiques** | Signalées dans l'aperçu (risque de doublon involontaire), sans bloquer. |
 
@@ -259,6 +259,6 @@ Petits choix faits pendant l'implémentation, dans l'esprit de la spec. À redis
 | Registre des cases importées | Un petit document Firestore à part (`users/{uid}/objectifs/perso` : mois + identifiants des cases), que l'app ignore. | Distinguer « supprimée dans l'app » (retirée de l'archive) de « jamais importée » (arrêt). Vidé à chaque clôture. |
 | Sous-objectif au même texte qu'un objectif | Fusionné avec l'objectif (une tâche, avec sa priorité), signalé dans l'aperçu. | Cas « mis en avant dans Top priorités ». |
 | Sous-tâches ajoutées à la main sous un objectif importé | Retirées avec l'objectif à la clôture, listées dans le résumé avant le « o ». | Elles font partie de l'objectif archivé. |
-| Contenu de l'archive | Copie de toute la section, y compris la ligne de date et la ligne de score (remplie). | Copie fidèle. |
+| Contenu de l'archive | Copie de toute la section, y compris la ligne de date et la ligne de score (remplie), sauf les cases vides (retirées, leurs sous-cases remontées d'un niveau). | Copie fidèle, sans les cases oubliées. |
 | Clé Firebase | Fichier `objectifs/serviceAccountKey.json` (chemin indiqué dans `config.local.json`), exclu de Git. | Format fourni par Firebase. |
-| Tests | `npm test` : 29 tests sur un faux Notion et un faux Firestore, dont les reprises après coupure à chaque étape de la clôture et un cycle complet de deux mois. | Vérifier sans toucher aux vraies données. |
+| Tests | `npm test` : 30 tests sur un faux Notion et un faux Firestore, dont les reprises après coupure à chaque étape de la clôture et un cycle complet de deux mois. | Vérifier sans toucher aux vraies données. |
