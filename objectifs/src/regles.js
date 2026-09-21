@@ -60,9 +60,12 @@ export function construireUnites(cases) {
     u.enfants.forEach(e => verifier(e, niveau + 1));
   };
   racines.forEach(u => verifier(u, 1));
-  // Ressemblances suspectes (doublon involontaire ?) : signalées, pas bloquantes.
+  // Ressemblances suspectes (doublon involontaire ?) : signalées, pas bloquantes. Des titres qui ne
+  // diffèrent que par un numéro (« Étape 1 » / « Étape 2 ») sont une numérotation, pas un doublon.
   const toutes = aplatir(racines).map(x => x.unite);
+  const sansNumeros = s => cle(s).replace(/\d+/g, "#");
   for (let i = 0; i < toutes.length; i++) for (let j = i + 1; j < toutes.length; j++) {
+    if (sansNumeros(toutes[i].titre) === sansNumeros(toutes[j].titre)) continue;
     if (similarite(toutes[i].titre, toutes[j].titre) >= SEUIL_RESSEMBLANCE)
       avert.push(`« ${toutes[i].titre} » et « ${toutes[j].titre} » se ressemblent : doublon involontaire ?`);
   }

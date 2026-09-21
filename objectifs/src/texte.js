@@ -65,6 +65,12 @@ export function libelleMoisCouvert(dateRevue) {
   return `${MOIS[m - 1]} ${a}`;
 }
 
+// « de septembre 2026 », mais « d'octobre 2026 » (élision devant une voyelle).
+export function deMois(dateRevue) {
+  const l = libelleMoisCouvert(dateRevue);
+  return /^[aeiouâ]/.test(l) ? `d'${l}` : `de ${l}`;
+}
+
 // Jour local "AAAA-MM-JJ" (le PC est dans le même fuseau que l'app).
 export function jourLocal(date) {
   const p = n => String(n).padStart(2, "0");

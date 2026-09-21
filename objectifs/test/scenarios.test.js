@@ -336,6 +336,7 @@ test("cycle complet : adoption → clôture → nouveaux objectifs → import �
 
   const ui = await lancerImport(m, ["o"], { adoption: true, maintenant: JOUR("2026-09-21") });
   assert.match(ui.texte, /Adoptées[^\n]*\(3\)/);
+  assert.match(ui.texte, /└ Étape 2 {2}\(sous « Avancer le projet D »\)/);     // parent déjà dans l'app : nommé
   assert.match(ui.texte, /sans case Notion correspondante[^\n]*\n {2}Tâche perso libre/);
   const A = m.store.blob.tasks.find(t => t.id === "s1");
   assert.deepEqual([A.completed, A.important, A.urgent, A.notion.mois], [true, true, true, "2026-10-01"]);

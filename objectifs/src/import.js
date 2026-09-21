@@ -1,6 +1,6 @@
 // Commande « objectifs import » (SPEC § 7) et son mode « --adoption » (§ 7.1).
 import { stop, Abandon } from "./erreurs.js";
-import { formatFr, libelleMoisCouvert } from "./texte.js";
+import { formatFr, deMois } from "./texte.js";
 import { reecrireScore, texteCanon, SCORE_RE } from "./blocs.js";
 import { localiserSections, lireArbre } from "./notion.js";
 import { analyserSection } from "./section.js";
@@ -14,7 +14,7 @@ export async function commandeImport({ notion: N, store, ui, config, maintenant,
   const noeuds = await lireArbre(N, sectionId);
   const modele = analyserSection(noeuds);
   const date = modele.date;
-  ui.info(`Objectifs de ${libelleMoisCouvert(date)} (revue le ${formatFr(date)})`);
+  ui.info(`Objectifs ${deMois(date)} (revue le ${formatFr(date)})`);
 
   const { blob, registre } = await store.lire();
   const projet = trouverProjet(blob, config.projet);
@@ -59,15 +59,19 @@ export async function commandeImport({ notion: N, store, ui, config, maintenant,
   }
 
   await verifierImport({ N, store, sectionId, unites, plan, date, fichier });
-  ui.ok(`${plan.total} objectifs de ${libelleMoisCouvert(date)} dans l'app, score « /${plan.total} : » écrit dans Notion.`);
+  ui.ok(`${plan.total} objectifs ${deMois(date)} dans l'app, score « /${plan.total} : » écrit dans Notion.`);
 }
 
 function afficherApercu(ui, { plan, unites, adoption, score }) {
   const niveau = new Map(aplatir(unites.racines).map(x => [x.unite, x.niveau]));
+  const creees = new Set(plan.creations.map(c => c.unite));
   const ligne = (u, prio) => {
     const n = niveau.get(u);
     const tete = n === 1 || prio ? `  P${prio || 4} · ` : `${"      ".repeat(n - 1)}  └ `;
-    const details = [u.ids.length > 1 ? `${u.ids.length} cases fusionnées` : "",
+    // Sous-objectif dont le parent existe déjà dans l'app : on nomme le parent (sinon il semblerait
+    // rangé sous la ligne précédente de la liste).
+    const sous = !prio && u.parent && !creees.has(u.parent) ? `sous « ${u.parent.titre} »` : "";
+    const details = [sous, u.ids.length > 1 ? `${u.ids.length} cases fusionnées` : "",
       u.echeance ? `échéance ${formatFr(u.echeance.jour)}${u.echeance.heure ? " " + u.echeance.heure : ""}` : ""].filter(Boolean);
     return tete + u.titre + (details.length ? `  (${details.join(", ")})` : "");
   };

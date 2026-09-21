@@ -440,7 +440,8 @@ la norme partout ailleurs (Todo, agenda).
 - **Objectifs du mois (Notion)** : sous-dossier `objectifs/` (script Node local, cf. `objectifs/SPEC.md` et
   `objectifs/README.md`). V1 codée le 21/09/2026 : `objectifs cloture` puis `objectifs import` ; `npm test`
   (29 tests, faux Notion + faux Firestore). Registre des cases importées : doc `users/{uid}/objectifs/perso`.
-  ⚠️ Pas encore essayé sur les vraies API : prévoir un essai en bac à sable (clés + page Notion de test).
+  Essai en bac à sable réussi sur les vraies API (21/09/2026) : sous-page Notion de test + espace Firestore
+  `test-objectifs` (supprimé après), cycle adoption → clôture → import → relance.
   Les tâches importées portent un champ `notion` ; **la purge (auto + bouton 🧹) les épargne**
   (`isPurgeableRoot` / `subtreeHasNotionTask`) : c'est la clôture du mois qui les retire.
   ⚠️ Repo PUBLIC + GitHub Pages : `objectifs/sauvegardes/` et les clés sont dans `.gitignore`, et la spec

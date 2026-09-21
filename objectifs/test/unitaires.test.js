@@ -1,7 +1,7 @@
 // Tests des fonctions pures (texte, dates, texte enrichi, fusion des cases).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cle, cleChemin, extrairePriorite, similarite, decalerMois, formatFr, libelleMoisCouvert,
+import { cle, cleChemin, extrairePriorite, similarite, decalerMois, formatFr, libelleMoisCouvert, deMois,
   estPremierDuMois, heureDe, echeanceApp } from "../src/texte.js";
 import { reecrireScore, remplacerDate, nettoyerTexte, texteCanon, texteSansDates } from "../src/blocs.js";
 import { construireUnites, drapeaux } from "../src/regles.js";
@@ -33,6 +33,10 @@ test("dates", () => {
   assert.equal(formatFr("2026-10-01"), "01/10/2026");
   assert.equal(libelleMoisCouvert("2026-10-01"), "septembre 2026");
   assert.equal(libelleMoisCouvert("2027-01-01"), "décembre 2026");
+  assert.equal(deMois("2026-10-01"), "de septembre 2026");
+  assert.equal(deMois("2026-11-01"), "d'octobre 2026");
+  assert.equal(deMois("2026-09-01"), "d'août 2026");
+  assert.equal(deMois("2026-05-01"), "d'avril 2026");
   assert.ok(estPremierDuMois("2026-10-01"));
   assert.ok(!estPremierDuMois("2026-10-02"));
   assert.equal(heureDe("2026-10-15T14:30:00.000+02:00"), "14:30");
@@ -106,6 +110,8 @@ test("unités : priorités contradictoires, ressemblances, 4 niveaux", () => {
   assert.equal(u.racines[0].prio, 1);
   assert.ok(u.avert.some(a => a.includes("deux priorités")));
   assert.ok(u.avert.some(a => a.includes("se ressemblent")));
+  const numeros = construireUnites([cas("p", "Projet"), cas("e1", "Étape 1", { parentId: "p" }), cas("e2", "Étape 2", { parentId: "p" })]);
+  assert.ok(!numeros.avert.some(a => a.includes("se ressemblent")));
   assert.throws(() => construireUnites([cas("1", "Un"), cas("2", "Deux", { parentId: "1" }), cas("3", "Trois", { parentId: "2" }), cas("4", "Quatre", { parentId: "3" })]),
     ErreurObjectifs);
 });

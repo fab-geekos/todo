@@ -3,7 +3,7 @@
 // Chaque étape vérifie l'état réel avant d'agir : relancer après une interruption reprend là où ça
 // s'est arrêté, sans jamais refaire une étape faite ni effacer quoi que ce soit d'inattendu.
 import { stop, Abandon } from "./erreurs.js";
-import { formatFr, libelleMoisCouvert, decalerMois, jourLocal, jourDe } from "./texte.js";
+import { formatFr, deMois, decalerMois, jourLocal, jourDe } from "./texte.js";
 import { canon, datesDe, texteCanon, reecrireScore, remplacerDate, mentionDate, blocApi, SCORE_RE, parcourir } from "./blocs.js";
 import { localiserSections, lireArbre, creerArbre, noeudDe } from "./notion.js";
 import { analyserSection } from "./section.js";
@@ -30,7 +30,7 @@ export async function commandeCloture({ notion: N, store, ui, config, maintenant
   let plan = planCloture.lire(dossier);
 
   if (plan) {
-    ui.avert(`La clôture des objectifs de ${libelleMoisCouvert(plan.date)} a été interrompue : elle va reprendre là où elle s'est arrêtée.`);
+    ui.avert(`La clôture des objectifs ${deMois(plan.date)} a été interrompue : elle va reprendre là où elle s'est arrêtée.`);
     if (!(await ui.demander("Reprendre la clôture ?"))) throw new Abandon();
   } else {
     const noeuds = await lireArbre(N, sectionId);
@@ -67,7 +67,7 @@ export async function commandeCloture({ notion: N, store, ui, config, maintenant
 }
 
 function afficherResume(ui, p) {
-  ui.info(`\nObjectifs de ${libelleMoisCouvert(p.date)} (revue le ${formatFr(p.date)}) : ${p.faits}/${p.total} atteints.`);
+  ui.info(`\nObjectifs ${deMois(p.date)} (revue le ${formatFr(p.date)}) : ${p.faits}/${p.total} atteints.`);
   if (p.nonFaits.length) { ui.info("\nNon faits :"); p.nonFaits.forEach(t => ui.info(`  ${t}`)); }
   if (p.retirees.length) { ui.info("\nSupprimés dans l'app en cours de mois (absents de l'archive) :"); p.retirees.forEach(t => ui.info(`  ${t}`)); }
   if (p.manuelles.length) { ui.info("\nSous-tâches ajoutées dans l'app (retirées avec leur objectif, non archivées) :"); p.manuelles.forEach(t => ui.info(`  ${t}`)); }
@@ -145,9 +145,9 @@ async function executer({ N, store, ui, plan, sectionId, archivesId }) {
 }
 
 function afficherBilan(ui, plan) {
-  ui.titre(`Bilan de ${libelleMoisCouvert(plan.date)} : ${plan.faits}/${plan.total} atteints`);
+  ui.titre(`Bilan ${deMois(plan.date)} : ${plan.faits}/${plan.total} atteints`);
   if (plan.nonFaits.length) { ui.info("Non faits :"); plan.nonFaits.forEach(t => ui.info(`  ${t}`)); }
-  ui.info(`\nProchaine étape : écris les objectifs de ${libelleMoisCouvert(plan.dateSuivante)} dans « Dans 1 mois », puis lance « objectifs import ».`);
+  ui.info(`\nProchaine étape : écris les objectifs ${deMois(plan.dateSuivante)} dans « Dans 1 mois », puis lance « objectifs import ».`);
 }
 
 // Cases qui ne sont pas sous une autre case (les supprimer emporte leurs sous-cases).
