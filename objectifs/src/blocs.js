@@ -108,6 +108,21 @@ export function reecrireScore(rt, faits, total) {
   return [{ type: "text", text: { content: texteScore(faits, total), link: null }, annotations }, ...suite];
 }
 
+// Case vidée pour le modèle du mois suivant : le texte part, le marqueur de priorité reste (avec sa
+// couleur), pour pouvoir réécrire l'objectif devant. → { rich_text, marqueur: true si P1…P4 trouvé }
+export function caseVidee(rt) {
+  const propre = nettoyerTexte(rt);
+  for (let i = propre.length - 1; i >= 0; i--) {
+    const it = propre[i];
+    const contenu = it.type === "text" ? it.text.content : texteCanon([it]);
+    if (contenu.trim() === "") continue;                      // espaces en fin de ligne : on remonte
+    const m = it.type === "text" && contenu.match(/\bP[1-4]$/);
+    if (!m) break;                                            // autre texte à la fin : pas de marqueur
+    return { rich_text: [{ ...it, text: { content: m[0], link: null } }], marqueur: true };
+  }
+  return { rich_text: [], marqueur: false };
+}
+
 /* ---------- Dates ---------- */
 
 export function mentionDate(jour) {

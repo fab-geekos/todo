@@ -4,8 +4,8 @@
 // s'est arrêté, sans jamais refaire une étape faite ni effacer quoi que ce soit d'inattendu.
 import { stop, Abandon } from "./erreurs.js";
 import { formatFr, deMois, jourLocal } from "./texte.js";
-import { memesArbres, casesDeTete, blocsDates, mentionneJour, lireScore, scoreVaut, reecrireScore,
-  remplacerDate, mentionDate, blocApi } from "./blocs.js";
+import { memesArbres, blocsDates, mentionneJour, lireScore, scoreVaut, reecrireScore, remplacerDate,
+  mentionDate, blocApi, parcourir, texteCanon } from "./blocs.js";
 import { localiserSections, lireArbre, creerArbre, noeudDe } from "./notion.js";
 import { tous, enAvance } from "./outils.js";
 import { sansMesure } from "./chrono.js";
@@ -14,6 +14,17 @@ import { planifierCloture, appliquerRetrait, verifierMoisUnique, aDesImportees, 
 import { sauvegarder, planCloture } from "./sauvegardes.js";
 
 const RELANCER = "Relance « objectifs cloture » : elle reprendra là où elle s'est arrêtée.";
+
+// Tous les blocs de l'arbre, par identifiant (pour agir seulement sur ce qui existe encore).
+function parTousLesIds(noeuds) {
+  const parId = new Map();
+  parcourir(noeuds, n => parId.set(n.id, n));
+  return parId;
+}
+
+// Une case gardée est-elle déjà au bon état (texte vidé, décochée) ? Sert à la reprise.
+const caseDejaVidee = (n, rich_text) =>
+  !n.data.checked && texteCanon(n.data.rich_text) === texteCanon(rich_text);
 
 export async function commandeCloture({ notion: N, store, ui, config, maintenant, mesure = sansMesure, cache = null }) {
   ui.titre("Clôture du mois");
@@ -110,7 +121,7 @@ async function etapeArchive({ N, ui, plan, archivesId }) {
 // portent sur des blocs différents, donc partent en parallèle. ---
 async function etapeModele({ N, ui, plan, sectionId }) {
   const noeuds = await lireArbre(N, sectionId);
-  const aRetirer = new Set(plan.casesModele);
+  const presents = parTousLesIds(noeuds);
   const score = noeuds.find(n => n.id === plan.scoreNoeudId);
   const ligneDate = noeuds.find(n => n.id === plan.dateNoeudId);
   if (!score || !ligneDate) stop("La ligne de date ou de score de « Dans 1 mois » a disparu pendant la clôture.",
@@ -119,7 +130,10 @@ async function etapeModele({ N, ui, plan, sectionId }) {
   if (!dateAvancee && !mentionneJour(ligneDate.data.rich_text, plan.date)) stop("La date de revue de « Dans 1 mois » a été modifiée pendant la clôture.",
     `Remets la date @${formatFr(plan.dateSuivante)} en tête de « Dans 1 mois », puis relance.`);
   await tous([
-    ...casesDeTete(noeuds).filter(n => aRetirer.has(n.id)).map(n => N.supprimer(n.id)),
+    ...plan.modele.aSupprimer.filter(id => presents.has(id)).map(id => N.supprimer(id)),
+    // Cases gardées : vidées de leur texte (le marqueur P1…P4 reste) et décochées.
+    ...plan.modele.aVider.filter(({ id, rich_text }) => presents.has(id) && !caseDejaVidee(presents.get(id), rich_text))
+      .map(({ id, rich_text }) => N.modifier(id, "to_do", { rich_text, checked: false })),
     scoreVaut(lireScore(score.data.rich_text), null, null) ? null
       : N.modifier(score.id, score.type, { rich_text: reecrireScore(score.data.rich_text, null, null) }),
     dateAvancee ? null
@@ -143,14 +157,16 @@ async function etapeApp({ store, ui, plan }) {
 // --- Étape 4 : vérification finale, complète (la clôture efface) ---
 async function verifierCloture({ N, store, plan, sectionId }) {
   const [{ blob, registre }, relu] = await tous([store.lire(), lireArbre(N, sectionId)]);
-  const aRetirer = new Set(plan.casesModele);
+  const presents = parTousLesIds(relu);
   const restes = importeesDuMois(blob.tasks, plan.date).length;
   const ligneDate = relu.find(n => n.id === plan.dateNoeudId);
   const score = relu.find(n => n.id === plan.scoreNoeudId);
   const problemes = [];
   if (restes) problemes.push(`${restes} objectif(s) encore dans l'app`);
   if (registre.ids.length) problemes.push("registre des cases importées non vidé");
-  if (casesDeTete(relu).some(n => aRetirer.has(n.id))) problemes.push("des cases restent dans « Dans 1 mois »");
+  if (plan.modele.aSupprimer.some(id => presents.has(id))) problemes.push("des cases restent dans « Dans 1 mois »");
+  if (plan.modele.aVider.some(({ id, rich_text }) => !presents.has(id) || !caseDejaVidee(presents.get(id), rich_text)))
+    problemes.push("des cases gardées n'ont pas été vidées");
   if (!ligneDate || !mentionneJour(ligneDate.data.rich_text, plan.dateSuivante)) problemes.push("date de revue non avancée");
   if (!score || !scoreVaut(lireScore(score.data.rich_text), null, null)) problemes.push("ligne de score non remise à zéro");
   if (problemes.length) stop(`Vérification après clôture : ${problemes.join(" ; ")}.`, RELANCER);

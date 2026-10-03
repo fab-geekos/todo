@@ -216,6 +216,11 @@ async function moisVecu() {
   return m;
 }
 
+// Après la clôture : les cases à marqueur (P1, P2, P3) restent, vidées ; chaque autre partie garde
+// une case vide prête à écrire ; tout le reste part à la corbeille.
+const MODELE_VIERGE = ["¶ @2026-11-01", "¶ / :", "¶ **Top priorités", "☐ P1", "☐ P2", "☐ P3",
+  { "¶ **Culture": ["☐ "] }, { "¶ **Projets perso": ["☐ "] }];
+
 const ARCHIVE_ATTENDUE = [        // sans la ligne de date : le titre du bloc dépliant la porte déjà
   "¶ 3/7 :",
   "¶ **Top priorités",
@@ -232,7 +237,7 @@ test("clôture : archive fidèle, modèle vierge, objectifs retirés de l'app", 
   const archives = m.faux.dump(m.archives);
   assert.deepEqual(archives.map(a => Object.keys(a)[0] || a), ["▸ @2026-08-01", "▸ @2026-09-01", "▸ @2026-10-01"]);
   assert.deepEqual(archives[2]["▸ @2026-10-01"], ARCHIVE_ATTENDUE);
-  assert.deepEqual(m.faux.dump(m.section), ["¶ @2026-11-01", "¶ / :", "¶ **Top priorités", "¶ **Culture", "¶ **Projets perso"]);
+  assert.deepEqual(m.faux.dump(m.section), MODELE_VIERGE);
   assert.deepEqual(m.store.blob.tasks.map(t => t.title), ["Acheter du pain", "Tâche libre du projet"]);
   assert.deepEqual(m.store.registre, { mois: null, ids: [] });
   assert.ok(!existsSync(join(m.config.dossierSauvegardes, "cloture-en-cours.json")));
@@ -321,7 +326,7 @@ for (const panne of PANNES) {
     const archives = m.faux.dump(m.archives);
     assert.equal(archives.length, 3, JSON.stringify(archives));
     assert.deepEqual(archives[2]["▸ @2026-10-01"], ARCHIVE_ATTENDUE);
-    assert.deepEqual(m.faux.dump(m.section), ["¶ @2026-11-01", "¶ / :", "¶ **Top priorités", "¶ **Culture", "¶ **Projets perso"]);
+    assert.deepEqual(m.faux.dump(m.section), MODELE_VIERGE);
     assert.deepEqual(m.store.blob.tasks.map(t => t.title), ["Acheter du pain", "Tâche libre du projet"]);
     assert.ok(!existsSync(join(m.config.dossierSauvegardes, "cloture-en-cours.json")));
   });
@@ -455,7 +460,7 @@ test("parallélisme : lectures simultanées, jamais plus de 3 requêtes à la fo
   await lancerCloture(m, ["o"]);
   assert.ok(m.faux.maxEnCours > 1, "les lectures devraient partir en parallèle");
   assert.ok(m.faux.maxEnCours <= 3, `${m.faux.maxEnCours} requêtes simultanées`);
-  assert.deepEqual(m.faux.dump(m.section), ["¶ @2026-11-01", "¶ / :", "¶ **Top priorités", "¶ **Culture", "¶ **Projets perso"]);
+  assert.deepEqual(m.faux.dump(m.section), MODELE_VIERGE);
 });
 
 test("Firebase connecté en arrière-plan : une erreur de connexion ressort au premier usage", async () => {

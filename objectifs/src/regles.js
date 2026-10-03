@@ -7,7 +7,7 @@
 import { stop } from "./erreurs.js";
 import { SEUIL_RESSEMBLANCE } from "./parametres.js";
 import { cle, extrairePriorite, similarite, echeanceApp, formatFr, decalerMois } from "./texte.js";
-import { chargeDe, reecrireScore, casesDeTete, blocsDates, datesDe } from "./blocs.js";
+import { chargeDe, reecrireScore, caseVidee, blocsDates, datesDe } from "./blocs.js";
 
 // Priorité Notion → drapeaux de l'app (SPEC § 5.1). Sans priorité (sous-objectif) = P4.
 const FLAGS = { 1: { important: true, urgent: true }, 2: { important: true, urgent: false },
@@ -261,6 +261,29 @@ function idsARetirer(taches, date) {
   return out;
 }
 
+// Modèle vierge : ce qu'on fait des cases de « Dans 1 mois » (choix de Fabien, 03/10/2026).
+// Dans chaque groupe de cases voisines (même parent : « Top priorités », une catégorie…) :
+// - les cases portant un marqueur P1…P4 sont GARDÉES, vidées de leur texte (le marqueur et sa
+//   couleur restent) → il n'y a plus qu'à écrire l'objectif devant ;
+// - si aucune n'en porte, on garde la PREMIÈRE, vidée : chaque partie conserve une case prête ;
+// - tout le reste part à la corbeille, sous-cases comprises.
+function planModele(noeuds) {
+  const aVider = [], aSupprimer = [];
+  const traiter = liste => {
+    const cases = liste.filter(n => n.type === "to_do");
+    const avecMarqueur = cases.filter(n => caseVidee(n.data.rich_text).marqueur);
+    const gardees = new Set((avecMarqueur.length ? avecMarqueur : cases.slice(0, 1)).map(n => n.id));
+    for (const n of cases) {
+      if (!gardees.has(n.id)) { aSupprimer.push(n.id); continue; }   // la corbeille emporte ses sous-cases
+      aVider.push({ id: n.id, rich_text: caseVidee(n.data.rich_text).rich_text });
+      for (const e of n.enfants) aSupprimer.push(e.id);              // une case gardée est vidée de son contenu
+    }
+    for (const n of liste) if (n.type !== "to_do") traiter(n.enfants);
+  };
+  traiter(noeuds);
+  return { aVider, aSupprimer };
+}
+
 // Les archives existantes donnent le style du nouveau titre (bloc dépliant, titre dépliant…).
 function styleArchive(archivesExistantes) {
   const derniere = [...archivesExistantes].reverse().find(n => datesDe(n.data.rich_text).length);
@@ -324,7 +347,7 @@ export function planifierCloture({ noeuds, modele, blob, registre, archivesExist
     retirees: pleines.filter(c => supprimee(c.id) && !supprimee(c.parentId)).map(c => c.titre),
     manuelles: blob.tasks.filter(t => aRetirer.has(t.id) && !estImportee(t)).map(t => t.title),
     nbTachesARetirer: aRetirer.size,
-    casesModele: casesDeTete(noeuds).map(n => n.id),
+    modele: planModele(noeuds),
     dateNoeudId: modele.dateNoeud.id,
     scoreNoeudId: modele.scoreNoeud.id,
     avert

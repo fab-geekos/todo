@@ -150,7 +150,9 @@ Seul cas particulier : si on la lance **avant** la date de revue (ex. le 25/09 p
    - date avancée d'un mois (`@01/11/2026`) ;
    - `/ :` remis à zéro ;
    - catégories en gras conservées (y compris « Top priorités ») ;
-   - toutes les cases retirées (elles vont dans la corbeille Notion, récupérables 30 jours).
+   - **les cases portant un marqueur P1 à P4 sont gardées, vidées de leur texte** (le marqueur et sa couleur restent) : il n'y a plus qu'à écrire l'objectif devant ;
+   - **chaque autre partie garde une case vide**, prête à écrire (la première de la partie) ;
+   - toutes les autres cases sont retirées, sous-cases comprises (corbeille Notion, récupérables 30 jours).
 9. **Suppression dans l'app** des tâches importées de ce mois, et uniquement celles-là.
 10. **Vérification finale** puis **bilan** à l'écran : « 6/9 atteints. Non faits : … ». Ce bilan aide à écrire le mois suivant.
 
@@ -259,6 +261,7 @@ Petits choix faits pendant l'implémentation, dans l'esprit de la spec. À redis
 | Registre des cases importées | Un petit document Firestore à part (`users/{uid}/objectifs/perso` : mois + identifiants des cases), que l'app ignore. | Distinguer « supprimée dans l'app » (retirée de l'archive) de « jamais importée » (arrêt). Vidé à chaque clôture. |
 | Sous-objectif au même texte qu'un objectif | Fusionné avec l'objectif (une tâche, avec sa priorité), signalé dans l'aperçu. | Cas « mis en avant dans Top priorités ». |
 | Sous-tâches ajoutées à la main sous un objectif importé | Retirées avec l'objectif à la clôture, listées dans le résumé avant le « o ». | Elles font partie de l'objectif archivé. |
+| Modèle vierge | Les cases à marqueur (P1 à P4) restent, vidées ; chaque autre partie garde une case vide ; le reste part à la corbeille (§ 6, étape 8). | Page prête à écrire le mois suivant, sans retaper les priorités ni les cases (choix du 03/10/2026, après la 1re vraie clôture). |
 | Contenu de l'archive | Copie de toute la section avec la ligne de score (remplie), **sans la ligne de date** (le titre du bloc dépliant la porte déjà) et sans les cases vides (retirées, leurs sous-cases remontées d'un niveau). | Copie fidèle, sans doublon ni case oubliée (date retirée le 03/10/2026, après la 1re vraie clôture). |
 | Clé Firebase | Fichier `objectifs/serviceAccountKey.json` (chemin indiqué dans `config.local.json`), exclu de Git. | Format fourni par Firebase. |
 | Rapidité | Lectures Notion en parallèle (3 requêtes à la fois au plus), connexion à Firebase pendant la lecture de Notion, emplacement des sections et identifiant Firebase mémorisés dans `config.local.cache.json` (revérifiés : bloc + parent), vérification de l'import limitée à la ligne de score (la clôture garde sa vérification complète). Option `--temps`. | Mesuré en bac à sable : import 2,4 s (1,1 s sans nouveauté), clôture environ 15 s, dont l'essentiel est la latence de Notion à chaque suppression. |
