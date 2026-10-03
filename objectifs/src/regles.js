@@ -297,10 +297,11 @@ export function planifierCloture({ noeuds, modele, blob, registre, archivesExist
 
   // Copie fidèle de la section : cases mises à jour, cases supprimées dans l'app retirées,
   // ligne de score remplie avec le score final. Une case vide disparaît et ses sous-cases
-  // remontent d'un niveau (choix de Fabien, 21/09/2026).
+  // remontent d'un niveau (choix de Fabien, 21/09/2026). La ligne de date n'est pas recopiée :
+  // le titre du bloc dépliant porte déjà la date (choix de Fabien, 03/10/2026).
   const vides = new Set(modele.cases.filter(c => c.vide).map(c => c.id));
   const copier = liste => liste.flatMap(n => {
-    if (statut.get(n.id) === null) return [];
+    if (statut.get(n.id) === null || n === modele.dateNoeud) return [];
     if (vides.has(n.id)) return copier(n.enfants);
     const data = chargeDe(n, m => avert.push(m));
     if (statut.has(n.id)) data.checked = statut.get(n.id);

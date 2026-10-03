@@ -122,5 +122,5 @@ test("cycle import + clôture sur le faux serveur Firestore (accès direct)", as
   assert.deepEqual(blob.tasks.map(t => t.title), ["Acheter du pain « bio » 🥖"]);
   assert.deepEqual(depuisChamps(serveur.champs("users/uid-1/objectifs/perso")), { mois: null, ids: [], _updatedAt: blob._updatedAt ?? depuisChamps(serveur.champs("users/uid-1/objectifs/perso"))._updatedAt });
   const archive = faux.dump(faux.trouver("Dans 1 mois", faux.trouver("Archives")))[0];
-  assert.deepEqual(archive["▸ @2026-10-01"], ["¶ @2026-10-01", "¶ 1/3 :", "¶ **Top priorités", "☐ Finir le dossier A P1", { "☐ Avancer le projet D": ["☑ Étape 1"] }]);
+  assert.deepEqual(archive["▸ @2026-10-01"], ["¶ 1/3 :", "¶ **Top priorités", "☐ Finir le dossier A P1", { "☐ Avancer le projet D": ["☑ Étape 1"] }]);
 });

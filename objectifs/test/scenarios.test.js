@@ -216,8 +216,7 @@ async function moisVecu() {
   return m;
 }
 
-const ARCHIVE_ATTENDUE = [
-  "¶ @2026-10-01",
+const ARCHIVE_ATTENDUE = [        // sans la ligne de date : le titre du bloc dépliant la porte déjà
   "¶ 3/7 :",
   "¶ **Top priorités",
   "☑ Finir le dossier A P1",
@@ -255,7 +254,7 @@ test("clôture : case vide imbriquée → retirée de l'archive, sa sous-case re
   assert.equal(tache(m.store, "Sous-étape").parentTaskId, tache(m.store, "Avancer le projet D").id);
   await lancerCloture(m, ["o"]);
   assert.deepEqual(m.faux.dump(m.archives)[2]["▸ @2026-10-01"],
-    ["¶ @2026-10-01", "¶ 0/3 :", "¶ **Top priorités", { "☐ Avancer le projet D": ["☐ Étape 1", "☐ Sous-étape"] }]);
+    ["¶ 0/3 :", "¶ **Top priorités", { "☐ Avancer le projet D": ["☐ Étape 1", "☐ Sous-étape"] }]);
 });
 
 test("clôture : case jamais importée → arrêt, rien n'est touché", async () => {
@@ -377,7 +376,7 @@ test("cycle complet : adoption → clôture → nouveaux objectifs → import �
   await lancerCloture(m, ["o"], { maintenant: JOUR("2026-11-04") });
   const archives = m.faux.dump(m.archives);
   assert.deepEqual(archives.map(a => Object.keys(a)[0]), ["▸ @2026-08-01", "▸ @2026-09-01", "▸ @2026-10-01", "▸ @2026-11-01"]);
-  assert.deepEqual(archives[3]["▸ @2026-11-01"], ["¶ @2026-11-01", "¶ 1/3 :", "¶ **Top priorités", "☐ Courir 3 fois par semaine P1",
+  assert.deepEqual(archives[3]["▸ @2026-11-01"], ["¶ 1/3 :", "¶ **Top priorités", "☐ Courir 3 fois par semaine P1",
     { "¶ **Culture": [{ "☐ Lire le livre F": ["☑ Chapitres 1 à 5"] }] }, "¶ **Projets perso"]);
   assert.deepEqual(m.faux.dump(m.section)[0], "¶ @2026-12-01");
   // 3 lancements avec écriture (adoption, import, 2 clôtures) : seules les 2 dernières sauvegardes restent.
