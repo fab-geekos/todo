@@ -22,9 +22,17 @@ function parTousLesIds(noeuds) {
   return parId;
 }
 
-// Une case gardée est-elle déjà au bon état (texte vidé, décochée) ? Sert à la reprise.
-const caseDejaVidee = (n, rich_text) =>
-  !n.data.checked && texteCanon(n.data.rich_text) === texteCanon(rich_text);
+// État d'une case à vider, d'après ce qu'elle contient maintenant :
+// - « faite »    : déjà vidée et décochée ;
+// - « a-faire »  : inchangée depuis la clôture → on la vide ;
+// - « reecrite » : réécrite à la main depuis (ex. l'objectif du mois suivant, tapé pendant une
+//   clôture interrompue) → on n'y touche JAMAIS, on le signale. Une case d'un plan sans « avant »
+//   (plan d'une version précédente) est traitée de même : dans le doute, on ne détruit rien.
+function etatCase(n, c) {
+  if (!n.data.checked && texteCanon(n.data.rich_text) === texteCanon(c.rich_text)) return "faite";
+  if (c.avant !== undefined && texteCanon(n.data.rich_text) === c.avant) return "a-faire";
+  return "reecrite";
+}
 
 export async function commandeCloture({ notion: N, store, ui, config, maintenant, mesure = sansMesure, cache = null }) {
   ui.titre("Clôture du mois");
@@ -132,14 +140,16 @@ async function etapeModele({ N, ui, plan, sectionId }) {
   await tous([
     ...plan.modele.aSupprimer.filter(id => presents.has(id)).map(id => N.supprimer(id)),
     // Cases gardées : vidées de leur texte (le marqueur P1…P4 reste) et décochées.
-    ...plan.modele.aVider.filter(({ id, rich_text }) => presents.has(id) && !caseDejaVidee(presents.get(id), rich_text))
+    ...plan.modele.aVider.filter(c => presents.has(c.id) && etatCase(presents.get(c.id), c) === "a-faire")
       .map(({ id, rich_text }) => N.modifier(id, "to_do", { rich_text, checked: false })),
     scoreVaut(lireScore(score.data.rich_text), null, null) ? null
       : N.modifier(score.id, score.type, { rich_text: reecrireScore(score.data.rich_text, null, null) }),
     dateAvancee ? null
       : N.modifier(ligneDate.id, ligneDate.type, { rich_text: remplacerDate(ligneDate.data.rich_text, plan.date, plan.dateSuivante) })
   ]);
+  const reecrites = plan.modele.aVider.filter(c => presents.has(c.id) && etatCase(presents.get(c.id), c) === "reecrite");
   ui.ok(`« Dans 1 mois » remis à zéro, daté @${formatFr(plan.dateSuivante)}.`);
+  ui.avertissements(reecrites.map(c => `Case réécrite à la main depuis le début de la clôture, laissée telle quelle : « ${texteCanon(presents.get(c.id).data.rich_text)} ».`));
 }
 
 // --- Étape 3 : retrait des objectifs dans l'app (+ registre vidé), en une opération ---
@@ -165,7 +175,7 @@ async function verifierCloture({ N, store, plan, sectionId }) {
   if (restes) problemes.push(`${restes} objectif(s) encore dans l'app`);
   if (registre.ids.length) problemes.push("registre des cases importées non vidé");
   if (plan.modele.aSupprimer.some(id => presents.has(id))) problemes.push("des cases restent dans « Dans 1 mois »");
-  if (plan.modele.aVider.some(({ id, rich_text }) => !presents.has(id) || !caseDejaVidee(presents.get(id), rich_text)))
+  if (plan.modele.aVider.some(c => presents.has(c.id) && etatCase(presents.get(c.id), c) === "a-faire"))
     problemes.push("des cases gardées n'ont pas été vidées");
   if (!ligneDate || !mentionneJour(ligneDate.data.rich_text, plan.dateSuivante)) problemes.push("date de revue non avancée");
   if (!score || !scoreVaut(lireScore(score.data.rich_text), null, null)) problemes.push("ligne de score non remise à zéro");

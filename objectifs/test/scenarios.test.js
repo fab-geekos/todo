@@ -67,7 +67,7 @@ function monde({ page = pageSeptembre(), blob = BLOB(), registre } = {}) {
   const objectifs = faux.trouver("Objectifs");
   const section = faux.trouver("Dans 1 mois", objectifs);
   const archives = faux.trouver("Dans 1 mois", faux.trouver("Archives"));
-  return { faux, store, config, section, archives, N: adaptateurNotion(faux) };
+  return { faux, store, config, section, archives, N: adaptateurNotion(faux, { attenteMs: 0 }) };   // réessais sans attente
 }
 
 const lancerImport = (m, reponses, opts = {}) => {
@@ -309,9 +309,10 @@ const PANNES = [
   { nom: "création du titre d'archive (réponse perdue)", notion: { methode: "append", n: 1, apres: true } },
   { nom: "remplissage de l'archive (avant envoi)", notion: { methode: "append", n: 3 } },
   { nom: "remplissage de l'archive (réponse perdue)", notion: { methode: "append", n: 4, apres: true } },
-  { nom: "retrait des cases du modèle", notion: { methode: "delete", n: 2 } },
-  { nom: "remise à zéro du score", notion: { methode: "update", n: 1 } },
-  { nom: "avance de la date (réponse perdue)", notion: { methode: "update", n: 2, apres: true } },
+  // Modifications et suppressions sont réessayées : pour tester la reprise, la panne doit durer.
+  { nom: "retrait des cases du modèle (panne durable)", notion: { methode: "delete", n: 2, fois: 99 } },
+  { nom: "mises à jour du modèle (conflit durable)", notion: { methode: "update", n: 1, fois: 99, code: "conflict_error", status: 409 } },
+  { nom: "mises à jour du modèle (réponses perdues)", notion: { methode: "update", n: 2, fois: 99, apres: true } },
   { nom: "retrait dans l'app", store: true }
 ];
 for (const panne of PANNES) {
@@ -321,6 +322,8 @@ for (const panne of PANNES) {
     if (panne.store) m.store.panne = true;
     await assert.rejects(lancerCloture(m, ["o"]), /simulé/);
     assert.ok(existsSync(join(m.config.dossierSauvegardes, "cloture-en-cours.json")));
+    assert.ok(importees(m.store).length > 0);                                       // l'app n'est jamais vidée avant Notion
+    m.faux.panne = null;                                                             // la panne est passée
     const ui = await lancerCloture(m, ["o"]);
     assert.match(ui.questions[0], /Reprendre la clôture/);
     const archives = m.faux.dump(m.archives);
@@ -331,6 +334,41 @@ for (const panne of PANNES) {
     assert.ok(!existsSync(join(m.config.dossierSauvegardes, "cloture-en-cours.json")));
   });
 }
+
+test("clôture : conflit Notion ponctuel (409) ou réponse perdue → réessayé, clôture terminée d'un coup", async () => {
+  for (const panne of [{ methode: "update", n: 1, fois: 2, code: "conflict_error", status: 409 },
+    { methode: "delete", n: 1, apres: true }]) {                                    // réessai sur un bloc déjà à la corbeille
+    const m = await moisVecu();
+    m.faux.panne = panne;
+    m.faux.appels = { list: 0, append: 0, update: 0, delete: 0, retrieve: 0 };
+    await lancerCloture(m, ["o"]);
+    assert.deepEqual(m.faux.dump(m.section), MODELE_VIERGE);
+    assert.deepEqual(m.store.blob.tasks.map(t => t.title), ["Acheter du pain", "Tâche libre du projet"]);
+    assert.ok(!existsSync(join(m.config.dossierSauvegardes, "cloture-en-cours.json")));
+  }
+});
+
+test("clôture : une donnée refusée par Notion n'est jamais réessayée", async () => {
+  const m = await moisVecu();
+  m.faux.panne = { methode: "update", n: 1, code: "validation_error", status: 400 };
+  m.faux.appels = { list: 0, append: 0, update: 0, delete: 0, retrieve: 0 };
+  await assert.rejects(lancerCloture(m, ["o"]), /validation_error/);
+  assert.ok(importees(m.store).length > 0);                                         // rien retiré de l'app
+});
+
+test("reprise : une case réécrite à la main entre-temps n'est pas touchée (et c'est signalé)", async () => {
+  const m = await moisVecu();
+  m.faux.panne = { methode: "update", n: 1, fois: 99, code: "conflict_error", status: 409 };
+  await assert.rejects(lancerCloture(m, ["o"]), /conflict_error/);
+  m.faux.panne = null;
+  // Pendant l'interruption, Fabien écrit son objectif du mois suivant dans la case P1.
+  const caseP1 = m.faux.trouver("Finir le dossier A");
+  m.faux.blocs.get(caseP1).data.rich_text = [{ type: "text", text: { content: "Nouvel objectif P1", link: null }, plain_text: "Nouvel objectif P1", annotations: {} }];
+  const ui = await lancerCloture(m, ["o"]);
+  assert.match(ui.texte, /laissée telle quelle : « Nouvel objectif P1 »/);
+  assert.deepEqual(m.faux.dump(m.section), MODELE_VIERGE.map(x => (x === "☐ P1" ? "☐ Nouvel objectif P1" : x)));
+  assert.deepEqual(m.store.blob.tasks.map(t => t.title), ["Acheter du pain", "Tâche libre du projet"]);
+});
 
 /* ================= ADOPTION ET CYCLE COMPLET ================= */
 

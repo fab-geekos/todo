@@ -116,7 +116,7 @@ export function caseVidee(rt) {
     const it = propre[i];
     const contenu = it.type === "text" ? it.text.content : texteCanon([it]);
     if (contenu.trim() === "") continue;                      // espaces en fin de ligne : on remonte
-    const m = it.type === "text" && contenu.match(/\bP[1-4]$/);
+    const m = it.type === "text" && contenu.trimEnd().match(/\bP[1-4]$/);   // « P2 » suivi d'une espace : reconnu
     if (!m) break;                                            // autre texte à la fin : pas de marqueur
     return { rich_text: [{ ...it, text: { content: m[0], link: null } }], marqueur: true };
   }

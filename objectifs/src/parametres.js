@@ -18,7 +18,9 @@ export const SAUVEGARDES_GARDEES = 2;         // sauvegardes conservées dans sa
 
 export const NOTION = {
   requetesSimultanees: 3,                     // Notion accepte ~3 requêtes/s : au-delà, on ne ferait qu'attendre
-  reessais: 5                                 // réessais automatiques du client officiel (limitation de débit)
+  reessais: 5,                                // réessais automatiques du client officiel (limitation de débit)
+  reessaisEcriture: 4,                        // modification / suppression rejouée après un conflit ou une coupure
+  attenteReessaiMs: 1000                      // 1re attente avant de rejouer (puis ×2 à chaque essai)
 };
 
 export const FIRESTORE = {

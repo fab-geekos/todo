@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { cle, cleChemin, extrairePriorite, similarite, decalerMois, formatFr, libelleMoisCouvert, deMois,
   estPremierDuMois, heureDe, echeanceApp } from "../src/texte.js";
-import { reecrireScore, lireScore, scoreVaut, remplacerDate, nettoyerTexte, texteCanon, texteSansDates } from "../src/blocs.js";
+import { reecrireScore, lireScore, scoreVaut, remplacerDate, nettoyerTexte, texteCanon, texteSansDates, caseVidee } from "../src/blocs.js";
 import { construireUnites, drapeaux } from "../src/regles.js";
 import { ErreurObjectifs } from "../src/erreurs.js";
 
@@ -59,6 +59,15 @@ test("ligne de score : réécrite sans toucher la suite", () => {
   assert.ok(scoreVaut(lireScore([txt("/9 :")]), null, 9));
   assert.ok(!scoreVaut(lireScore([txt("0/9 :")]), null, 9));
   assert.ok(!scoreVaut(null, null, null));
+});
+
+test("case vidée pour le mois suivant : le marqueur P reste, même suivi d'une espace", () => {
+  const p = (t, color) => ({ ...txt(t), annotations: { color } });
+  assert.deepEqual(texteCanon(caseVidee([txt("Discuter du document "), p("P2", "orange"), txt(" ")]).rich_text), "P2");
+  assert.equal(caseVidee([p("Postuler à 3 postes P3 ", "blue")]).rich_text[0].annotations.color, "blue");
+  assert.deepEqual(texteCanon(caseVidee([p("Postuler à 3 postes P3 ", "blue")]).rich_text), "P3");
+  assert.deepEqual(caseVidee([txt("Sans priorité")]), { rich_text: [], marqueur: false });
+  assert.deepEqual(caseVidee([txt("Voir le film P1X")]), { rich_text: [], marqueur: false });
 });
 
 test("texte enrichi : nettoyage pour l'API, dates", () => {

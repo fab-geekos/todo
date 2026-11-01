@@ -7,7 +7,7 @@
 import { stop } from "./erreurs.js";
 import { SEUIL_RESSEMBLANCE } from "./parametres.js";
 import { cle, extrairePriorite, similarite, echeanceApp, formatFr, decalerMois } from "./texte.js";
-import { chargeDe, reecrireScore, caseVidee, blocsDates, datesDe } from "./blocs.js";
+import { chargeDe, reecrireScore, caseVidee, blocsDates, datesDe, texteCanon } from "./blocs.js";
 
 // Priorité Notion → drapeaux de l'app (SPEC § 5.1). Sans priorité (sous-objectif) = P4.
 const FLAGS = { 1: { important: true, urgent: true }, 2: { important: true, urgent: false },
@@ -275,7 +275,8 @@ function planModele(noeuds) {
     const gardees = new Set((avecMarqueur.length ? avecMarqueur : cases.slice(0, 1)).map(n => n.id));
     for (const n of cases) {
       if (!gardees.has(n.id)) { aSupprimer.push(n.id); continue; }   // la corbeille emporte ses sous-cases
-      aVider.push({ id: n.id, rich_text: caseVidee(n.data.rich_text).rich_text });
+      // `avant` = texte au moment de la clôture : à la reprise, une case réécrite depuis n'est pas touchée.
+      aVider.push({ id: n.id, rich_text: caseVidee(n.data.rich_text).rich_text, avant: texteCanon(n.data.rich_text) });
       for (const e of n.enfants) aSupprimer.push(e.id);              // une case gardée est vidée de son contenu
     }
     for (const n of liste) if (n.type !== "to_do") traiter(n.enfants);

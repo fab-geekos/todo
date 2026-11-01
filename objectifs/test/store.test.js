@@ -110,7 +110,7 @@ test("cycle import + clôture sur le faux serveur Firestore (accès direct)", as
   const config = { notion: { token: "t", page: pageId, cheminObjectifs: ["Dev perso", "Objectifs"], section: "Dans 1 mois", cheminArchives: ["Archives", "Dans 1 mois"] },
     espace: "perso", projet: "Objectifs du mois", dossierSauvegardes: dossierTemp() };
   const store = await ouvrir(serveur);
-  const N = adaptateurNotion(faux);
+  const N = adaptateurNotion(faux, { attenteMs: 0 });
   await commandeImport({ notion: N, store, ui: new FausseUI(["o"]), config, maintenant: new Date("2026-09-03T10:00:00").getTime() });
   let blob = depuisChamps(serveur.champs("users/uid-1/spaces/perso"));
   assert.deepEqual(blob.tasks.filter(t => t.notion).map(t => [t.title, t.important, t.urgent]),

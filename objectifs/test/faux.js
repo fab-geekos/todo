@@ -72,14 +72,17 @@ export class FauxNotion {
     return `00000000-0000-4000-8000-${h}`;
   }
 
-  // Panne simulée (coupure réseau) : `apres` = la requête a été exécutée mais la réponse est perdue.
+  // Panne simulée à partir de la n-ième requête de ce type, `fois` requêtes de suite (1 par défaut) :
+  // coupure réseau (sans code) ou erreur Notion (`code`, `status`, ex. conflict_error / 409).
+  // `apres` = la requête a été exécutée mais la réponse est perdue.
   _panne(methode, action) {
     this.appels[methode]++;
-    if (this.panne && this.panne.methode === methode && this.appels[methode] === this.panne.n) {
-      const apres = this.panne.apres;
-      this.panne = null;
-      if (apres) action();
-      throw new Error(`ECONNRESET simulé (${methode})`);
+    const p = this.panne;
+    if (p && p.methode === methode && this.appels[methode] >= p.n && this.appels[methode] < p.n + (p.fois || 1)) {
+      if (this.appels[methode] === p.n + (p.fois || 1) - 1) this.panne = null;
+      if (p.apres) action();
+      throw Object.assign(new Error(p.code ? `${p.code} simulé (${methode})` : `ECONNRESET simulé (${methode})`),
+        p.code ? { code: p.code, status: p.status } : {});
     }
     return action();
   }
@@ -153,7 +156,8 @@ export class FauxNotion {
 
   _delete({ block_id }) {
     const b = this._vivant(block_id);
-    if (b.in_trash) throw new Error("validation_error: déjà dans la corbeille");
+    if (b.in_trash) throw Object.assign(new Error("Can't edit block that is archived. You must unarchive the block before editing."),
+      { code: "validation_error", status: 400 });
     return this._panne("delete", () => { b.in_trash = true; return this._reponse(b); });
   }
 

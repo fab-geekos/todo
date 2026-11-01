@@ -7,11 +7,33 @@ import { tous, limiteur } from "./outils.js";
 
 const PROFONDEUR_RECHERCHE = 4;       // niveaux explorés pour trouver « Dev perso » dans la page
 
+// Erreurs passagères de Notion : conflit d'enregistrement (page modifiée au même moment), surcharge,
+// coupure réseau (pas de statut HTTP). Une donnée refusée (validation_error…) ne l'est jamais.
+const CODES_PASSAGERS = ["conflict_error", "rate_limited", "internal_server_error", "service_unavailable",
+  "gateway_timeout", "notionhq_client_request_timeout"];
+const passagere = e => CODES_PASSAGERS.includes(e.code) || [409, 429, 500, 502, 503, 504].includes(e.status)
+  || (!e.code && !e.status);
+
+// Mettre à la corbeille un bloc qui y est déjà : le but est atteint (réponse perdue puis réessai).
+const dejaALaCorbeille = e => e.code === "validation_error" && /archived|trash/i.test(e.message || "");
+
 // `client` = instance de @notionhq/client (ou le faux client des tests : mêmes méthodes).
-// Le client officiel réessaie seul les limitations de débit, et ne rejoue JAMAIS une écriture
-// après une erreur serveur (pas de doublon possible dans l'archive).
-export function adaptateurNotion(client) {
+// Le client officiel réessaie seul les limitations de débit, mais ne rejoue pas une écriture après
+// un conflit ou une erreur serveur. On rejoue nous-mêmes les écritures IDEMPOTENTES (modifier un
+// bloc vers un contenu fixe, le mettre à la corbeille) : les refaire donne le même résultat. Les
+// ajouts (append) ne sont jamais rejoués ici, pour ne pas créer de doublon : la reprise de la
+// clôture s'en charge en vérifiant l'archive.
+export function adaptateurNotion(client, { attenteMs = NOTION.attenteReessaiMs } = {}) {
   const file = limiteur(NOTION.requetesSimultanees);   // au-delà, Notion ne ferait que nous ralentir
+  const idempotente = async fn => {
+    for (let essai = 1; ; essai++) {
+      try { return await N.appel(fn); }
+      catch (e) {
+        if (essai > NOTION.reessaisEcriture || !passagere(e)) throw e;
+        await new Promise(r => setTimeout(r, attenteMs * 2 ** (essai - 1)));
+      }
+    }
+  };
   const N = {
     requetes: 0,                                    // compteur affiché avec --temps
     appel(fn) { N.requetes++; return file(fn); },
@@ -38,10 +60,11 @@ export function adaptateurNotion(client) {
       return crees;
     },
     async modifier(blockId, type, data) {
-      await N.appel(() => client.blocks.update({ block_id: blockId, [type]: data }));
+      await idempotente(() => client.blocks.update({ block_id: blockId, [type]: data }));
     },
-    async supprimer(blockId) {
-      await N.appel(() => client.blocks.delete({ block_id: blockId }));   // → corbeille Notion (30 jours)
+    async supprimer(blockId) {                      // → corbeille Notion (30 jours)
+      try { await idempotente(() => client.blocks.delete({ block_id: blockId })); }
+      catch (e) { if (!dejaALaCorbeille(e)) throw e; }
     }
   };
   return N;
