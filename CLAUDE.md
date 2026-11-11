@@ -550,6 +550,37 @@ reconnexion, vrai conflit signalé). Commit `9c9ae95`.
 **même espace** (`?espace=pro` vs défaut `perso` = deux documents Firestore totalement distincts)
 et le **même compte Google** (`users/{uid}`).
 
+## Session Google invalidée + diagnostic visible (lot 13, fait)
+**Symptôme (user, 11/11/2026)** : après un changement de mot de passe Google, l'app ne synchronisait
+plus entre deux ordinateurs (courses, todos, agenda). Cause : une **session Firebase invalidée**
+(jeton révoqué) n'était gérée nulle part. Firestore répond alors `permission-denied` /
+`unauthenticated`, et l'app restait « connectée » sur une session morte : données affichées depuis le
+cache, modifs gardées en local, rien ne part ni n'arrive, et aucune explication (juste ⚠️).
+- **`handleFirebaseError(err, contexte)`** = point unique des erreurs Firestore (lecture `onSnapshot`
+  ET écriture `set`). Codes `AUTH_DEAD_CODES` (`permission-denied`, `unauthenticated`) →
+  `forceRelogin(MSG_SESSION_DEAD)` : message posé sur la porte (`showAuthMessage` → `#authErr`) PUIS
+  `signOut()` → `onAuthStateChanged(null)` → porte de login. Autres codes → pastille `error`.
+- **Déconnexion subie vs volontaire** : `_manualSignOut` (posé par le bouton « Se déconnecter »).
+  Dans `onAuthStateChanged(null)`, si on était connecté et que ce n'est pas un clic → message
+  « session plus valide » ; sinon porte muette (1er chargement, ou déconnexion choisie).
+- **Compte affiché** : email sur le bouton « Se déconnecter » et dans l'info-bulle de la pastille
+  (`accountLine`). Deux appareils sur deux comptes Google = deux `users/{uid}` distincts, et ça se
+  voit immédiatement (même famille de piège que `?espace=` ci-dessus).
+- **Chien de garde** `startWaitWatchdog` / `clearWaitWatchdog` (`WAIT_WATCHDOG_MS` = 20 s) : état
+  `waiting` qui s'éternise en ligne (`navigator.onLine !== false`) → état `stuck` (⚠️, collant : un
+  `setSyncState("waiting")` ne l'efface pas, cf. garde en tête de `setSyncState`). Armé dans
+  `attachSpace`, désarmé au 1er snapshot serveur et dans `detachSpace`.
+- **Pastille cliquable** (`bindSyncPill`) : état en clair + compte (utile sur mobile, sans survol) ;
+  en `error`/`stuck`, `confirm` → `forceRelogin`.
+
+Invariant : **on ne reste jamais sur une session morte**. Toute perte d'accès Firestore finit sur la
+porte de login avec sa cause ; les données locales et le mémo `SYNCMETA_KEY` restent intacts, donc
+la reprise après reconnexion est la reprise normale du lot 12 (push, ou conflit si le cloud a bougé).
+⚠️ Hors du périmètre : le script `objectifs/` utilise un **compte de service**, insensible au mot de
+passe Google. Validé par 23 cas simulés (session morte en lecture et en écriture, erreur réseau sans
+déconnexion, déconnexion subie / volontaire / initiale, compte affiché, chien de garde avec et sans
+réponse, hors ligne, reprise après reconnexion).
+
 ## Règles de collaboration
 - **Committer + pusher systématiquement à la fin de chaque lot de modifs** (demande permanente
   du user, 10/06/2026) : il teste directement en ligne après chaque lot. Commit direct sur
