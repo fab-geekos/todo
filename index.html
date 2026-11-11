@@ -242,11 +242,11 @@
   }
   /* Pastille d'état de synchro : discrète quand tout va bien, visible quand ça coince. */
   .sync-pill {
-    background: none; border: none; cursor: default; font-size: 15px; line-height: 1;
+    background: none; border: none; cursor: pointer; font-size: 15px; line-height: 1;
     padding: 0 2px; flex-shrink: 0; opacity: .55; transition: opacity .2s;
   }
   .sync-pill:hover { opacity: 1; }
-  .sync-pill.sync-error { opacity: 1; }
+  .sync-pill.sync-error, .sync-pill.sync-stuck { opacity: 1; }   /* alertes : toujours bien visibles */
   .sync-pill.sync-pending, .sync-pill.sync-waiting { opacity: .8; }
 
   /* Modale « versions différentes » (conflit de synchro multi-appareils) */
@@ -1824,6 +1824,7 @@ let googleProvider = null;
 let _pendingIframeAuth = false;    // true = on attend le clic qui débloque le stockage puis démarre l'auth
 
 let fbUser = null;        // utilisateur connecté (null = porte de login affichée)
+let _manualSignOut = false; // vrai le temps d'un clic sur « Se déconnecter » (vs déconnexion subie)
 let spaceRef = null;      // doc Firestore de l'espace courant (null tant que non connecté)
 let _spaceUnsub = null;   // fonction de désabonnement onSnapshot
 let _saveTimer = null;    // debounce des écritures réseau
@@ -2085,10 +2086,7 @@ function flushFirestore() {
       if (_lastSync !== pushed) return;         // une écriture plus récente a pris le relais
       markSynced(pushed);
     })
-    .catch(e => {
-      console.warn("[firebase] échec écriture :", e);
-      setSyncState("error", e && (e.code || e.message));   // plus jamais d'échec silencieux
-    });
+    .catch(e => handleFirebaseError(e, "écriture"));   // plus jamais d'échec silencieux
 }
 // Filet anti-perte : on vide l'écriture en attente dès que l'onglet passe en arrière-plan
 // (changement d'onglet, verrouillage…) ou se ferme. visibilitychange est le signal le plus fiable ;
@@ -2151,20 +2149,69 @@ function downloadBlob(blob, suffix) {
    passait totalement inaperçu : l'app semblait normale mais rien ne partait. ---- */
 const SYNC_LABELS = {
   init:    { icon: "…",  text: "Connexion…" },
-  local:   { icon: "📴", text: "Hors ligne — modifications gardées sur cet appareil" },
+  local:   { icon: "📴", text: "Hors ligne : modifications gardées sur cet appareil" },
   waiting: { icon: "⏳", text: "Lecture du cloud… (tes modifications partiront juste après)" },
   pending: { icon: "⏳", text: "Envoi en cours…" },
   ok:      { icon: "✅", text: "Synchronisé avec le cloud" },
-  error:   { icon: "⚠️", text: "Synchronisation impossible — modifications gardées sur cet appareil" }
+  error:   { icon: "⚠️", text: "Synchronisation impossible : modifications gardées sur cet appareil" },
+  stuck:   { icon: "⚠️", text: "Le cloud ne répond pas depuis un moment : clique ici pour te reconnecter" }
 };
+const accountLine = () => (fbUser && fbUser.email) ? `\nCompte : ${fbUser.email}` : "";
 function setSyncState(st, detail) {
+  if (_syncState === "stuck" && st === "waiting") return;   // l'alerte « bloqué » reste visible
   _syncState = st;
   const el = $("syncPill");
   if (!el) return;
   const info = SYNC_LABELS[st] || SYNC_LABELS.init;
   el.textContent = info.icon;
-  el.title = info.text + (detail ? ` (${detail})` : "");
+  el.title = info.text + (detail ? ` (${detail})` : "") + accountLine();
   el.className = "sync-pill sync-" + st;
+}
+// Clic sur la pastille : l'état en clair (utile sur mobile, sans survol) + le compte connecté ;
+// en cas de blocage ou d'erreur, propose la reconnexion.
+function bindSyncPill() {
+  $("syncPill").addEventListener("click", () => {
+    const text = (SYNC_LABELS[_syncState] || SYNC_LABELS.init).text + accountLine();
+    if (_syncState === "error" || _syncState === "stuck") {
+      if (confirm(text + "\n\nSe reconnecter maintenant ?")) forceRelogin("Reconnecte-toi pour relancer la synchronisation.");
+    } else alert(text);
+  });
+}
+
+/* ---- Session invalidée (mot de passe Google changé, accès révoqué, compte désactivé…) ----
+   Firestore refuse alors tout (permission-denied / unauthenticated). Rester « connecté » sur une
+   session morte = l'app a l'air normale, les modifs restent locales et rien ne part, sans explication.
+   On ne reste JAMAIS dans cet état : déconnexion propre + porte de login avec la cause. */
+const AUTH_DEAD_CODES = new Set(["permission-denied", "unauthenticated"]);
+const MSG_SESSION_DEAD = "Ta session Google n'est plus valide (mot de passe changé ? accès révoqué ?). Reconnecte-toi pour relancer la synchronisation.";
+function showAuthMessage(msg) {
+  const el = $("authErr");
+  if (el) { el.textContent = msg; el.hidden = false; }
+}
+function forceRelogin(msg) {
+  showAuthMessage(msg);                       // posé AVANT le signOut : le passage à « déconnecté » le laisse en place
+  if (fbAuth) fbAuth.signOut();               // → onAuthStateChanged(null) → porte de login
+}
+// Point unique des erreurs Firestore (lecture live ET écriture).
+function handleFirebaseError(err, context) {
+  const code = err && err.code;
+  console.warn(`[firebase] ${context} :`, err);
+  if (AUTH_DEAD_CODES.has(code)) { forceRelogin(MSG_SESSION_DEAD); return; }
+  setSyncState("error", code || (err && err.message));
+}
+
+// Chien de garde : « Lecture du cloud… » qui s'éternise en ligne = quelque chose coince (jeton
+// mort sans erreur remontée, réseau d'entreprise qui bloque Firestore…). On le dit, au lieu de
+// laisser un sablier muet, et la pastille propose la reconnexion.
+const WAIT_WATCHDOG_MS = 20000;
+let _waitTimer = null;
+function clearWaitWatchdog() { if (_waitTimer) { clearTimeout(_waitTimer); _waitTimer = null; } }
+function startWaitWatchdog() {
+  clearWaitWatchdog();
+  _waitTimer = setTimeout(() => {
+    _waitTimer = null;
+    if (!_serverSynced && navigator.onLine !== false) setSyncState("stuck");
+  }, WAIT_WATCHDOG_MS);
 }
 
 /* ---- Conflit de synchronisation ----
@@ -7113,7 +7160,7 @@ function bindAuth() {
       el.hidden = false;
     });
   });
-  $("signOutBtn").addEventListener("click", () => { $("dataMenu").hidden = true; if (fbAuth) fbAuth.signOut(); });
+  $("signOutBtn").addEventListener("click", () => { $("dataMenu").hidden = true; _manualSignOut = true; if (fbAuth) fbAuth.signOut(); });
 
   // Navigateur intégré (Messenger, Instagram…) : le bouton Google est voué au 403 disallowed_useragent.
   // On le masque et on affiche la marche à suivre (ouvrir dans Safari/Chrome) + un bouton « Copier le lien ».
@@ -7139,6 +7186,7 @@ function attachSpace(uid) {
   _serverSynced = false;
   restoreSyncMeta();
   setSyncState("waiting");
+  startWaitWatchdog();
   // includeMetadataChanges : indispensable pour distinguer "absent en cache" de "absent confirmé serveur".
   _spaceUnsub = spaceRef.onSnapshot({ includeMetadataChanges: true }, snap => {
     if (snap.metadata.hasPendingWrites) return;          // ignore l'écho de nos propres écritures
@@ -7151,6 +7199,7 @@ function attachSpace(uid) {
       // doc vide (évite la pollution depuis un origin de test).
       if (fromCache) { setSyncState("waiting"); return; }
       _serverSynced = true;
+      clearWaitWatchdog();
       if (_seeded) return;
       _seeded = true;
       applyData(normalizeData(readLocalRaw()));
@@ -7179,6 +7228,7 @@ function attachSpace(uid) {
 
     // ---------- Snapshot SERVEUR : fait autorité ----------
     _serverSynced = true;
+    clearWaitWatchdog();
 
     if (incoming === _lastSync) {                        // notre propre écriture, confirmée
       markSynced(incoming);
@@ -7211,16 +7261,14 @@ function attachSpace(uid) {
     // Vrai CONFLIT : le cloud a bougé (autre appareil) ET on a des modifs non envoyées.
     // On ne tranche JAMAIS tout seul : ni l'un ni l'autre ne doit disparaître en silence.
     openSyncConflict(data, incoming);
-  }, err => {
-    console.warn("[firebase] snapshot :", err);
-    setSyncState("error", err && (err.code || err.message));
-  });
+  }, err => handleFirebaseError(err, "lecture"));
 }
 
 function detachSpace() {
   if (_spaceUnsub) { _spaceUnsub(); _spaceUnsub = null; }
   spaceRef = null;
   _serverSynced = false;
+  clearWaitWatchdog();
   _pendingWrite = false;
   clearTimeout(_saveTimer); _saveTimer = null;
   if (_conflictOpen) closeSyncConflict();
@@ -7233,9 +7281,17 @@ function startAuth() {
   fbAuth = firebase.auth();
   googleProvider = new firebase.auth.GoogleAuthProvider();
   fbAuth.onAuthStateChanged(user => {
+    const hadUser = !!fbUser;
     fbUser = user;
-    if (user) { showAuthGate(false); attachSpace(user.uid); }
-    else { detachSpace(); setSyncState("local"); showAuthGate(true); }
+    // Le compte connecté est affiché (menu ⋯ + pastille) : deux appareils sur deux comptes Google
+    // différents = deux jeux de données distincts, et ça se voit tout de suite.
+    $("signOutBtn").textContent = "🚪 Se déconnecter" + (user && user.email ? ` (${user.email})` : "");
+    if (user) { showAuthGate(false); attachSpace(user.uid); return; }
+    detachSpace(); setSyncState("local"); showAuthGate(true);
+    // Déconnexion SUBIE (jeton révoqué par Firebase, pas un clic sur « Se déconnecter ») : on
+    // explique, sinon l'utilisateur se retrouve devant une porte muette sans comprendre pourquoi.
+    if (hadUser && !_manualSignOut && $("authErr").hidden) showAuthMessage(MSG_SESSION_DEAD);
+    _manualSignOut = false;
   });
 }
 
@@ -7278,6 +7334,7 @@ function init() {
   initTheme();
   bindAuth();
   bindSyncConflict();
+  bindSyncPill();
   render();
   bootFirebase();            // auth Google + sync live (affiche la porte de login si déconnecté)
 }
