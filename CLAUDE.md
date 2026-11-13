@@ -581,6 +581,51 @@ passe Google. Validé par 23 cas simulés (session morte en lecture et en écrit
 déconnexion, déconnexion subie / volontaire / initiale, compte affiché, chien de garde avec et sans
 réponse, hors ligne, reprise après reconnexion).
 
+## Faux conflit sur clics rapprochés + revue générale (lot 14, fait)
+**Symptôme (user, 13/11/2026)** : cocher plusieurs tâches/produits rapidement faisait apparaître
+la modale « Versions différentes » alors qu'un seul appareil était en jeu. Cause : l'écho serveur
+de l'écriture n°1 pouvait arriver pendant que la n°2 attendait encore son envoi (debounce 600 ms) ;
+`_baseRemote` n'étant mis à jour qu'à la confirmation, cet écho de NOUS-MÊMES était pris pour
+« le cloud a bougé ailleurs ». Correctif : `_sentHashes` (empreintes de nos écritures en vol,
+`rememberSent`/`acknowledgeOwnEcho`, persisté avec le mémo, borné à `SENT_HASHES_MAX`) — un
+snapshot qui porte une de nos empreintes récentes devient la nouvelle base au lieu d'ouvrir un
+conflit. `SAVE_DEBOUNCE_MS` nomme le délai de regroupement (600 ms) ; ⚠️ ce n'est PAS un délai
+imposé entre deux clics, et il n'y en a pas à raccourcir — le vrai bug était la détection d'écho.
+
+Revue demandée ensuite (« enlève les lignes mortes, factorise, simplifie, SEULEMENT au besoin,
+rien ne doit casser ») :
+- **Règle no-em-dash appliquée au code** : 44 « — » retirés (reformulés avec « : » ou une virgule),
+  jamais vue auparavant dans ce fichier — à surveiller dans les futurs commentaires/chaînes.
+- **Bug réel trouvé et corrigé** : `esc()` échappait `& < >` mais pas les guillemets → un nom de
+  contact/étiquette contenant un `"` cassait l'attribut HTML (`value="…"`) dans plusieurs champs
+  (fiche contact, recherche de rayon, renommage d'étiquette…). `esc()` échappe maintenant aussi
+  `"` et `'`.
+- **Garde-fous ajoutés** (jamais déclenchés avant, mais réels) : `initTheme`/`setTheme` tolèrent un
+  `localStorage` inaccessible (iframe, navigation privée) sans interrompre le démarrage ;
+  `importData` vérifie la forme du JSON et avertit si le fichier vient d'un AUTRE espace avant
+  d'écraser ; `deleteTask(id)` sur un id déjà supprimé ne fait plus rien (pas de toast fantôme).
+  La duplication (`duplicateTaskOnDates`) retire le champ `notion` de la copie : sans ça, dupliquer
+  un objectif importé aurait pu être pris par le script `objectifs/` pour l'original.
+- **Factorisations** (zéro changement de comportement) : `subtreeIds(id)` = parcours de sous-arbre
+  partagé (suppression, purge, retour visuel de coche ; remplace l'ancien `giftSubtreeIds` et deux
+  boucles locales) ; `capitalize()` (6 sites dupliqués) ; `downloadFile()`/`todayIso()` (export
+  JSON/CSV/sauvegarde partageaient le même geste copié 3 fois) ; `affaireMembers(t)` (copies d'une
+  affaire par groupe, 4 sites) ; `emptyEl(html)` (bloc « état vide », 4 sites) ; `DRAG_IGNORE` /
+  `CLICK_GUARD_MS` (sélecteurs et délai de garde répétés en dur). `state.flatList` (toujours faux,
+  ne servait qu'à se nier lui-même) retiré.
+- **Audit de code mort** : 0 fonction/constante/id mort (script ad hoc, cf. lot 10/12 — les
+  classes CSS « suspectes » restent les faux positifs dynamiques déjà documentés).
+
+**Méthode de validation (à réutiliser)** : test différentiel sur le VRAI code, pas une réplique.
+Un script extrait le script inline d'`index.html` (ancien commit vs nouveau fichier), l'exécute
+dans un bac à sable Node (`vm`, faux DOM/localStorage/Firebase/horloge/hasard déterministes), joue
+~90 actions couvrant toutes les vues, et compare les deux journaux (tout DOM écrit, alert/confirm/
+téléchargement, état complet après chaque action). Résultat : **identique** (2453 entrées, 128
+états) entre avant et après le refactor — preuve que seuls les changements voulus ont un effet.
+29 vérifications ciblées en plus pour les comportements neufs. Scripts dans le scratchpad de la
+session (non committés, jetables) : `smoke.js` (rejoue le vrai script), `scenario.js` (les ~90
+actions), `newchecks.js` (les 29 assertions), `compare.js` (diff des deux journaux).
+
 ## Règles de collaboration
 - **Committer + pusher systématiquement à la fin de chaque lot de modifs** (demande permanente
   du user, 10/06/2026) : il teste directement en ligne après chaque lot. Commit direct sur

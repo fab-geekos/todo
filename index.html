@@ -20,7 +20,7 @@
     --alert: #E07A5F;
     --red-strong: #D62828;   /* rouge appuyé partagé : MIT + priorité « Faire » (urgent + important) */
     --warning: #F2CC8F;
-    --muted: #6b7280;        /* gris secondaire — assombri pour passer AA 4,5:1 (était #888 ≈ 3,3:1) */
+    --muted: #6b7280;        /* gris secondaire, assombri pour passer AA 4,5:1 (était #888 ≈ 3,3:1) */
     --card: #ffffff;
     --border: #E6EAF0;
     --hover: #F9FAFC;
@@ -48,7 +48,7 @@
     --bg: #0b1120;
     --text: #e2e8f0;
     --card: #131b2e;
-    --muted: #94a3b8;        /* gris secondaire (nuit) — éclairci pour passer AA 4,5:1 (était #64748b ≈ 3,6:1) */
+    --muted: #94a3b8;        /* gris secondaire (nuit), éclairci pour passer AA 4,5:1 (était #64748b ≈ 3,6:1) */
     --border: #1e293b;
     --hover: #1a2438;
     /* Le bleu de remplissage ne bouge pas (du blanc dessus donne 5,1:1), mais
@@ -308,7 +308,7 @@
     transition: border-color .2s, box-shadow .2s;
   }
   .quick-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(74,111,165,.12); }
-  /* Encadré MIT (Most Important Thing) — vue Aujourd'hui, espace pro */
+  /* Encadré MIT (Most Important Thing) : vue Aujourd'hui, espace pro */
   .mit-box {
     display: flex; align-items: center; gap: 10px; margin-bottom: 16px;
     padding: 11px 14px; background: var(--card); border: 1px solid var(--border);
@@ -358,7 +358,7 @@
     padding-left: calc(14px + var(--depth, 0) * 22px);   /* indentation des sous-tâches */
   }
   .task-row:hover { background-color: var(--hover); }
-  /* Méthode b — connecteurs en arbre. Verticales d'ancêtres : posées en fond (inline, calculées au rendu). */
+  /* Méthode b : connecteurs en arbre. Verticales d'ancêtres : posées en fond (inline, calculées au rendu). */
   .task-row[style*="--depth:1"], .task-row[style*="--depth:2"], .task-row[style*="--depth:3"] {
     position: relative; background-repeat: no-repeat;
   }
@@ -451,7 +451,7 @@
   }
   .task-row:hover .task-del { opacity: 1; }
   .task-del:hover { color: var(--alert); }
-  /* Bouton « renommer » (vues-listes : produits, rayons, notes…) — même style hover que la croix */
+  /* Bouton « renommer » (vues-listes : produits, rayons, notes…) : même style hover que la croix */
   .task-edit {
     opacity: 0; background: none; border: none; cursor: pointer;
     color: var(--muted); font-size: 14px; padding: 0 4px; align-self: center;
@@ -522,7 +522,7 @@
     background: rgba(74,111,165,.08);
     outline: 2px dashed var(--accent); outline-offset: -2px;
   }
-  /* NB : pas d'overflow:hidden ici — l'auto-défilement du drag a besoin de pouvoir scroller la fenêtre.
+  /* NB : pas d'overflow:hidden ici : l'auto-défilement du drag a besoin de pouvoir scroller la fenêtre.
      Le scroll natif au doigt est déjà bloqué pendant le drag par onDragTouchMove (preventDefault). */
   body.is-dragging { cursor: grabbing; user-select: none; touch-action: none; }
 
@@ -715,7 +715,7 @@
   /* ===== VUE CONTACTS ===== */
   .contacts-view { display: none; }
   .contacts-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
-  /* Bouton secondaire (contour) — import CSV, à côté de « + Contact » */
+  /* Bouton secondaire (contour) : import CSV, à côté de « + Contact » */
   .contacts-import-btn {
     flex-shrink: 0; font-family: inherit; font-size: 14px; cursor: pointer; white-space: nowrap;
     padding: 12px 16px; border-radius: var(--radius);
@@ -903,7 +903,7 @@
     font-size: 22px; line-height: 1; padding: 4px 8px; border-radius: 8px; transition: background .15s;
   }
   .editor-close:hover { background: var(--hover); }
-  /* Éditeur d'affaire (vue-liste flat) : fenêtre compacte — plus de bandeau du haut,
+  /* Éditeur d'affaire (vue-liste flat) : fenêtre compacte, plus de bandeau du haut,
      la croix vient s'aligner sur la ligne du titre */
   .editor.affaire-mode { position: relative; }
   .editor.affaire-mode .editor-top { position: absolute; top: 18px; right: 12px; padding: 0; border-bottom: none; }
@@ -1270,7 +1270,7 @@
     .sidebar {
       position: fixed; left: 0; top: 0; z-index: 35;
       /* 100dvh = hauteur RÉELLEMENT visible (hors barres du navigateur mobile) :
-         sinon le bas du menu — Idées/Notes/Autres, Vaccins — passe sous la barre d'adresse. */
+         sinon le bas du menu (Idées/Notes/Autres, Vaccins) passe sous la barre d'adresse. */
       height: 100dvh;
       transform: translateX(-100%); transition: transform .25s ease;
       box-shadow: 2px 0 12px rgba(0,0,0,.1);
@@ -1761,7 +1761,7 @@
     <p class="auth-err" id="authErr" hidden></p>
     <div class="auth-inapp" id="authInApp" hidden>
       <p class="auth-inapp-title">⚠️ Ouvre cette page dans ton navigateur</p>
-      <p class="auth-inapp-text">La connexion Google est bloquée dans le navigateur intégré de Messenger, Instagram, etc. Touche le menu <b>⋯</b> (en haut ou en bas de l'écran) puis « <b>Ouvrir dans le navigateur</b> » (Safari / Chrome) — ou copie ce lien et colle-le dans Safari/Chrome :</p>
+      <p class="auth-inapp-text">La connexion Google est bloquée dans le navigateur intégré de Messenger, Instagram, etc. Touche le menu <b>⋯</b> (en haut ou en bas de l'écran) puis « <b>Ouvrir dans le navigateur</b> » (Safari / Chrome), ou copie ce lien et colle-le dans Safari/Chrome :</p>
       <button class="auth-btn auth-copy" id="authCopyLink" type="button">📋 Copier le lien</button>
     </div>
   </div>
@@ -1780,7 +1780,6 @@
    ========================================================= */
 // --- Espaces (pro / perso) : namespaces distincts dans le même stockage ---
 // L'espace vient de l'URL (?espace=pro|perso) ; défaut = perso.
-// Demain (Firebase) : seul le backend de db.load/save changera, cette logique reste.
 const ESPACES = ["perso", "pro"];
 function getEspace() {
   const p = new URLSearchParams(location.search).get("espace");
@@ -1790,7 +1789,7 @@ const ESPACE = getEspace();
 const LEGACY_KEY = "todo_app_v1";                 // ancienne clé unique (avant les espaces)
 const STORAGE_KEY = LEGACY_KEY + "__" + ESPACE;   // ex. todo_app_v1__perso
 const THEME_KEY = "todo_theme";
-// Dernière vue affichée — en sessionStorage (par espace) : survit au F5/rafraîchissement DANS
+// Dernière vue affichée, en sessionStorage (par espace) : survit au F5/rafraîchissement DANS
 // l'onglet, mais un NOUVEL onglet repart vide → vue par défaut "today" (Aujourd'hui).
 const VIEW_KEY = "todo_lastview__" + ESPACE;
 // Vues masquées selon l'espace (outil perso : certaines vues n'ont pas de sens côté pro).
@@ -1798,7 +1797,7 @@ const ESPACE_HIDDEN_VIEWS = { pro: ["courses", "bagages", "mediatheque", "cadeau
 const isViewHidden = view => (ESPACE_HIDDEN_VIEWS[ESPACE] || []).includes(view);
 
 /* =========================================================
-   FIREBASE — sync en ligne + auth Google
+   FIREBASE : sync en ligne + auth Google
    Modèle validé : document-blob par espace → users/{uid}/spaces/{espace}.
    La clé apiKey est publique par design (sécurité = règles Firestore + domaines autorisés).
    ========================================================= */
@@ -1830,7 +1829,7 @@ let _spaceUnsub = null;   // fonction de désabonnement onSnapshot
 const SAVE_DEBOUNCE_MS = 600; // regroupe les actions rapprochées en UNE écriture cloud (pas un délai imposé entre 2 clics)
 let _saveTimer = null;    // debounce des écritures réseau
 let _pendingWrite = false; // une écriture Firestore est en attente (debounce en cours) → à vider avant fermeture
-let _lastSync = null;     // dernier blob (stable-stringifié) poussé/appliqué — anti-écho/anti-clobber
+let _lastSync = null;     // dernier blob (stable-stringifié) poussé/appliqué : anti-écho/anti-clobber
 let _seeded = false;      // garde le seed initial à un seul passage par session
 let _autoPurgeDone = false; // purge auto des tâches terminées : un seul passage par chargement
 /* --- Sécurité multi-appareils (cf. « Sync multi-appareils » dans CLAUDE.md) ---
@@ -1921,12 +1920,11 @@ let state = {
 
 /* =========================================================
    DATA LAYER
-   Tout passe par db.* — c'est le seul module à remplacer quand on
-   migrera vers une sync en ligne (Firebase, étape 5) : il suffira de
-   réécrire load/save, le reste de l'app ne changera pas.
+   Toute la persistance passe par db.* : cache local immédiat (localStorage)
+   + écriture Firestore regroupée. Le reste de l'app n'appelle que db.*.
    ========================================================= */
 
-// Transforme des données brutes (localStorage OU futur Firebase) en {tasks, projects}.
+// Transforme des données brutes (localStorage, Firestore ou fichier importé) en blob normalisé.
 // Gère l'ancien format (simple tableau de tâches) pour ne rien perdre.
 function normalizeData(raw) {
   const emptyMit = { text: "", date: null };
@@ -2161,14 +2159,19 @@ const backupLocalBlob = tag => writeBackup(currentBlob(), tag);
 // format d'export : utilisé par le bouton « Exporter », les sauvegardes et les versions en conflit.
 function downloadBlob(blob, suffix) {
   const payload = { _app: "todo", _version: 1, _espace: ESPACE, _exportedAt: new Date().toISOString(), ...blob };
-  const f = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(f);
+  downloadFile(JSON.stringify(payload, null, 2), `todo-${ESPACE}-${suffix ? suffix + "-" : ""}${todayIso()}.json`, "application/json");
+}
+// Déclenche le téléchargement d'un fichier généré dans la page. Un seul endroit pour ce geste,
+// partagé par l'export JSON (ci-dessus) et l'export CSV des contacts.
+function downloadFile(content, filename, type) {
+  const url = URL.createObjectURL(new Blob([content], { type }));
   const a = document.createElement("a");
   a.href = url;
-  a.download = `todo-${ESPACE}-${suffix ? suffix + "-" : ""}${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = filename;
   document.body.appendChild(a); a.click(); a.remove();
   URL.revokeObjectURL(url);
 }
+const todayIso = () => new Date().toISOString().slice(0, 10);   // "AAAA-MM-JJ", pour les noms de fichiers exportés
 
 /* ---- Pastille d'état de synchro (en-tête) : voir en un coup d'œil si le cloud est à jour.
    Sans elle, un échec d'écriture (réseau d'entreprise qui bloque Firestore, règles, quota…)
@@ -2333,7 +2336,7 @@ const isRoot = t => t.parentTaskId == null;   // tâche racine = sans parent
    RACINE = la clé de la vue (ex. "courses"). Une racine = une catégorie
    (rayon) ; ses sous-tâches = les items. Tout le comportement spécial
    (pas de priorité, 2 niveaux, racine qui coche tout, éditeur épuré…)
-   est piloté par ces helpers — AUCUN code dupliqué d'une vue à l'autre.
+   est piloté par ces helpers : AUCUN code dupliqué d'une vue à l'autre.
    Pour ajouter une vue-liste : il suffit d'ajouter une entrée ici + un
    bouton de nav (et un sous-onglet si besoin). Rien d'autre à toucher.
    ========================================================= */
@@ -2479,6 +2482,11 @@ const isChecklistTask = t => { const lr = listRootOf(t); return !!lr && listShap
 // Affaire multi-onglets (mode flat) : toutes les copies d'une même affaire partagent un `group`
 // (généré à l'ajout). Repli sur l'id pour les affaires créées avant ce champ.
 const affaireGroup = t => t.group || t.id;
+// Toutes les copies d'une même affaire (une par sous-onglet où elle figure), elle-même comprise.
+const affaireMembers = t => {
+  const key = affaireGroup(t);
+  return state.tasks.filter(x => isListRoot(x) && x.list === t.list && affaireGroup(x) === key);
+};
 // Une affaire est "éditable" (clic → éditeur d'appartenance aux sous-onglets) seulement dans une
 // vue flat qui gère le multi-onglets (Affaires/Voyages). Pas dans une vue "removeOnCheck" (Médiathèque).
 const affaireEditable = t => isListRoot(t) && listShape(t.list) === "flat" && !!(listConfig(t.list) && listConfig(t.list).multiAdd);
@@ -2487,14 +2495,15 @@ const affaireEditable = t => isListRoot(t) && listShape(t.list) === "flat" && !!
 function startOfDay(d) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
 function todayTs() { return startOfDay(new Date()).getTime(); }   // aujourd'hui à minuit, en ms
 function pad2(n) { return String(n).padStart(2, "0"); }           // entier -> 2 chiffres ("3" -> "03")
+const capitalize = s => s.replace(/^./, c => c.toUpperCase());    // 1re lettre en majuscule ("lundi" -> "Lundi")
 function endOfToday() { return todayTs() + DAY_MS - 1; }
 function isDueToday(t) { return t.dueDate != null && t.dueDate <= endOfToday(); }
 
 /* =========================================================
    MOTEUR DE RÉCURRENCE
    recurrence = { freq:"day"|"week"|"month"|"year", interval, weekdays?, nthWeekday? }
-   weekdays : [0..6] (0=dimanche) — mode hebdo
-   nthWeekday : { week:1..5|-1, day:0..6 } — mode "2e mercredi" (mois/année)
+   weekdays : [0..6] (0=dimanche) : mode hebdo
+   nthWeekday : { week:1..5|-1, day:0..6 } : mode "2e mercredi" (mois/année)
    ========================================================= */
 const WEEKDAY_LABELS = ["dimanche","lundi","mardi","mercredi","jeudi","vendredi","samedi"];
 const WEEKDAY_SHORT  = ["D","L","M","M","J","V","S"];
@@ -2615,7 +2624,7 @@ const NUM_WORDS = {
   six:6, sept:7, huit:8, neuf:9, dix:10
 };
 
-// Retire les guillemets de protection littérale (même nettoyage qu'à l'ajout, sans parser de date) — utilisé à l'édition.
+// Retire les guillemets de protection littérale (même nettoyage qu'à l'ajout, sans parser de date), utilisé à l'édition.
 function stripLiteralQuotes(s) {
   return (s || "").replace(/"([^"]*)"/g, "$1");
 }
@@ -2781,7 +2790,10 @@ function nearestAncestorDue(task) {
 function esc(s) {
   const d = document.createElement("div");
   d.textContent = s ?? "";
-  return d.innerHTML;
+  // innerHTML échappe & < > mais PAS les guillemets. Or esc() sert aussi dans des attributs
+  // (value="…", placeholder="…") : sans ça, un nom contenant un guillemet tronquait le champ
+  // (étiquette, libellé de contact, recherche…) et permettait d'injecter un attribut.
+  return d.innerHTML.replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 /* =========================================================
@@ -2793,15 +2805,12 @@ function visibleTasks() {
     // Vue échéance : toute tâche due aujourd'hui (retards inclus), racine ou sous-tâche.
     list = withoutNestedDuplicates(list.filter(isDueToday));   // évite le doublon sous-tâche/parent
     // Tri agenda : heure croissante en haut, puis priorité, puis ordre manuel.
-    state.flatList = false;
     return agendaSort(list);
-  } else {
-    // Todo : seulement les racines (hors rayons de la liste de courses) ; les sous-tâches s'affichent en dépliant
-    list = list.filter(t => isRoot(t) && !isListRoot(t));
-    // Onglet "Récurrentes" : ne garder que les tâches ayant une récurrence
-    if (state.todoTab === "recur") list = list.filter(t => t.recurrence);
-    state.flatList = false;
   }
+  // Todo : seulement les racines (hors rayons de la liste de courses) ; les sous-tâches s'affichent en dépliant
+  list = list.filter(t => isRoot(t) && !isListRoot(t));
+  // Onglet "Récurrentes" : ne garder que les tâches ayant une récurrence
+  if (state.todoTab === "recur") list = list.filter(t => t.recurrence);
   return sortTasks(list);
 }
 
@@ -2827,7 +2836,7 @@ function sortTasks(list) {
 }
 
 // Agenda (Aujourd'hui / Semaine) : retire les sous-tâches dont le parent figure DÉJÀ dans la même
-// liste — elles s'affichent imbriquées sous lui, donc les garder au niveau racine ferait un doublon.
+// liste : elles s'affichent imbriquées sous lui, donc les garder au niveau racine ferait un doublon.
 // Une sous-tâche dont le parent est absent de la liste est conservée (sinon on la masquerait).
 function withoutNestedDuplicates(list) {
   const present = new Set(list.map(t => t.id));
@@ -2852,9 +2861,6 @@ function agendaSort(list) {
   });
 }
 
-// HTML d'UNE ligne de tâche (racine ou sous-tâche), sans carte englobante.
-// depth : 0 = racine, 1+ = sous-tâche (indentation par un trait vertical).
-
 // Style de fond des guides en arbre : une verticale par ancêtre dont la branche continue.
 // Partagé entre la vue Todo et la vue Prochainement pour éviter toute divergence.
 function treeGuideStyle(depth, ancestorContinues) {
@@ -2868,6 +2874,8 @@ function treeGuideStyle(depth, ancestorContinues) {
   return `background-image:${g};background-position:${p};background-size:${s};`;
 }
 
+// HTML d'UNE ligne de tâche (racine ou sous-tâche), sans carte englobante.
+// depth : 0 = racine, 1+ = sous-tâche (indentation par un trait vertical).
 function taskRowHtml(task, depth, ancestorContinues = [], isLast = false) {
   // Date effective : la sienne si elle en a une, sinon héritée de l'ancêtre daté le plus proche
   // (calculée à l'affichage, jamais stockée). L'héritée s'affiche en style atténué/italique.
@@ -3003,8 +3011,7 @@ function renameListItem(id, title) {
   const t = getTask(id);
   if (!t || !title) return;
   if (affaireEditable(t)) {
-    const key = affaireGroup(t);
-    state.tasks.forEach(x => { if (isListRoot(x) && x.list === t.list && affaireGroup(x) === key) x.title = title; });
+    affaireMembers(t).forEach(x => { x.title = title; });
     db.save();
   } else {
     db.update(id, { title });
@@ -3047,7 +3054,7 @@ function startListRename(row) {
 // Clé de jour locale "AAAA-MM-JJ" (sert au reset quotidien du MIT).
 function todayKey() {
   const d = new Date();
-  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
 }
 // Encadré MIT : visible en vue Aujourd'hui + espace pro ; affiche vide si le texte date d'un autre jour.
 function renderMit() {
@@ -3078,7 +3085,7 @@ function render() {
   // Titre + sous-titre (la page projet a son propre en-tête, donc titre vide)
   const titles = {
     todo:  { t: "Todo", s: "" },
-    today: { t: "Aujourd'hui", s: new Date().toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" }).replace(/^./, c => c.toUpperCase()) },
+    today: { t: "Aujourd'hui", s: capitalize(new Date().toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long" })) },
     eisenhower: { t: "Eisenhower / Priorités", s: "" },
     projects: { t: "Projets", s: "" },
     contacts: { t: "Contacts", s: "Tes contacts et leurs projets délégués" },
@@ -3195,17 +3202,19 @@ function render() {
   }
 }
 
+// Bloc « état vide » (grande icône + message) : le même élément pour toutes les listes.
+function emptyEl(html) {
+  const el = document.createElement("div");
+  el.className = "empty";
+  el.innerHTML = html;
+  return el;
+}
+
 // Affiche une liste de tâches. Mode arbre (défaut) : chaque racine est une carte qui englobe
-// ses sous-tâches. Mode plat (flat=true) : chaque tâche est une carte seule (vue Aujourd'hui).
+// ses sous-tâches. Mode plat (flat=true) : chaque tâche est une carte seule (vues-listes "flat").
 function renderTasksInto(ul, tasks, emptyHtml, flat = false) {
   ul.innerHTML = "";
-  if (tasks.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "empty";
-    empty.innerHTML = emptyHtml;
-    ul.appendChild(empty);
-    return;
-  }
+  if (tasks.length === 0) { ul.appendChild(emptyEl(emptyHtml)); return; }
   tasks.forEach(t => ul.appendChild(taskCard(t, !flat)));
 }
 
@@ -3224,13 +3233,13 @@ function renderList() {
       : isRecur
       ? `<div class="big">🔁</div>Aucune tâche récurrente.`
       : `<div class="big">📭</div>Aucune tâche. Ajoute-en une ci-dessus.`;
-    renderTasksInto(ul, [], emptyHtml, state.flatList);
+    renderTasksInto(ul, [], emptyHtml);
     return;
   }
   ul.innerHTML = "";
   bdays.forEach(b => ul.appendChild(birthdayCard(b)));   // anniversaires tout en haut, devant les priorités
   if (vacCard) ul.appendChild(vacCard);                  // puis le rappel vaccin, juste en dessous des anniversaires
-  tasks.forEach(t => ul.appendChild(taskCard(t, !state.flatList)));
+  tasks.forEach(t => ul.appendChild(taskCard(t)));
   // Aujourd'hui : seules les tâches SANS heure sont réordonnables par glisser-déposer
   if (isToday) {
     [...ul.children].forEach(li => {
@@ -3250,7 +3259,7 @@ function birthdayCard(b, withDate = false) {
   li.dataset.bdayYear = b.year;
   let note;
   if (b.shifted) {
-    note = `<div class="task-note">Anniversaire le 29/02 — fêté le 28 février ${b.year}</div>`;
+    note = `<div class="task-note">Anniversaire le 29/02, fêté le 28 février ${b.year}</div>`;
   } else if (withDate) {
     const isTodayB = b.ts != null && startOfDay(b.ts).getTime() === todayTs();
     note = `<div class="task-note">📅 ${esc(isTodayB ? "Aujourd'hui 🎉" : formatBirthday(b.contact.birthday))}</div>`;
@@ -3387,7 +3396,7 @@ function resetListTab(view) {
 
 // Remplit une <ul> avec des cartes, ou un message si la liste est vide.
 // Partagé par la matrice Eisenhower, le Kanban et la liste des projets terminés.
-function fillColumn(ul, items, makeCard, emptyText = "—") {
+function fillColumn(ul, items, makeCard, emptyText = "-") {
   ul.innerHTML = "";
   if (items.length === 0) {
     const d = document.createElement("div");
@@ -3465,6 +3474,14 @@ function childTasks(taskId) {
   return state.tasks.filter(t => t.parentTaskId === taskId);
 }
 
+// Ids d'une tâche ET de toute sa descendance (Set). Source unique du parcours de sous-arbre :
+// suppression, purge, retour visuel de la coche, déplacement par glisser-déposer.
+function subtreeIds(rootId) {
+  const set = new Set();
+  (function walk(id) { set.add(id); childTasks(id).forEach(c => walk(c.id)); })(rootId);
+  return set;
+}
+
 // Profondeur d'une tâche (1 = racine). Remonte la chaîne des parents.
 function taskDepth(task) {
   let depth = 1, cur = task;
@@ -3487,11 +3504,11 @@ function setCompletedDeep(taskId, done) {
 }
 
 // Recalcule l'état d'une tâche d'après ses enfants, puis remonte vers les parents.
-// Auto-DÉCOCHE (PARTOUT) : un parent marqué fait qui a (ou retrouve) un enfant à faire — enfant
-// décoché, nouvelle sous-tâche — ne peut plus rester "fait".
+// Auto-DÉCOCHE (PARTOUT) : un parent marqué fait qui a (ou retrouve) un enfant à faire (enfant
+// décoché, nouvelle sous-tâche) ne peut plus rester "fait".
 // Auto-COCHE : UNIQUEMENT la checklist Cadeaux › À faire (isChecklistTask). Quand toutes ses
 // sous-tâches sont cochées, la tâche du dessus se coche automatiquement (et remonte en cascade).
-// Choix user (23/06/2026) : AILLEURS (Todo, agenda) un parent ne s'auto-termine PAS — il reste
+// Choix user (23/06/2026) : AILLEURS (Todo, agenda) un parent ne s'auto-termine PAS : il reste
 // visible avec sa progression et c'est l'utilisateur qui le coche. (Les catégories de courses,
 // isListRoot en mode "tree", ne sont jamais touchées ici.)
 function refreshCompletionUpwards(taskId) {
@@ -3755,6 +3772,10 @@ function duplicateTaskOnDates(src, dates, time) {
       labels: [...(src.labels || [])]
     };
     delete copy.group; delete copy.tab; delete copy.list;   // champs propres aux vues-listes : sans objet ici
+    // Étiquette invisible posée par le script objectifs/ (import Notion) : la copie est une tâche
+    // ajoutée à la main. Si elle gardait l'étiquette, le script la prendrait pour l'objectif importé
+    // (retirée à la clôture, épargnée par la purge) alors qu'il ne doit jamais toucher ces tâches.
+    delete copy.notion;
     state.tasks.push(copy);
     made.push(copy.id);
   });
@@ -3920,9 +3941,8 @@ function contactCard(contact) {
 }
 
 /* =========================================================
-   VUE SEMAINE (Prochainement) — 7 jours à partir d'une date d'ancrage
+   VUE SEMAINE (Prochainement) : 7 jours à partir d'une date d'ancrage
    ========================================================= */
-// Prochaine occurrence (ms, à minuit) d'un anniversaire "MM-DD" à partir d'un jour donné.
 // Contacts dont l'anniversaire tombe ce jour-là. Renvoie { contact, shifted } :
 // shifted = anniversaire du 29/02 reporté au 28/02 (année non bissextile).
 function isLeapYear(y) { return (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0; }
@@ -4016,7 +4036,7 @@ function renderWeek() {
 
   // Libellé de la période (mois de l'ancre)
   const a = new Date(anchor);
-  $("weekMonth").textContent = MONTH_LABELS[a.getMonth()].replace(/^./, c => c.toUpperCase()) + " " + a.getFullYear();
+  $("weekMonth").textContent = capitalize(MONTH_LABELS[a.getMonth()]) + " " + a.getFullYear();
 
   // Tâches non terminées et datées (racines ET sous-tâches datées)
   const dated = state.tasks.filter(t => !t.completed && t.dueDate != null);
@@ -4039,8 +4059,8 @@ function renderWeek() {
     const count = items.length + bdays.length + (vacOnDay ? 1 : 0);
 
     const d = new Date(dayTs);
-    const wd = isToday ? "Aujourd'hui" : WEEKDAY_LABELS[d.getDay()].replace(/^./, c => c.toUpperCase());
-    const dateLabel = d.getDate() + " " + MONTH_LABELS[d.getMonth()].replace(/^./, c => c.toUpperCase());
+    const wd = isToday ? "Aujourd'hui" : capitalize(WEEKDAY_LABELS[d.getDay()]);
+    const dateLabel = d.getDate() + " " + capitalize(MONTH_LABELS[d.getMonth()]);
 
     let listBody = "";
     items.forEach(t => {
@@ -4051,7 +4071,7 @@ function renderWeek() {
     });
     let bdayBody = "";
     bdays.forEach(b => {
-      const note = b.shifted ? `<div class="week-bday-note">Anniversaire le 29/02 — fêté le 28 février cette année</div>` : "";
+      const note = b.shifted ? `<div class="week-bday-note">Anniversaire le 29/02, fêté le 28 février cette année</div>` : "";
       // Rond "souhaité" : marque l'anniversaire comme fait et le renvoie à l'an prochain.
       bdayBody += `<div class="week-bday" data-bday-id="${b.contact.id}" data-bday-year="${b.year}">
         <div class="week-bday-main">
@@ -4120,8 +4140,7 @@ function setWeekAddDayLabel() {
   if (weekAddDay == null) { el.textContent = "📥 Sans date"; return; }
   const d = new Date(weekAddDay);
   const isToday = todayTs() === weekAddDay;
-  const cap = s => s.replace(/^./, c => c.toUpperCase());
-  const label = (isToday ? "Aujourd'hui · " : cap(WEEKDAY_LABELS[d.getDay()]) + " ")
+  const label = (isToday ? "Aujourd'hui · " : capitalize(WEEKDAY_LABELS[d.getDay()]) + " ")
               + d.getDate() + " " + MONTH_LABELS[d.getMonth()];
   el.textContent = "📅 " + label;
 }
@@ -4158,12 +4177,9 @@ function renderContacts() {
   const ul = $("contactList");
   ul.innerHTML = "";
   if (list.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "empty";
-    empty.innerHTML = q
+    ul.appendChild(emptyEl(q
       ? `<div class="big">🔍</div>Aucun contact trouvé.`
-      : `<div class="big">🧑</div>Aucun contact. Ajoute-en un, ou délègue un projet.`;
-    ul.appendChild(empty);
+      : `<div class="big">🧑</div>Aucun contact. Ajoute-en un, ou délègue un projet.`));
   } else {
     list.forEach(c => ul.appendChild(contactCard(c)));
   }
@@ -4177,10 +4193,7 @@ function renderContactsBirthdays() {
   ul.innerHTML = "";
   const list = upcomingBirthdays();
   if (list.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "empty";
-    empty.innerHTML = `<div class="big">🎂</div>Aucun anniversaire. Ajoute une date dans une fiche contact.`;
-    ul.appendChild(empty);
+    ul.appendChild(emptyEl(`<div class="big">🎂</div>Aucun anniversaire. Ajoute une date dans une fiche contact.`));
     return;
   }
   list.forEach(b => ul.appendChild(birthdayCard(b, true)));
@@ -4280,14 +4293,11 @@ function renderCadeaux() {
   const ul = $("cadeauxList");
   ul.innerHTML = "";
   if (withGifts.length === 0) {
-    const empty = document.createElement("div");
-    empty.className = "empty";
-    empty.innerHTML = q
+    ul.appendChild(emptyEl(q
       ? `<div class="big">🔍</div>Aucune personne ne correspond à « ${esc(state.giftSearch.trim())} ».`
       : state.contacts.length === 0
       ? `<div class="big">🎁</div>Aucun contact. Ajoute des personnes dans la vue Contacts.`
-      : `<div class="big">🎁</div>Aucune idée encore. Choisis une personne ci-dessus et note une idée.`;
-    ul.appendChild(empty);
+      : `<div class="big">🎁</div>Aucune idée encore. Choisis une personne ci-dessus et note une idée.`));
     return;
   }
   withGifts.forEach(c => ul.appendChild(giftCard(c)));
@@ -4308,11 +4318,6 @@ function renderGiftTodo() {
    centre = IMBRIQUER dedans. Le geste est appliqué au dépôt en réordonnant state.tasks par bloc
    contigu (le sous-arbre du glissé) → l'ordre est réellement persisté et les sous-sous-tâches
    suivent leur parent. `drag` (fantôme, auto-défilement) est fourni par makeDraggable. */
-function giftSubtreeIds(rootId) {
-  const set = new Set();
-  (function walk(id) { set.add(id); childTasks(id).forEach(c => walk(c.id)); })(rootId);
-  return set;
-}
 function giftDragMove(x, y) {
   clearNestFeedback();
   drag.giftTarget = null; drag.giftPos = null;
@@ -4321,7 +4326,7 @@ function giftDragMove(x, y) {
   if (!row || !drag.board.contains(row)) return;
   const targetId = row.dataset.id;
   if (targetId === drag.id) return;
-  const sub = giftSubtreeIds(drag.id);
+  const sub = subtreeIds(drag.id);
   if (sub.has(targetId)) return;                       // pas dans sa propre descendance
   const target = getTask(targetId);
   if (!target) return;
@@ -4342,7 +4347,7 @@ function giftDragDrop() {
 function giftMoveSubtree(dragId, targetId, pos) {
   const dragged = getTask(dragId), target = getTask(targetId);
   if (!dragged || !target || dragId === targetId) return;
-  const sub = giftSubtreeIds(dragId);
+  const sub = subtreeIds(dragId);
   if (sub.has(targetId)) return;
   const newParentId = pos === "nest" ? targetId : (target.parentTaskId || null);
   const parentDepth = newParentId ? taskDepth(getTask(newParentId)) : 0;
@@ -4355,7 +4360,7 @@ function giftMoveSubtree(dragId, targetId, pos) {
   if (pos === "before") {
     idx = kept.findIndex(t => t.id === targetId);
   } else {
-    const tsub = giftSubtreeIds(targetId);
+    const tsub = subtreeIds(targetId);
     idx = kept.length;
     for (let i = kept.length - 1; i >= 0; i--) { if (tsub.has(kept[i].id)) { idx = i + 1; break; } }
   }
@@ -4391,7 +4396,7 @@ function migrateNotesToAutres() {
 }
 
 // Multimédia d'avant les genres : les anciens titres « À lire » sans genre passent en Romans,
-// « À regarder » en Films (les autres onglets — Jeux de société, PS4 — n'ont pas de genres).
+// « À regarder » en Films (les autres onglets, Jeux de société et PS4, n'ont pas de genres).
 function migrateMediaGenres() {
   let changed = false;
   state.tasks.forEach(t => {
@@ -4404,7 +4409,7 @@ function migrateMediaGenres() {
 }
 
 /* =========================================================
-   VACCINS (calendrier français — rappels à âges fixes)
+   VACCINS (calendrier français : rappels à âges fixes)
    ========================================================= */
 const DTP_MAX_AGE = 105;                       // après 65 ans : rappel tous les 10 ans (jusqu'à cet âge)
 const DTP_AGES = [25, 45];                     // rappels dTP adulte (France), puis 65, 75, 85, 95, 105…
@@ -4435,7 +4440,7 @@ function vaccineStatus(ts) {
   const today = todayTs();
   const days = Math.round((ts - today) / DAY_MS);
   if (days < 0) return { cls: "overdue", icon: "⚠️", label: `en retard (depuis ${durationLabel(-days)})` };
-  if (days <= VACCINE_LEAD_DAYS) return { cls: "soon", icon: "⏳", label: `bientôt — dans ${durationLabel(days)}` };
+  if (days <= VACCINE_LEAD_DAYS) return { cls: "soon", icon: "⏳", label: `bientôt, dans ${durationLabel(days)}` };
   return { cls: "ok", icon: "✅", label: `À jour · Prochain rappel dans ${vaccineCountdown(days)}` };
 }
 // Durée approchée lisible (ans / mois / semaines / jours)
@@ -4548,7 +4553,7 @@ function vaccineAgendaCard() {
 }
 
 /* =========================================================
-   LABELS (étiquettes transversales — plusieurs par tâche racine)
+   LABELS (étiquettes transversales : plusieurs par tâche racine)
    ========================================================= */
 // Palette rangée du plus chaud au plus froid (ordre stable, identique dans toutes les vues)
 const LABEL_COLORS = [
@@ -4727,7 +4732,7 @@ function attachLabelPicker(container, opts) {
   });
 }
 
-// Picker labels de la fiche (tâche racine) — s'ouvre vers le haut pour rester visible
+// Picker labels de la fiche (tâche racine) : s'ouvre vers le haut pour rester visible
 function renderEditorLabels(task) {
   attachLabelPicker($("editLabels"), {
     selected: () => task.labels || [],
@@ -4823,7 +4828,7 @@ function toggleTask(id) {
   t.completed = done;
   t.completedAt = done ? Date.now() : null;
   setCompletedDeep(id, done);            // (2) cascade : coche/décoche toute la descendance
-  if (t.parentTaskId) refreshCompletionUpwards(t.parentTaskId);  // remontée : décoche un parent fait qui retrouve un enfant à faire (jamais d'auto-coche)
+  if (t.parentTaskId) refreshCompletionUpwards(t.parentTaskId);  // remontée : décoche un parent fait qui retrouve un enfant à faire (auto-coche : checklist Cadeaux seulement)
   markRowsDone(id, done);                // retour visuel IMMÉDIAT (coche peinte avant le re-render)
   db.save();
   scheduleRender();                      // tri/compteurs/parents recalculés à la frame suivante (coalescé)
@@ -4832,9 +4837,7 @@ function toggleTask(id) {
 // Bascule tout de suite la classe .done de la ligne et de sa descendance dans le DOM courant,
 // pour que la coche apparaisse instantanément sans attendre le render complet (cf. scheduleRender).
 function markRowsDone(rootId, done) {
-  const ids = [rootId];
-  (function collect(pid) { childTasks(pid).forEach(c => { ids.push(c.id); collect(c.id); }); })(rootId);
-  ids.forEach(cid => document.querySelectorAll(`.task-row[data-id="${cid}"]`)
+  subtreeIds(rootId).forEach(cid => document.querySelectorAll(`.task-row[data-id="${cid}"]`)
     .forEach(r => r.classList.toggle("done", done)));
 }
 
@@ -4920,11 +4923,10 @@ function addSubtask(parentId, raw) {
 // Supprime une tâche et toute sa descendance (sous-tâches en cascade), puis met à jour les parents
 function deleteTask(id) {
   const t = getTask(id);
-  const parentId = t ? t.parentTaskId : null;
-  const label = (t && t.title) ? t.title : "Élément";
-  const toRemove = new Set([id]);
-  const collect = pid => childTasks(pid).forEach(c => { toRemove.add(c.id); collect(c.id); });
-  collect(id);
+  if (!t) return;                       // id périmé (déjà supprimée) : rien à faire, pas de toast « supprimé » fantôme
+  const parentId = t.parentTaskId;
+  const label = t.title || "Élément";
+  const toRemove = subtreeIds(id);
   // Snapshot (position d'origine + objet) pour tout réinsérer si l'utilisateur annule.
   const removed = [];
   state.tasks.forEach((tk, i) => { if (toRemove.has(tk.id)) removed.push({ index: i, task: tk }); });
@@ -4941,7 +4943,7 @@ function deleteTask(id) {
 }
 
 /* =========================================================
-   PURGE DES TÂCHES TERMINÉES (hygiène du blob Firestore — limite 1 Mio/document)
+   PURGE DES TÂCHES TERMINÉES (hygiène du blob Firestore, limite 1 Mio/document)
    Périmètre STRICT pour ne jamais perdre de donnée utile :
      • UNIQUEMENT des racines todo (parentTaskId == null) → on retire l'arbre ENTIER d'un coup,
        jamais une sous-tâche isolée → zéro orphelin ;
@@ -4982,8 +4984,7 @@ function purgeCompletedTodos(maxAgeDays) {
   );
   if (!roots.length) return 0;
   const toRemove = new Set();
-  const collect = id => { toRemove.add(id); childTasks(id).forEach(c => collect(c.id)); };
-  roots.forEach(r => collect(r.id));
+  roots.forEach(r => subtreeIds(r.id).forEach(id => toRemove.add(id)));
   state.tasks = state.tasks.filter(t => !toRemove.has(t.id));
   return roots.length;
 }
@@ -5018,7 +5019,6 @@ function purgeCompletedDoneNow() {
   alert(`${count} tâche(s) terminée(s) supprimée(s) ✅`);
 }
 
-/* ---- Modal d'édition ---- */
 /* =========================================================
    COMPOSANT DÉROULANT AVEC RECHERCHE (générique, réutilisable)
    createPicker(container, options) monte un sélecteur dans `container`.
@@ -5133,7 +5133,7 @@ function applyCalendar() {
 function renderCal() {
   if (!cal) return;
   $("calTitle").textContent =
-    MONTH_LABELS[cal.month.getMonth()].replace(/^./, c => c.toUpperCase()) + " " + cal.month.getFullYear();
+    capitalize(MONTH_LABELS[cal.month.getMonth()]) + " " + cal.month.getFullYear();
   $("calWeekdays").innerHTML = WEEKDAY_ORDER.map(wd => `<span>${WEEKDAY_SHORT[wd]}</span>`).join("");
 
   const first = cal.month;
@@ -5161,7 +5161,7 @@ function renderCalTimeField() {
   if (!cal) return;
   const cur = cal.time;
   const times = [];
-  for (let h = 0; h < 24; h++) for (const m of [0, 30]) times.push(String(h).padStart(2,"0") + ":" + String(m).padStart(2,"0"));
+  for (let h = 0; h < 24; h++) for (const m of [0, 30]) times.push(pad2(h) + ":" + pad2(m));
   if (cur && !times.includes(cur)) { times.push(cur); times.sort(); }
   $("calTime").innerHTML = `<option value="">Aucune heure</option>` +
     times.map(tm => `<option value="${tm}">${tm}</option>`).join("");
@@ -5204,11 +5204,8 @@ function renderEditorDate(t) {
 
 // Éditeur d'une affaire (vue-liste flat) : chips des sous-onglets où l'affaire (le groupe) existe.
 function renderEditorAffaireTabs(t) {
-  const cfg = listConfig(t.list), key = affaireGroup(t);
-  const tabsWith = new Set(
-    state.tasks.filter(x => isListRoot(x) && x.list === t.list && affaireGroup(x) === key)
-               .map(x => x.tab || cfg.subTabs[0].id)
-  );
+  const cfg = listConfig(t.list);
+  const tabsWith = new Set(affaireMembers(t).map(x => x.tab || cfg.subTabs[0].id));
   $("editAffaireChips").innerHTML = cfg.subTabs.map(s =>
     `<button type="button" class="list-add-chip${tabsWith.has(s.id) ? " on" : ""}" data-edittab="${s.id}">${esc(subTabLabel(s))}</button>`
   ).join("");
@@ -5218,7 +5215,7 @@ function renderEditorAffaireTabs(t) {
 // Refuse de retirer le dernier onglet. Renvoie true si une modif a eu lieu.
 function toggleAffaireTab(t, tabId) {
   const cfg = listConfig(t.list), key = affaireGroup(t);
-  const members = state.tasks.filter(x => isListRoot(x) && x.list === t.list && affaireGroup(x) === key);
+  const members = affaireMembers(t);
   const inTab = members.filter(x => (x.tab || cfg.subTabs[0].id) === tabId);
   if (inTab.length) {
     if (members.length - inTab.length === 0) return false;   // garder au moins un onglet
@@ -5553,10 +5550,7 @@ function saveEditorFields() {
     $("editTitle").value = title;   // reflète le nettoyage dans le champ
 
     // Affaire (vue-liste flat) : renomme toutes les copies du groupe (tous les onglets).
-    if (isListRoot(t) && listShape(t.list) === "flat") {
-      const key = affaireGroup(t);
-      state.tasks.forEach(x => { if (isListRoot(x) && x.list === t.list && affaireGroup(x) === key) x.title = title; });
-    }
+    if (isListRoot(t) && listShape(t.list) === "flat") affaireMembers(t).forEach(x => { x.title = title; });
   }
   t.note = $("editNote").value.trim();
   db.save();
@@ -5643,6 +5637,10 @@ function closeSidebar() {
 let drag = null;
 let lastDragEnd = 0;
 let lastRenameEnd = 0;   // fin d'un renommage inline : ignore le clic qui vient de clôturer l'édition
+const CLICK_GUARD_MS = 300;   // durée pendant laquelle on ignore le clic qui clôt un glisser ou un renommage inline
+// Zones d'une ligne de tâche qui ne déclenchent jamais un glisser (boutons, champs, case, croix,
+// chevron, « + »). Chaque liste y ajoute au besoin ses propres zones.
+const DRAG_IGNORE = "button, input, select, .checkbox, .task-del, .task-chevron, .task-addsub";
 
 function makeDraggable(board, config) {
   board.addEventListener("pointerdown", e => onDragPointerDown(e, board, config));
@@ -5709,7 +5707,7 @@ function onDragPointerDown(e, board, config) {
   if (drag.isTouch) window.addEventListener("touchmove", onDragTouchMove, { passive: false });
 }
 
-// Une fois le glisser activé (appui long passé), on empêche la page/colonne de défiler — sinon le
+// Une fois le glisser activé (appui long passé), on empêche la page/colonne de défiler, sinon le
 // navigateur s'approprie le geste, émet un pointercancel et la tâche « se désélectionne ».
 // Avant activation on ne fait rien : un simple swipe continue de faire défiler normalement.
 function onDragTouchMove(e) {
@@ -6067,7 +6065,7 @@ function bindEvents() {
   $("weekPrev").addEventListener("click", () => shiftWeek(-7));
   $("weekNext").addEventListener("click", () => shiftWeek(7));
   $("weekToday").addEventListener("click", () => { state.weekAnchor = null; render(); });
-  // 2c — Cliquer le mois ouvre un calendrier de navigation : la date choisie devient le début de la semaine.
+  // 2c : cliquer le mois ouvre un calendrier de navigation : la date choisie devient le début de la semaine.
   $("weekMonth").addEventListener("click", () => {
     const base = state.weekAnchor != null ? state.weekAnchor : todayTs();
     openCalendar({
@@ -6100,7 +6098,7 @@ function bindEvents() {
     if (e.key === "Enter") { e.preventDefault(); submitWeekAdd(); }
     else if (e.key === "Escape") closeWeekAdd();
   });
-  // 2b — La pastille de jour ouvre le même calendrier pour changer le jour à la création.
+  // 2b : la pastille de jour ouvre le même calendrier pour changer le jour à la création.
   $("weekAddDayLabel").addEventListener("click", () => {
     openCalendar({
       dueDate: weekAddDay, showTime: false,        // ici on ne choisit que le jour
@@ -6115,11 +6113,11 @@ function bindEvents() {
   // Clics sur les tâches (délégation sur tout le main : liste + matrice).
   // L'id vient de la LIGNE (.task-row) car une carte racine contient plusieurs lignes.
   document.querySelector(".main").addEventListener("click", e => {
-    if (Date.now() - lastDragEnd < 300) return;  // un drag vient de se terminer
+    if (Date.now() - lastDragEnd < CLICK_GUARD_MS) return;  // un drag vient de se terminer
     // Renommage inline « verrou » : pendant l'édition, un clic dans le titre place le curseur sans
     // ouvrir l'affaire ; juste après la fin, on ignore le clic qui a clôturé l'édition (sinon il rouvre).
     if (e.target.closest('[contenteditable="true"]')) return;
-    if (Date.now() - lastRenameEnd < 300) return;
+    if (Date.now() - lastRenameEnd < CLICK_GUARD_MS) return;
     // Anniversaire (Aujourd'hui & Prochainement) : le rond marque "souhaité" et renvoie à l'an prochain.
     const bdayBtn = e.target.closest('[data-action="bday-done"]');
     if (bdayBtn) {
@@ -6400,7 +6398,7 @@ function bindEvents() {
 
   // Drag and drop : matrice Eisenhower (globale) et Kanban des projets
   // Les matrices sont triées par date : le drag ne sert qu'à changer la case (priorité),
-  // jamais à réordonner (reorder:false partout) — sinon l'ordre date-trié écraserait
+  // jamais à réordonner (reorder:false partout), sinon l'ordre date-trié écraserait
   // l'ordre manuel global de state.tasks via reorderFromDOM.
   setupEisenBoard($("eisenGrid"), () => null, { reorder: false });          // vue globale : tâches libres
   setupEisenBoard($("projEisenGrid"), () => state.projectId, { reorder: false }); // matrice d'un projet
@@ -6446,7 +6444,7 @@ function bindEvents() {
   //  • Vues-listes : racines (cartes) partout ; produits (prod-row) si reorderItems.
   makeDraggable($("taskList"), {
     getItem(e) {
-      if (e.target.closest("button, input, select, .checkbox, .task-del, .task-chevron, .task-addsub, .row-search, .list-additem")) return null;
+      if (e.target.closest(DRAG_IGNORE + ", .row-search, .list-additem")) return null;
       const row = e.target.closest(".task-row");
       if (!row) return null;
       const task = getTask(row.dataset.id);
@@ -6477,11 +6475,11 @@ function bindEvents() {
     }
   });
 
-  // Liste d'un projet (sous-vue "Liste") : mêmes gestes que la vue Todo — réordonner les tâches
+  // Liste d'un projet (sous-vue "Liste") : mêmes gestes que la vue Todo : réordonner les tâches
   // racines du projet (bords) ou imbriquer en sous-tâche (centre).
   makeDraggable($("projTaskList"), {
     getItem(e) {
-      if (e.target.closest("button, input, select, .checkbox, .task-del, .task-chevron, .task-addsub")) return null;
+      if (e.target.closest(DRAG_IGNORE)) return null;
       const row = e.target.closest(".task-row");
       if (!row) return null;
       const task = getTask(row.dataset.id);
@@ -6605,13 +6603,13 @@ function bindEvents() {
   };
   $("giftTodoAdd").addEventListener("click", submitGiftTodo);
   onEnter($("giftTodoInput"), submitGiftTodo);
-  // Cadeaux › À faire : glisser une ligne — racine OU sous-tâche, avec TOUTE sa descendance —
+  // Cadeaux › À faire : glisser une ligne (racine OU sous-tâche, avec TOUTE sa descendance)
   // pour réordonner entre frères (tiers haut/bas d'une ligne) ou imbriquer sous une autre (centre).
   // Le déplacement est appliqué au dépôt sur le modèle de données (giftMoveSubtree) → l'ordre est
   // réellement persisté. Cocher/supprimer/ajouter passent par la délégation .main (undo inclus).
   makeDraggable($("giftTodoList"), {
     getItem(e) {
-      if (e.target.closest("button, input, select, .checkbox, .task-del, .task-chevron, .task-addsub, .task-addsub-zone")) return null;
+      if (e.target.closest(DRAG_IGNORE + ", .task-addsub-zone")) return null;
       const row = e.target.closest(".task-row");
       if (!row || !$("giftTodoList").contains(row)) return null;
       return getTask(row.dataset.id) ? row : null;   // n'importe quelle ligne (racine ou sous-tâche)
@@ -6853,7 +6851,7 @@ function closeContactEditor() {
 // Parseur CSV générique : gère guillemets, virgules et retours à la ligne DANS les champs,
 // le BOM en tête et les fins de ligne CRLF/CR. Retourne un tableau de lignes (tableaux de cellules).
 function parseCSV(text) {
-  text = text.replace(/^﻿/, "").replace(/\r\n?/g, "\n");   // BOM + fins de ligne normalisées
+  text = text.replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n");   // BOM + fins de ligne normalisées
   const rows = []; let row = [], field = "", inQuotes = false;
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
@@ -6889,7 +6887,7 @@ function importContactsFromCSV(text) {
   if (rows.length < 2) return { added: 0, skipped: 0, total: 0 };
   const headers = rows[0].map(h => h.trim());
   const col = name => headers.indexOf(name);
-  // Paires Label/Value numérotées (« Phone 1 - Value », « E-mail 2 - Value »…) — quel qu'en soit le nombre.
+  // Paires Label/Value numérotées (« Phone 1 - Value », « E-mail 2 - Value »…), quel qu'en soit le nombre.
   const pairs = kind => headers
     .map((h, i) => ({ h, i }))
     .filter(o => new RegExp("^" + kind + " \\d+ - Value$").test(o.h))
@@ -6942,13 +6940,7 @@ function exportContactsCSV() {
     lines.push(row.map(csvEsc).join(","));
   });
   // BOM UTF-8 + CRLF : ouverture correcte des accents dans Excel, compatible Google Contacts.
-  const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `contacts-${ESPACE}-${new Date().toISOString().slice(0, 10)}.csv`;
-  document.body.appendChild(a); a.click(); a.remove();
-  URL.revokeObjectURL(url);
+  downloadFile("\uFEFF" + lines.join("\r\n"), `contacts-${ESPACE}-${todayIso()}.csv`, "text/csv;charset=utf-8");
 }
 
 // Câble une matrice Eisenhower (drag + ajout inline par case). getProjectId rattache
@@ -7012,7 +7004,7 @@ function addProjectTaskFromInput() {
 // Clic sur une carte projet (Kanban ou liste des terminés) : supprimer, ouvrir un champ
 // d'ajout (projet/tâche), basculer un bouton de priorité, ou ouvrir le projet.
 function onProjectBoardClick(e) {
-  if (Date.now() - lastDragEnd < 300) return;       // pas juste après un drag
+  if (Date.now() - lastDragEnd < CLICK_GUARD_MS) return;   // pas juste après un drag
   const delBtn = e.target.closest(".proj-del");
   const colAdd = e.target.closest(".col-add-btn");
   const projAdd = e.target.closest(".proj-add");
@@ -7060,18 +7052,19 @@ function onProjectBoardKeydown(e) {
 function setTheme(dark) {
   document.body.classList.toggle("dark", dark);
   document.getElementById("themeToggle").textContent = dark ? "☀️" : "🌙";
-  localStorage.setItem(THEME_KEY, dark ? "dark" : "light");
+  try { localStorage.setItem(THEME_KEY, dark ? "dark" : "light"); } catch {}
 }
+// Le stockage peut être inaccessible (iframe sans accès, navigation privée) : lire/écrire le thème
+// ne doit jamais interrompre le démarrage de l'app (initTheme est appelé depuis init()).
 function initTheme() {
-  setTheme(localStorage.getItem(THEME_KEY) === "dark");
+  let saved = null;
+  try { saved = localStorage.getItem(THEME_KEY); } catch {}
+  setTheme(saved === "dark");
 }
 function toggleTheme() {
   setTheme(!document.body.classList.contains("dark"));
 }
 
-/* =========================================================
-   INIT
-   ========================================================= */
 /* =========================================================
    ESPACE (pro / perso) + SAUVEGARDE (export / import JSON)
    ========================================================= */
@@ -7098,14 +7091,20 @@ function importData(file) {
     try { raw = JSON.parse(reader.result); }
     catch { alert("Import impossible : le fichier n'est pas un JSON valide."); return; }
     const data = normalizeData(raw);
-    const msg = `Importer ce fichier dans l'espace « ${ESPACE} » ?\n\n`
+    // Garde-fou : un fichier qui n'a pas la forme attendue ne doit jamais remplacer les données
+    // (elles partiraient aussitôt dans le cloud et casseraient l'affichage).
+    if (![data.tasks, data.projects, data.contacts, data.labels, data.notes].every(Array.isArray)) {
+      alert("Import impossible : ce fichier n'a pas le format attendu (export JSON de cette app).");
+      return;
+    }
+    const fromOther = (raw && raw._espace && raw._espace !== ESPACE)
+      ? `⚠️ Ce fichier a été exporté depuis l'espace « ${raw._espace} ».\n\n` : "";
+    const msg = fromOther + `Importer ce fichier dans l'espace « ${ESPACE} » ?\n\n`
       + `• ${data.tasks.length} tâche(s)\n• ${data.projects.length} projet(s)\n`
       + `• ${data.contacts.length} contact(s)\n• ${data.labels.length} étiquette(s)\n\n`
       + `⚠️ Cela REMPLACE toutes les données actuelles de cet espace.`;
     if (!confirm(msg)) return;
-    state.tasks = data.tasks; state.projects = data.projects; state.contacts = data.contacts;
-    state.birthDate = data.birthDate; state.vaccineDone = data.vaccineDone; state.labels = data.labels;
-    state.notes = data.notes; state.mit = data.mit;
+    applyData(data);
     db.save();
     migrateNotesToAutres();   // d'éventuelles notes importées (ancien format) deviennent des racines "autres"
     migrateMediaGenres();     // titres Multimédia importés sans genre → Romans / Films
@@ -7117,7 +7116,7 @@ function importData(file) {
 }
 
 // Propose la copie de secours locale (posée avant tout écrasement par le cloud ou après un choix
-// de conflit). On la TÉLÉCHARGE au lieu de l'appliquer : non destructif — l'utilisateur relit le
+// de conflit). On la TÉLÉCHARGE au lieu de l'appliquer : non destructif, l'utilisateur relit le
 // fichier puis décide de l'importer ou non via « Importer (JSON) ».
 function offerLocalBackup() {
   let saved = null;
@@ -7154,7 +7153,7 @@ function bindDataMenu() {
 }
 
 /* =========================================================
-   BOOT — auth Google + sync live (Firebase)
+   BOOT : auth Google + sync live (Firebase)
    ========================================================= */
 function showAuthGate(show) {
   $("authGate").hidden = !show;
@@ -7195,7 +7194,7 @@ function bindAuth() {
     $("authInApp").hidden = false;
     $("authCopyLink").addEventListener("click", async () => {
       const btn = $("authCopyLink");
-      try { await navigator.clipboard.writeText(location.href); btn.textContent = "✅ Lien copié — colle-le dans Safari/Chrome"; }
+      try { await navigator.clipboard.writeText(location.href); btn.textContent = "✅ Lien copié : colle-le dans Safari/Chrome"; }
       catch { btn.textContent = location.href; }   // repli : affiche le lien à copier à la main
     });
   }
@@ -7208,7 +7207,7 @@ function attachSpace(uid) {
   _seeded = false;
   // On ne sait encore rien du serveur : interdiction d'écrire tant que sa version n'est pas arrivée
   // (cf. garde-fou de db.save). La base et l'éventuel « modifs non envoyées » sont repris du mémo
-  // persisté — c'est ce qui protège des modifications faites hors ligne lors d'une session passée.
+  // persisté : c'est ce qui protège des modifications faites hors ligne lors d'une session passée.
   _serverSynced = false;
   restoreSyncMeta();
   setSyncState("waiting");
@@ -7242,7 +7241,7 @@ function attachSpace(uid) {
     const incoming = stableStr(data);
 
     // ---------- Snapshot venant du CACHE local : ne fait PAS autorité ----------
-    // (Avec enablePersistence, le 1er snapshot est souvent le cache — parfois vieux de plusieurs
+    // (Avec enablePersistence, le 1er snapshot est souvent le cache, parfois vieux de plusieurs
     // jours.) On peut l'AFFICHER au démarrage, jamais s'en servir comme base d'écriture.
     if (fromCache) {
       if (!_serverSynced && !_localDirty && incoming !== stableStr(currentBlob())) {
