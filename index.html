@@ -1827,6 +1827,7 @@ let fbUser = null;        // utilisateur connecté (null = porte de login affich
 let _manualSignOut = false; // vrai le temps d'un clic sur « Se déconnecter » (vs déconnexion subie)
 let spaceRef = null;      // doc Firestore de l'espace courant (null tant que non connecté)
 let _spaceUnsub = null;   // fonction de désabonnement onSnapshot
+const SAVE_DEBOUNCE_MS = 600; // regroupe les actions rapprochées en UNE écriture cloud (pas un délai imposé entre 2 clics)
 let _saveTimer = null;    // debounce des écritures réseau
 let _pendingWrite = false; // une écriture Firestore est en attente (debounce en cours) → à vider avant fermeture
 let _lastSync = null;     // dernier blob (stable-stringifié) poussé/appliqué — anti-écho/anti-clobber
@@ -1838,6 +1839,7 @@ let _autoPurgeDone = false; // purge auto des tâches terminées : un seul passa
 let _serverSynced = false;  // cet appareil a reçu au moins un snapshot SERVEUR de l'espace courant
 let _localDirty = false;    // des modifs locales ne sont pas encore confirmées côté serveur
 let _baseRemote = null;     // EMPREINTE du blob distant dont notre état local dérive = base de nos modifs
+let _sentHashes = [];       // empreintes de NOS écritures envoyées, pas encore toutes confirmées (ordre d'envoi)
 let _conflictOpen = false;  // une boîte de conflit est déjà affichée (ne pas en empiler)
 let _syncState = "init";    // état affiché par la pastille de synchro (cf. setSyncState)
 const DAY_MS = 86400000;                 // millisecondes dans une journée
@@ -1957,7 +1959,27 @@ function hashStr(s) {
    écraserait. */
 const SYNCMETA_KEY = STORAGE_KEY + "__sync";
 function saveSyncMeta() {
-  try { localStorage.setItem(SYNCMETA_KEY, JSON.stringify({ base: _baseRemote, dirty: _localDirty })); } catch {}
+  try { localStorage.setItem(SYNCMETA_KEY, JSON.stringify({ base: _baseRemote, dirty: _localDirty, sent: _sentHashes })); } catch {}
+}
+/* Nos propres écritures en vol. Quand on enchaîne vite plusieurs actions (cocher 3 produits), l'écho
+   serveur de l'écriture n°1 peut revenir alors que la n°2 attend encore son envoi : sans ce registre,
+   cet écho ressemblait à « le cloud a bougé ailleurs » et ouvrait un FAUX conflit. On reconnaît donc
+   nos versions à leur empreinte. Borné, persisté avec le mémo (une écriture peut être confirmée
+   après la fermeture de l'onglet), vidé dès que tout est confirmé (markSynced). */
+const SENT_HASHES_MAX = 20;
+function rememberSent(hash) {
+  if (_sentHashes[_sentHashes.length - 1] !== hash) _sentHashes.push(hash);
+  if (_sentHashes.length > SENT_HASHES_MAX) _sentHashes = _sentHashes.slice(-SENT_HASHES_MAX);
+}
+// Le cloud porte-t-il une de NOS écritures récentes ? Si oui, elle devient la base de référence et
+// tout ce qui a été envoyé avant elle est oublié. Renvoie vrai si c'était bien un écho.
+function acknowledgeOwnEcho(hash) {
+  const i = _sentHashes.lastIndexOf(hash);
+  if (i === -1) return false;
+  _sentHashes = _sentHashes.slice(i + 1);
+  _baseRemote = hash;
+  saveSyncMeta();
+  return true;
 }
 // Restaure la base de référence + le drapeau « modifs non envoyées » depuis le mémo persisté.
 // Sans mémo (1ʳᵉ fois), le cache local fait office de base et rien n'est réputé en attente.
@@ -1967,6 +1989,7 @@ function restoreSyncMeta() {
   const ok = m && typeof m === "object";
   _baseRemote = ok ? (m.base || null) : hashStr(stableStr(currentBlob()));
   _localDirty = ok ? !!m.dirty : false;
+  _sentHashes = ok && Array.isArray(m.sent) ? m.sent.slice(-SENT_HASHES_MAX) : [];
 }
 
 // Sérialisation stable (clés triées) : compare 2 blobs indépendamment de l'ordre des clés.
@@ -2032,7 +2055,7 @@ const db = {
     _lastSync = stableStr(blob);                 // ce qu'on s'apprête à pousser → ignore l'écho
     _pendingWrite = true;
     clearTimeout(_saveTimer);
-    _saveTimer = setTimeout(flushFirestore, 600);
+    _saveTimer = setTimeout(flushFirestore, SAVE_DEBOUNCE_MS);
     setSyncState("pending");
   },
   // --- Tâches ---
@@ -2078,6 +2101,8 @@ function flushFirestore() {
   const blob = currentBlob();
   const pushed = stableStr(blob);
   _lastSync = pushed;
+  rememberSent(hashStr(pushed));
+  saveSyncMeta();
   // enablePersistence est actif : dès que set() est appelé, la modif est durable (IndexedDB) et
   // rejouée au prochain lancement même si le réseau n'a pas répondu avant la fermeture.
   // La promesse ne se résout qu'à la confirmation SERVEUR → c'est notre signal « vraiment synchro ».
@@ -2108,6 +2133,7 @@ function flushNow() {
 function markSynced(blobStr) {
   _baseRemote = blobStr == null ? null : hashStr(blobStr);
   _localDirty = false;
+  _sentHashes = [];            // tout est confirmé : plus aucune écriture à nous en vol
   saveSyncMeta();
   setSyncState("ok");
 }
@@ -7252,8 +7278,15 @@ function attachSpace(uid) {
       return;
     }
 
-    // Modifs locales en attente. Deux cas très différents :
-    if (hashStr(incoming) === _baseRemote) {
+    // Modifs locales en attente. Trois cas très différents :
+    const incomingHash = hashStr(incoming);
+    if (acknowledgeOwnEcho(incomingHash)) {
+      // Écho d'une de NOS écritures précédentes (actions enchaînées vite) : ce n'est PAS un autre
+      // appareil. La suite est déjà en route (debounce en cours) ; sinon on la pousse maintenant.
+      if (_pendingWrite) setSyncState("pending"); else flushNow();
+      return;
+    }
+    if (incomingHash === _baseRemote) {
       // Le cloud est resté sur la base dont nos modifs dérivent → nos modifs sont dessus, on pousse.
       flushNow();
       return;
