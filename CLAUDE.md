@@ -641,8 +641,8 @@ actions), `newchecks.js` (les 29 assertions), `compare.js` (diff des deux journa
 - `slugProduit()` doit rester **identique** à `slug()` de Recettes (`web/js/referentiels.js`) : c'est
   l'identifiant commun. Vérifié sur 627 noms (catalogue + liste de courses) : 0 écart.
 - Sans catalogue chargé (hors ligne, erreur de lecture), rien ne change par rapport à avant.
-- **Pas encore fait** : les produits déjà présents dans la liste de courses n'ont pas de `produitId`
-  (écriture dans le blob réel, à faire avec l'accord de Fabien). Les erreurs du catalogue vont en
+- Les 234 produits déjà présents dans la liste de courses ont reçu leur `produitId` le 2026-11-13
+  (script `../Recettes cuisine/migration/relier-todo.mjs`, seul ce champ ajouté). Les erreurs du catalogue vont en
   `console.warn`, pas dans `handleFirebaseError` (elles ne doivent pas déclencher l'écran de sync).
 
 ## Règles de collaboration
