@@ -626,6 +626,25 @@ téléchargement, état complet après chaque action). Résultat : **identique**
 session (non committés, jetables) : `smoke.js` (rejoue le vrai script), `scenario.js` (les ~90
 actions), `newchecks.js` (les 29 assertions), `compare.js` (diff des deux journaux).
 
+## Catalogue de produits partagé avec l'app Recettes (lot Recettes 5, 2026-11-13)
+- Collection Firestore **`users/{uid}/catalogue/{produitId}`** = `{ nom, rayon, alias? }`, commune à Todo
+  et à l'app Recettes (`../Recettes cuisine`, même projet Firebase). Elle vit **hors du blob** de l'espace :
+  ni dans `state`, ni dans `db.save()`. Espace perso uniquement (`attachCatalogue` ne fait rien en pro).
+- `attachCatalogue(uid)` / `detachCatalogue()` appelés depuis `attachSpace` / `detachSpace` : écoute live
+  de la collection dans `_catalogue` (Map), sans aucun `render()` (le champ en cours de saisie n'est jamais redessiné).
+- **Champ « + » d'un rayon de courses** : au focus, `fillCatalogueSuggestions(rayon)` remplit un `<datalist>`
+  unique (`#catalogueProduits`, créé à la volée) avec les produits du catalogue rangés dans ce rayon et pas
+  encore dans la liste. Autocomplétion native du navigateur.
+- **Ajout d'un produit** (`addSubtask` sous un rayon de courses) : `linkProductToCatalogue` pose
+  `task.produitId` et crée le produit dans le catalogue s'il est nouveau (rayon = `rayonName(rayon)`,
+  le titre du rayon sans son emoji ; « Nom = alias » range l'alias à part).
+- `slugProduit()` doit rester **identique** à `slug()` de Recettes (`web/js/referentiels.js`) : c'est
+  l'identifiant commun. Vérifié sur 627 noms (catalogue + liste de courses) : 0 écart.
+- Sans catalogue chargé (hors ligne, erreur de lecture), rien ne change par rapport à avant.
+- **Pas encore fait** : les produits déjà présents dans la liste de courses n'ont pas de `produitId`
+  (écriture dans le blob réel, à faire avec l'accord de Fabien). Les erreurs du catalogue vont en
+  `console.warn`, pas dans `handleFirebaseError` (elles ne doivent pas déclencher l'écran de sync).
+
 ## Règles de collaboration
 - **Committer + pusher systématiquement à la fin de chaque lot de modifs** (demande permanente
   du user, 10/06/2026) : il teste directement en ligne après chaque lot. Commit direct sur

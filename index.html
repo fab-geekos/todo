@@ -4903,6 +4903,85 @@ function openSubtaskInput(taskId) {
   zone.querySelector(".task-addsub-input").focus();
 }
 
+/* ---------- Catalogue de produits partagé avec l'app Recettes ----------
+   Collection Firestore users/{uid}/catalogue/{produitId} = { nom, rayon, alias? }, commune aux deux
+   apps (cahier des charges : ../Recettes cuisine/CLAUDE.md §3). Espace perso uniquement.
+   - Le champ « + » d'un rayon de courses propose les produits du catalogue rangés dans ce rayon.
+   - Un produit ajouté porte un `produitId` ; s'il est nouveau, il est créé dans le catalogue.
+   Le catalogue vit HORS du blob de l'espace : il n'entre ni dans `state` ni dans db.save().
+   Sans catalogue chargé (hors ligne, espace pro), tout se comporte comme avant. */
+const CATALOGUE_VIEW = "courses";
+const CATALOGUE_DATALIST_ID = "catalogueProduits";
+const CATALOGUE_ALIAS_SEP = " = ";          // « Cumin = spidskommen » : nom, puis alias suédois/danois
+let _catalogue = new Map();                 // produitId → { nom, rayon, alias? }
+let _catalogueRef = null;                   // null tant que non connecté (ou espace pro)
+let _catalogueLoaded = false;               // 1re réponse reçue : on peut créer sans risquer d'écraser
+let _catalogueUnsub = null;
+
+// Identifiant d'un produit à partir de son nom. MÊME règle que slug() de l'app Recettes
+// (web/js/referentiels.js) : c'est elle qui fait le lien entre les deux apps, ne pas la changer seule.
+function slugProduit(nom) {
+  return String(nom || "").toLowerCase()
+    .replace(/œ/g, "oe").replace(/æ/g, "ae")
+    .normalize("NFD").replace(/\p{Diacritic}/gu, "")
+    .replace(/[’`]/g, "'").replace(/\s+/g, " ").trim()
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
+}
+// Nom d'un rayon sans son emoji de tête (« 🍎 Fruits et légumes » → « Fruits et légumes ») :
+// c'est ce nom qui est écrit dans le champ `rayon` du catalogue.
+const rayonName = t => String(t.title || "").trim().replace(/^[^\p{L}\p{N}]+/u, "").trim();
+const isCatalogueRayon = t => !!t && t.list === CATALOGUE_VIEW && isListCategory(t);
+
+function attachCatalogue(uid) {
+  detachCatalogue();
+  if (!PERSO) return;
+  _catalogueRef = fbStore.collection(`users/${uid}/catalogue`);
+  _catalogueUnsub = _catalogueRef.onSnapshot(snap => {
+    _catalogue = new Map(snap.docs.map(d => [d.id, d.data()]));
+    _catalogueLoaded = true;
+  }, err => console.warn("Catalogue de produits illisible :", err && (err.code || err.message)));
+}
+function detachCatalogue() {
+  if (_catalogueUnsub) { _catalogueUnsub(); _catalogueUnsub = null; }
+  _catalogueRef = null;
+  _catalogueLoaded = false;
+  _catalogue = new Map();
+}
+
+// Rattache un produit de courses tout juste créé au catalogue (pose `produitId`), et l'y ajoute
+// s'il n'existe pas encore. Ne fait rien tant que le catalogue n'est pas chargé.
+function linkProductToCatalogue(task, rayon) {
+  if (!_catalogueRef || !_catalogueLoaded) return;
+  const [nom, alias] = task.title.split(CATALOGUE_ALIAS_SEP).map(x => x.trim());
+  const id = slugProduit(nom);
+  if (!id) return;
+  task.produitId = id;
+  if (_catalogue.has(id)) return;
+  const produit = { nom, rayon: rayonName(rayon) };
+  if (alias) produit.alias = alias;
+  _catalogue.set(id, produit);
+  _catalogueRef.doc(id).set(produit)
+    .catch(err => console.warn("Produit non ajouté au catalogue :", err && (err.code || err.message)));
+}
+
+// Suggestions du champ « + » d'un rayon : les produits du catalogue rangés dans ce rayon et pas
+// encore dans la liste (repli : tout le catalogue si le rayon n'y a aucun produit).
+function fillCatalogueSuggestions(rayon) {
+  let list = document.getElementById(CATALOGUE_DATALIST_ID);
+  if (!list) {
+    list = document.createElement("datalist");
+    list.id = CATALOGUE_DATALIST_ID;
+    document.body.appendChild(list);
+  }
+  const nom = rayonName(rayon);
+  const present = new Set(childTasks(rayon.id).map(t => t.produitId || slugProduit(t.title.split(CATALOGUE_ALIAS_SEP)[0])));
+  const tous = [..._catalogue].filter(([id]) => !present.has(id)).map(([, p]) => p);
+  const duRayon = tous.filter(p => p.rayon === nom);
+  list.innerHTML = (duRayon.length ? duRayon : tous)
+    .sort((a, b) => a.nom.localeCompare(b.nom, "fr", { sensitivity: "base" }))
+    .map(p => `<option value="${esc(p.nom)}"></option>`).join("");
+}
+
 // Crée une sous-tâche rattachée à un parent (hérite du projet du parent).
 // Les sous-tâches n'ont jamais de priorité : si une sous-tâche devient urgente,
 // elle a vocation à être promue en tâche racine à part entière.
@@ -4914,6 +4993,7 @@ function addSubtask(parentId, raw) {
   // jusqu'à MAX_TASK_DEPTH (garde-fou de profondeur déjà appliqué juste au-dessus).
   if (isListTask(parent) && !isListCategory(parent) && !isChecklistTask(parent)) return;
   const task = makeTask(raw, { urgent: false, important: false }, parent.projectId, parentId);
+  if (isCatalogueRayon(parent)) linkProductToCatalogue(task, parent);   // produit de courses → catalogue partagé
   state.tasks.push(task);
   if (parent.recurrence) parent.recurrence = null;   // une tâche à sous-tâches n'est plus récurrente
   refreshCompletionUpwards(parentId);   // le parent n'est plus "fait" s'il l'était
@@ -6174,6 +6254,16 @@ function bindEvents() {
     if (row) { db.update(row.dataset.id, { tab2: sel.value }); render(); }
   });
 
+  // Champ « + » d'un rayon de courses : propose les produits du catalogue partagé (autocomplétion native).
+  document.querySelector(".main").addEventListener("focusin", e => {
+    const inp = e.target.closest(".list-additem-input");
+    if (!inp || !_catalogueLoaded) return;
+    const rayon = getTask(inp.closest(".list-additem").dataset.parent);
+    if (!isCatalogueRayon(rayon)) return;
+    fillCatalogueSuggestions(rayon);
+    inp.setAttribute("list", CATALOGUE_DATALIST_ID);
+  });
+
   // Saisie d'une sous-tâche : Entrée valide, Échap referme (pas de priorité sur les sous-tâches)
   document.querySelector(".main").addEventListener("keydown", e => {
     // Champ « + » en bas d'une catégorie de vue-liste (courses, Idées/Notes/Autres…)
@@ -7204,6 +7294,7 @@ function bindAuth() {
 function attachSpace(uid) {
   detachSpace();
   spaceRef = fbStore.doc(`users/${uid}/spaces/${ESPACE}`);
+  attachCatalogue(uid);   // catalogue de produits partagé avec l'app Recettes (perso seulement)
   _seeded = false;
   // On ne sait encore rien du serveur : interdiction d'écrire tant que sa version n'est pas arrivée
   // (cf. garde-fou de db.save). La base et l'éventuel « modifs non envoyées » sont repris du mémo
@@ -7298,6 +7389,7 @@ function attachSpace(uid) {
 
 function detachSpace() {
   if (_spaceUnsub) { _spaceUnsub(); _spaceUnsub = null; }
+  detachCatalogue();
   spaceRef = null;
   _serverSynced = false;
   clearWaitWatchdog();
