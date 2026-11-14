@@ -645,6 +645,17 @@ actions), `newchecks.js` (les 29 assertions), `compare.js` (diff des deux journa
   (script `../Recettes cuisine/migration/relier-todo.mjs`, seul ce champ ajouté). Les erreurs du catalogue vont en
   `console.warn`, pas dans `handleFirebaseError` (elles ne doivent pas déclencher l'écran de sync).
 
+## L'app Recettes écrit dans la liste de courses (lot Recettes 6, 2026-11-14)
+- L'app Recettes (`../Recettes cuisine`) ajoute des produits à la liste de courses de l'espace perso
+  en réécrivant le blob dans une **transaction** Firestore, dans la même forme que `flushFirestore`
+  (`_v: 1`, `_updatedAt` serveur). Pour Todo c'est une écriture d'un « autre appareil » : sans
+  modification locale en attente la version est adoptée, sinon la fenêtre de conflit s'ouvre.
+- Champs que Recettes pose sur un produit de courses, à **préserver** (ne pas filtrer les champs
+  inconnus d'une tâche) : `produitId` (lien au catalogue) et `recetteIds` (recettes qui ont mis ce
+  produit sur la liste). Recettes ne supprime jamais de tâche : il crée, décoche, ou recoche.
+- Rappel du sens des cases, sur lequel Recettes s'appuie : produit **non coché = à acheter**.
+- `users/{uid}/spaces/perso_test` est un bac à sable de l'app Recettes (mode `?test=1`), jamais lu par Todo.
+
 ## Règles de collaboration
 - **Committer + pusher systématiquement à la fin de chaque lot de modifs** (demande permanente
   du user, 10/06/2026) : il teste directement en ligne après chaque lot. Commit direct sur
