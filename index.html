@@ -854,6 +854,17 @@
   .quick-labels .picker-panel { left: 0; right: auto; width: 280px; }
   /* Palette de couleur flottante (recoloration + choix à la création) */
   .color-palette { position: fixed; z-index: 300; background: var(--card); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 8px; display: flex; flex-wrap: wrap; gap: 6px; width: 184px; }
+  /* Vue « À cuisiner » : recettes prévues dans l'app Recettes (lecture seule + rond « cuisinée ») */
+  .acuisiner-view { display: none; }
+  .acuisiner-row { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; }
+  .acuisiner-row:hover { background: var(--hover); }
+  .acuisiner-row .checkbox { margin-top: 0; }
+  .acuisiner-emoji { font-size: 20px; line-height: 1; }
+  .acuisiner-title { flex: 1; min-width: 0; font-weight: 500; color: var(--text); text-decoration: none; word-break: break-word; }
+  .acuisiner-title:hover { color: var(--accent-text); }
+  .acuisiner-time { color: var(--muted); font-size: 13px; white-space: nowrap; }
+  .acuisiner-foot { margin: 14px 12px 0; font-size: 13px; }
+  .acuisiner-foot a { color: var(--accent-text); }
   /* Vue Étiquettes (pleine largeur) */
   .labels-view { display: none; }
   .label-add { display: flex; gap: 10px; align-items: center; margin-bottom: 18px; }
@@ -1375,6 +1386,9 @@
     <button class="nav-item" data-view="courses">
       <span class="icon">🛒</span> Liste de courses
     </button>
+    <button class="nav-item" data-view="acuisiner">
+      <span class="icon">🧑‍🍳</span> À cuisiner <span class="count" id="count-acuisiner"></span>
+    </button>
     <button class="nav-item" data-view="mediatheque">
       <span class="icon icon-multi">📚🎬</span> Multimédia
     </button>
@@ -1578,6 +1592,8 @@
     </div>
 
     <div class="labels-view" id="labelsView"></div>
+
+    <div class="acuisiner-view" id="acuisinerView"></div>
 
     <div class="week-modal-scrim" id="weekAddModal" hidden>
       <div class="week-modal" role="dialog" aria-label="Ajouter une tâche">
@@ -1793,7 +1809,7 @@ const THEME_KEY = "todo_theme";
 // l'onglet, mais un NOUVEL onglet repart vide → vue par défaut "today" (Aujourd'hui).
 const VIEW_KEY = "todo_lastview__" + ESPACE;
 // Vues masquées selon l'espace (outil perso : certaines vues n'ont pas de sens côté pro).
-const ESPACE_HIDDEN_VIEWS = { pro: ["courses", "bagages", "mediatheque", "cadeaux", "vaccins"] };
+const ESPACE_HIDDEN_VIEWS = { pro: ["courses", "acuisiner", "bagages", "mediatheque", "cadeaux", "vaccins"] };
 const isViewHidden = view => (ESPACE_HIDDEN_VIEWS[ESPACE] || []).includes(view);
 
 /* =========================================================
@@ -3092,7 +3108,8 @@ function render() {
     week: { t: "Prochainement", s: "" },
     vaccins: { t: "Vaccins", s: "" },
     cadeaux: { t: "Cadeaux", s: "" },
-    labels: { t: "Étiquettes", s: "" }
+    labels: { t: "Étiquettes", s: "" },
+    acuisiner: { t: "À cuisiner", s: "" }
   };
   // Les vues-listes tirent leur titre/sous-titre de LIST_VIEWS (source unique).
   const lc0 = listConfig(state.view);
@@ -3148,7 +3165,7 @@ function render() {
   });
 
   // Affichage : on masque tous les conteneurs de vues, puis on montre celui de la vue courante
-  ["taskList","eisenGrid","kanbanBoard","projectsTabs","projectsDone","projectsPriorities","projectView","contactsView","weekView","vaccinesView","cadeauxView","labelsView"]
+  ["taskList","eisenGrid","kanbanBoard","projectsTabs","projectsDone","projectsPriorities","projectView","contactsView","weekView","vaccinesView","cadeauxView","labelsView","acuisinerView"]
     .forEach(id => { $(id).style.display = "none"; });
   const gridEl = $("eisenGrid");
   const kanbanEl = $("kanbanBoard");
@@ -3196,6 +3213,9 @@ function render() {
   } else if (state.view === "labels") {
     $("labelsView").style.display = "block";
     renderLabels();
+  } else if (state.view === ACUISINER_VIEW) {
+    $("acuisinerView").style.display = "block";
+    renderACuisiner();
   } else {
     $("taskList").style.display = "flex";
     renderList();
@@ -4982,6 +5002,109 @@ function fillCatalogueSuggestions(rayon) {
     .map(p => `<option value="${esc(p.nom)}"></option>`).join("");
 }
 
+/* ---------- Vue « À cuisiner » : recettes prévues dans l'app Recettes ----------
+   Lecture de users/{uid}/recettes filtrée sur `aCuisiner` (même projet Firebase), espace perso
+   uniquement. Le rond marque la recette « cuisinée » (aCuisiner repasse à false) ; le titre ouvre sa
+   fiche dans l'app Recettes. Comme le catalogue, ces données vivent HORS du blob de l'espace.
+   Cahier des charges : ../Recettes cuisine/CLAUDE.md §5. */
+const ACUISINER_VIEW = "acuisiner";
+const RECETTES_APP_URL = "https://recettes-fabien.web.app/";
+// « ?test » dans l'adresse : lit les recettes de test de l'app Recettes (son mode ?test=1).
+const RECETTES_TEST = new URLSearchParams(location.search).has("test");
+const RECETTES_COLLECTION = RECETTES_TEST ? "recettes_test" : "recettes";
+const RECETTES_APP_QUERY = RECETTES_TEST ? "?test=1" : "";
+const RECETTE_REPOS_NUIT = "nuit";          // champ `repos` : préparation la veille
+const RECETTE_TEMPS_MAX = 240;              // minutes : au-delà, « Plus de 3h » (comme dans l'app Recettes)
+let _recettes = [];                         // recettes à cuisiner, triées par titre
+let _recettesRef = null;                    // null tant que non connecté (ou espace pro)
+let _recettesState = "loading";             // "loading" | "ready" | "error"
+let _recettesUnsub = null;
+
+const recetteUrl = id => `${RECETTES_APP_URL}${RECETTES_APP_QUERY}#/a-cuisiner/${encodeURIComponent(id)}`;
+const fbNow = () => firebase.firestore.FieldValue.serverTimestamp();
+const warnRecette = err => console.warn("Recette non mise à jour :", err && (err.code || err.message));
+
+// Temps lisible, comme dans l'app Recettes : 45 → « 45 min », 90 → « 1h30 ».
+function recetteTemps(r) {
+  if (r.repos === RECETTE_REPOS_NUIT) return "La veille";
+  const m = r.tempsPrep;
+  if (typeof m !== "number") return "";
+  if (m >= RECETTE_TEMPS_MAX) return "Plus de 3h";
+  if (m < 60) return `${m} min`;
+  return m % 60 ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}` : `${m / 60}h`;
+}
+
+// Met à jour le compteur de la nav et, si la vue est affichée, la redessine (elle seule : pas de
+// render() global, qui pourrait interrompre une saisie en cours ailleurs).
+function refreshACuisiner() {
+  const count = $("count-acuisiner");
+  if (count) count.textContent = _recettes.length || "";
+  if (state.view === ACUISINER_VIEW) renderACuisiner();
+}
+
+function attachRecettes(uid) {
+  detachRecettes();
+  if (!PERSO) return;
+  _recettesRef = fbStore.collection(`users/${uid}/${RECETTES_COLLECTION}`);
+  _recettesUnsub = _recettesRef.where("aCuisiner", "==", true).onSnapshot(snap => {
+    _recettes = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => String(a.titre || "").localeCompare(String(b.titre || ""), "fr", { sensitivity: "base" }));
+    _recettesState = "ready";
+    refreshACuisiner();
+  }, err => {
+    console.warn("Recettes à cuisiner illisibles :", err && (err.code || err.message));
+    _recettesState = "error";
+    refreshACuisiner();
+  });
+}
+function detachRecettes() {
+  if (_recettesUnsub) { _recettesUnsub(); _recettesUnsub = null; }
+  _recettesRef = null;
+  _recettes = [];
+  _recettesState = "loading";
+}
+
+function renderACuisiner() {
+  const el = $("acuisinerView");
+  const empty = text => `<div class="empty"><div class="big">🧑‍🍳</div>${text}</div>`;
+  const foot = `<p class="acuisiner-foot"><a href="${RECETTES_APP_URL}${RECETTES_APP_QUERY}" target="_blank" rel="noopener">Ouvrir l'app Recettes ↗</a></p>`;
+  if (_recettesState === "loading") { el.innerHTML = empty("Chargement des recettes…"); return; }
+  if (_recettesState === "error") { el.innerHTML = empty("Les recettes n'ont pas pu être chargées.") + foot; return; }
+  if (!_recettes.length) { el.innerHTML = empty("Rien de prévu. Coche une recette dans l'app Recettes pour la retrouver ici.") + foot; return; }
+  el.innerHTML = _recettes.map(r => `<div class="acuisiner-row" data-recette="${esc(r.id)}">
+      <button class="checkbox" data-action="recette-done" aria-label="Marquer comme cuisinée" title="Cuisinée"></button>
+      <span class="acuisiner-emoji">${esc(r.icone || "🍽️")}</span>
+      <a class="acuisiner-title" href="${esc(recetteUrl(r.id))}" target="_blank" rel="noopener">${esc(r.titre || "(sans titre)")}</a>
+      <span class="acuisiner-time">${esc(recetteTemps(r))}</span>
+    </div>`).join("") + foot;
+}
+
+// Marque une recette « cuisinée » : elle quitte la vue (aCuisiner → false, lu aussi par l'app
+// Recettes) et n'est plus associée aux produits de la liste de courses. Filet « Annuler ».
+function markRecetteCooked(id) {
+  const recette = _recettes.find(r => r.id === id);
+  if (!recette || !_recettesRef) return;
+  const ref = _recettesRef.doc(id);
+  ref.update({ aCuisiner: false, dansCourses: false, modifieLe: fbNow() }).catch(warnRecette);
+  untagRecetteProducts(id);
+  showUndo(`« ${recette.titre || "Recette"} » cuisinée`, () => {
+    ref.update({ aCuisiner: true, modifieLe: fbNow() }).catch(warnRecette);
+  });
+}
+
+// Retire l'association recette → produit posée par l'app Recettes (champ `recetteIds` des produits
+// de courses). L'état coché des produits n'est PAS touché : seul le lien avec la recette disparaît.
+function untagRecetteProducts(id) {
+  let changed = false;
+  state.tasks.forEach(t => {
+    if (!Array.isArray(t.recetteIds) || !t.recetteIds.includes(id)) return;
+    t.recetteIds = t.recetteIds.filter(x => x !== id);
+    if (!t.recetteIds.length) delete t.recetteIds;
+    changed = true;
+  });
+  if (changed) db.save();
+}
+
 // Crée une sous-tâche rattachée à un parent (hérite du projet du parent).
 // Les sous-tâches n'ont jamais de priorité : si une sous-tâche devient urgente,
 // elle a vocation à être promue en tâche racine à part entière.
@@ -6254,6 +6377,12 @@ function bindEvents() {
     if (row) { db.update(row.dataset.id, { tab2: sel.value }); render(); }
   });
 
+  // Vue « À cuisiner » : le rond marque la recette comme cuisinée (le titre est un lien normal).
+  $("acuisinerView").addEventListener("click", e => {
+    const btn = e.target.closest('[data-action="recette-done"]');
+    if (btn) markRecetteCooked(btn.closest(".acuisiner-row").dataset.recette);
+  });
+
   // Champ « + » d'un rayon de courses : propose les produits du catalogue partagé (autocomplétion native).
   document.querySelector(".main").addEventListener("focusin", e => {
     const inp = e.target.closest(".list-additem-input");
@@ -7295,6 +7424,7 @@ function attachSpace(uid) {
   detachSpace();
   spaceRef = fbStore.doc(`users/${uid}/spaces/${ESPACE}`);
   attachCatalogue(uid);   // catalogue de produits partagé avec l'app Recettes (perso seulement)
+  attachRecettes(uid);    // recettes « à cuisiner » de l'app Recettes (perso seulement)
   _seeded = false;
   // On ne sait encore rien du serveur : interdiction d'écrire tant que sa version n'est pas arrivée
   // (cf. garde-fou de db.save). La base et l'éventuel « modifs non envoyées » sont repris du mémo
@@ -7390,6 +7520,7 @@ function attachSpace(uid) {
 function detachSpace() {
   if (_spaceUnsub) { _spaceUnsub(); _spaceUnsub = null; }
   detachCatalogue();
+  detachRecettes();
   spaceRef = null;
   _serverSynced = false;
   clearWaitWatchdog();

@@ -656,6 +656,22 @@ actions), `newchecks.js` (les 29 assertions), `compare.js` (diff des deux journa
 - Rappel du sens des cases, sur lequel Recettes s'appuie : produit **non coché = à acheter**.
 - `users/{uid}/spaces/perso_test` est un bac à sable de l'app Recettes (mode `?test=1`), jamais lu par Todo.
 
+## Vue « À cuisiner » (lot Recettes 7, 2026-11-14)
+- Bouton de nav `data-view="acuisiner"` juste sous « Liste de courses », compteur `#count-acuisiner`,
+  conteneur `#acuisinerView`. Masquée en pro (`ESPACE_HIDDEN_VIEWS`). Ce n'est PAS une vue-liste
+  (`LIST_VIEWS` inchangé) : ses données ne sont pas des tâches.
+- **Lecture live** de `users/{uid}/recettes` filtrée sur `aCuisiner == true` (`attachRecettes` /
+  `detachRecettes`, appelés avec le catalogue depuis `attachSpace` / `detachSpace`). Hors du blob,
+  espace perso seulement. `refreshACuisiner()` met à jour le compteur et ne redessine que cette vue
+  (jamais de `render()` global depuis un snapshot : une saisie en cours ailleurs serait interrompue).
+- **Rond « cuisinée »** (`markRecetteCooked`) : écrit `aCuisiner: false` et `dansCourses: false` sur
+  la recette, retire son identifiant des `recetteIds` des produits de courses (`untagRecetteProducts`,
+  l'état coché des produits n'est pas touché), et propose « Annuler » (`showUndo`).
+- **Titre = lien** vers la fiche dans l'app Recettes (`RECETTES_APP_URL`, nouvel onglet).
+- `?test` dans l'adresse de Todo fait lire `recettes_test` (les données de test de l'app Recettes).
+- Vérifié par exécution du bloc extrait d'`index.html` dans un bac à sable Node (tri, échappement,
+  liens, écriture, annulation, espace pro, mode test). Non vérifié dans un navigateur connecté.
+
 ## Règles de collaboration
 - **Committer + pusher systématiquement à la fin de chaque lot de modifs** (demande permanente
   du user, 10/06/2026) : il teste directement en ligne après chaque lot. Commit direct sur
